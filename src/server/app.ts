@@ -2,8 +2,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
-import { newProject } from '../core/model/project.ts';
+import type { FewShot } from '../core/llm/buildWriter.ts';
+import { newProject, ProjectSchema } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
+import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
+import { writeShot, type Runner } from './llm/tasks/write.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
 
 export const HOST = '127.0.0.1';
@@ -23,6 +26,9 @@ export interface AppOptions {
   rootDir: string;
   /** Каталог пользовательских данных (в .gitignore). */
   dataDir: string;
+  /** Подменяется в тестах: живой вызов тратит квоту подписки. */
+  runLlm?: Runner;
+  writerModel?: string;
 }
 
 function loadPack(rootDir: string, id: string): PackBundle {
@@ -85,6 +91,29 @@ export function createApp(options: AppOptions) {
       if (bytes.byteLength > MAX_REF_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Картинка больше 30 МБ — Seedance такую не примет.' }, 413);
       await store.writeRef(c.req.param('slug'), c.req.param('file'), bytes);
       return c.json({ ok: true });
+    })
+    // Писатель запускается только по клику владельца. Клиент присылает текущий снимок проекта,
+    // чтобы не было гонки с автосейвом; отмена запроса убивает дочерний процесс.
+    .post('/api/llm/write', async (c) => {
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string };
+      const project = ProjectSchema.parse(body.project);
+      const packDir = path.join(options.rootDir, 'packs', project.packId);
+      try {
+        const result = await writeShot({
+          project,
+          shotId: body.shotId ?? '',
+          pack: loadPack(options.rootDir, project.packId),
+          rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
+          fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
+          run: options.runLlm ?? runClaude,
+          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus',
+          signal: c.req.raw.signal,
+        });
+        return c.json(result);
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        return c.json({ error: 'WRITE_FAILED', messageRu: error instanceof Error ? error.message : 'Писатель не сработал.' }, 422);
+      }
     })
     .get('/api/projects/:slug/refs/:file', async (c) => {
       const file = c.req.param('file');

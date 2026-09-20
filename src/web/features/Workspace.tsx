@@ -221,12 +221,23 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               <div key={segment.id} className={styles.segment}>
                 <div className={styles.segmentHead}>
                   <Text variant="label" medium>Отрезок {index + 1}</Text>
-                  <Tag tone={segment.text.en.trim() === '' ? 'outline' : 'neutral'}>{segment.text.en.trim() === '' ? 'пусто' : 'вручную'}</Tag>
+                  <Tag tone={segment.text.en.trim() === '' ? 'outline' : segment.text.source === 'llm' ? 'accent' : 'neutral'}>{segment.text.en.trim() === '' ? 'пусто' : segment.text.source === 'llm' ? 'агент' : 'вручную'}</Tag>
+                  {segment.text.locked && segment.text.en.trim() !== '' && (
+                    <Button variant="ghost" size="xs" icon={<Icon name="lock" size={0.875} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, text: { ...x.text, locked: false } } : x)) }))}>
+                      защищён от агента — снять
+                    </Button>
+                  )}
                   <span className={styles.spacer} />
                   <Button variant="ghost" size="xs" iconOnly aria-label="Удалить отрезок" icon={<Icon name="bin" size={1} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.filter((x) => x.id !== segment.id) }))} />
                 </div>
                 <TextField multiline label="Что происходит (по-русски — вход для писателя)" value={segment.beatsRu} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, beatsRu: event.target.value } : x)) }))} />
                 <TextField multiline label="Абзац промпта (английский)" value={segment.text.en} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, text: { ...x.text, en: event.target.value, source: 'manual', locked: true } } : x)) }))} onFocus={(event) => areas.current.set(segment.id, event.target as HTMLTextAreaElement)} helper="Номера и реплики не пиши руками — вставляй кнопками ниже." />
+                {store.writeReport?.notes[segment.id] !== undefined && store.writeReport.notes[segment.id] !== '' && (
+                  <div className={styles.agentNote}>
+                    <Icon name="sparkles" size={1} />
+                    <Text variant="label" tone="secondary">{store.writeReport.notes[segment.id]}</Text>
+                  </div>
+                )}
                 <div className={styles.tokens}>
                   {project.entities.map((entity) => <Button key={entity.key} variant="soft" size="xs" onClick={() => insert(segment.id, `{{intro:${entity.key}}}`)}>{entity.name}</Button>)}
                   {shot.panel.map((key, i) => <Button key={key} variant="border" size="xs" onClick={() => insert(segment.id, `{{ref:${key}}}`)}>№{i + 1} {refByKey.get(key)?.label}</Button>)}
@@ -236,7 +247,21 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             ))}
             <div className={styles.row}>
               <Button variant="secondary" size="s" icon={<Icon name="plus" />} onClick={() => store.updateShot((s) => ({ ...s, segments: [...s.segments, { id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: emptyUnit() }] }))}>Отрезок</Button>
+              <div className={styles.writeRow}>
+                {store.writing && <Button variant="ghost" size="s" onClick={store.cancelWrite}>Отмена</Button>}
+                <Button variant="primary" size="s" icon={<Icon name="sparkles" variant="filled" />} loading={store.writing} disabled={!shot.segments.some((s) => !s.text.locked && s.beatsRu.trim() !== '')} onClick={() => void store.writeShot()}>
+                  {store.writing ? 'Агент пишет… до пары минут' : 'Написать кадр'}
+                </Button>
+              </div>
             </div>
+            <Text variant="caption" tone="tertiary">Агент пишет только отрезки с русским описанием, не защищённые от него. Реплики упоминай в описании как L1, L2 — он поставит их в этом порядке.</Text>
+            {store.writeReport !== null && (
+              <div className={`${styles.report} ${store.writeReport.ok ? '' : styles.reportBad}`}>
+                <Text variant="label" medium>{store.writeReport.messageRu}</Text>
+                {store.writeReport.warningsRu.map((w, i) => <Text key={`w${i}`} variant="label" tone="secondary">{w}</Text>)}
+                {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">Осталось после ремонта: {store.writeReport.remainingRu.join(' · ')}</Text>}
+              </div>
+            )}
           </Section>
         </div>
 

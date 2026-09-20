@@ -1,0 +1,95 @@
+{
+ "$source": "Кадр 2 гайда Cinema Ai Tech — единственная генерация, вошла в монтаж без правок. Сгенерировано scripts/build-fewshot.ts.",
+ "kitId": "sony-venice2-zeiss-supreme",
+ "entities": [
+  {
+   "key": "alexander",
+   "name": "Alexander",
+   "kind": "character"
+  },
+  {
+   "key": "john",
+   "name": "John",
+   "kind": "character"
+  },
+  {
+   "key": "pickup",
+   "name": "the main pickup",
+   "kind": "object"
+  },
+  {
+   "key": "sony",
+   "name": "the Sony VENICE 2",
+   "kind": "object"
+  },
+  {
+   "key": "zeiss",
+   "name": "the ZEISS Supreme Prime lenses",
+   "kind": "object"
+  }
+ ],
+ "lines": [
+  {
+   "id": "L1",
+   "ru": "Сейчас мы снимаем на Sony VENICE 2 с объективами ZEISS Supreme Prime."
+  },
+  {
+   "id": "L2",
+   "ru": "Обратите внимание — качество изображения отличается от прошлого, потому что прошлое было снято на ARRI Alexa 35."
+  },
+  {
+   "id": "L3",
+   "ru": "Sony даёт холодные, нейтральные и точные тона. Современная, чистая картинка — без плёночной мягкости."
+  },
+  {
+   "id": "L4",
+   "ru": "Касательно объектива. Вы можете заметить, что здесь блики ведут себя по-другому. Специальное покрытие объективов не позволяет бликам перекрывать всё изображение и терять контрастность."
+  },
+  {
+   "id": "L5",
+   "ru": "Отлично, вот так снимает камера Sony. Сейчас покажу вам, как снимает другая камера."
+  }
+ ],
+ "segments": [
+  {
+   "id": "seg-1",
+   "beatsRu": "Alexander стоит у пикапа с Sony в руках, John рядом держит открытый кейс с линзами ZEISS. На борту видна вмятина от прошлого удара, мокрые отпечатки ладоней. Alexander говорит в камеру L1, спокойно и уверенно. Ветер, блик от лужи на лице.",
+   "en": "{{intro:alexander}}, stands near {{intro:pickup}}. He holds {{intro:sony}} in his hands. {{intro:john}}, stands beside him, holding an open case with {{intro:zeiss}}. The dent from a previous impact is visible on the truck's side panel. Wet handprints on the metal. Condensation drips from the exhaust pipe. The truck's reflection ripples in the puddle below. Alexander turns to the camera and {{line:L1}} He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes. A glare from the puddle briefly hits his face."
+  },
+  {
+   "id": "seg-2",
+   "beatsRu": "Договорив, Alexander небрежно бросает камеру за кадр. За кадром её еле ловит рыжий ассистент в очках — камера на нём не задерживается. John ставит кейс на мокрый асфальт.",
+   "en": "As soon as he finishes the line, Alexander casually tosses the camera out of frame, to the side. Off-screen, a young reddish-haired assistant in glasses catches it — just barely, fumbling, catching it at the last second, a look of surprise on his face. The camera does not linger on him — the frame stays on Alexander. John sets the open lens case down on the wet asphalt."
+  },
+  {
+   "id": "seg-3",
+   "beatsRu": "Без предупреждения John встаёт в стойку Брюса Ли, Alexander — в стойку ММА. Спарринг на мокром асфальте: скользят, часть ударов мимо, клинч, расходятся. У Alexander красное пятно на скуле, у John разбита губа. Ветер шевелит мокрые волосы и одежду.",
+   "en": "Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He taps his nose lightly with one finger, bounces on his feet, a faint smile of enjoyment on his face. Alexander shifts into a mixed martial arts stance. They start sparring — real, gritty, not always clean. John moves like Bruce Lee: precise, fast, controlled. Alexander moves like an MMA fighter: grounded, heavy, powerful. Both are damp from the rain, hair slightly wet, clothes clinging lightly to their bodies, sweat on their skin. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Some punches miss, some are blocked. At one point they clinch — pushing, shoving, unable to break apart, breathing hard in each other's faces. Then they separate, circle, catch their breath. Water splashes under their feet with each step. Wet footprints stay on the ground. Their breath is short and audible. When a punch lands, one of them exhales sharply, the other grimaces briefly, then recovers. A red mark appears on Alexander's cheekbone. John's lip is split — he wipes it, looks at his finger, smirks. Alexander rotates his shoulder after a block, checking it. The wind moves their damp hair and clothes as they fight, adding constant subtle motion to every frame."
+  },
+  {
+   "id": "seg-4",
+   "beatsRu": "Alexander пытается объяснять прямо в драке, слова рвутся между ударами: L2, блокирует удар; L3, уходит от удара ногой, оступается; L4.",
+   "en": "Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He {{line:L2}} He blocks a punch mid-sentence, keeps going. He {{line:L3}} He dodges a kick, stumbles, recovers. He {{line:L4}}"
+  },
+  {
+   "id": "seg-5",
+   "beatsRu": "Камера живая: бегает вокруг, приседает, снимает снизу, заваливает горизонт. Когда удар пролетает слишком близко — отдёргивается, теряет фокус. Спотыкается о бордюр. На мокром борту пикапа на долю секунды мелькает отражение оператора.",
+   "en": "The camera moves dynamically — running around the fighters, circling, ducking, crouching low when they close in, stepping closer, pulling back, dropping low and shooting upward, tilting the horizon slightly. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. There is a brief exhale of relief when it misses. The camera stumbles on a curb, the horizon tilts badly, then corrects. Breathing is heavy, sometimes through the mouth, sometimes through the nose. At one point, when the camera moves past the truck, the operator's faint reflection briefly appears in the wet body panel — a dark silhouette with the camera, gone in a split second. No one reacts. The reflection also ripples in the puddle below. The camera does not linger on it."
+  },
+  {
+   "id": "seg-6",
+   "beatsRu": "John влетает спиной в борт пикапа, появляется небольшая вмятина, камера вздрагивает; John с ухмылкой извиняется в объектив. Фон: прохожий снимает на телефон, охранник тянется к рации и передумывает, машина сигналит и уезжает, голуби, собака на поводке, дворник, студент в наушниках.",
+   "en": "At one point, John is pushed back hard and slams into the side of the pickup, his back hitting the metal with a dull thud. A small dent appears in the body panel. He winces, pushes off the truck, and keeps fighting. The camera shakes from the impact. John glances at the lens and gestures a quick apology with a grin, then keeps fighting. A passerby stops and watches, pulling out a phone to film. Another passerby keeps walking, not interested. A guard takes a step forward, reaches for his radio, then stops, does not call. Someone in the distance laughs when John misses a punch. A car slows on the road, the driver looking over, then honks and drives off. Everyone glances at the sound for a split second. Pigeons scatter. A dog barks and pulls on its leash. In the distance, a street cleaner sweeps, not paying attention. A student with headphones walks by without looking. Someone photographs the building, then turns at the noise."
+  },
+  {
+   "id": "seg-7",
+   "beatsRu": "Свет как событие: солнце из-за спин бойцов, мягкий контролируемый блик без засветки, облако на две секунды, тень пикапа двигается, блик от асфальта слепит объектив.",
+   "en": "The sun catches the lens from behind the fighters — backlight glows softly around their silhouettes, hair glowing, a controlled soft flare drifting across the frame without washing out the image. A cloud passes, the light shifts for two seconds, then returns. The shadow of the truck moves. A glare flashes off the wet asphalt and briefly blinds the lens. The camera keeps moving, shaking, hunting for focus, losing and catching it again."
+  },
+  {
+   "id": "seg-8",
+   "beatsRu": "Драка замедляется. Alexander подходит к камере, тяжело дыша: L5. Он не успевает договорить — John с разворота бьёт ногой в голову, Alexander вылетает из кадра. Кадр держится на пустом месте. John впервые смотрит в камеру, уставший и ошарашенный. Финал: лужа, мокрый асфальт, John на заднем плане, тишина, смех за кадром, камера опускается.",
+   "en": "The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and {{line:L5}} He is about to continue — but from behind, John leaps into the frame with a jumping spin kick. His foot hits Alexander in the head. Alexander is knocked out of frame, out of the shot. The camera jerks, loses focus, the frame tilts, then holds on the empty space where Alexander stood. John lands on his feet, breathing hard, looking down at where Alexander fell. He takes a step forward, as if to help. He looks directly at the camera for the first time — tired, a little stunned. The fight is over. The shot ends on the puddle, the wet asphalt, and John standing in the background, chest heaving. The wind keeps blowing across the empty space where Alexander stood, moving John's clothes and hair as he catches his breath. A second of silence, just the wind and the water. Someone laughs quietly off-screen. The camera slowly lowers, as if the arms holding it are finally tired."
+  }
+ ]
+}

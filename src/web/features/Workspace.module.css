@@ -346,3 +346,34 @@
     max-height: none;
   }
 }
+
+/* писатель */
+.writeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+}
+
+.agentNote {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--lab-space-4);
+  padding: var(--lab-space-4) var(--lab-space-6);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-accent-softer);
+  color: var(--lab-accent);
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-6) var(--lab-space-8);
+  border-radius: var(--lab-radius-xl);
+  background: var(--lab-fill-1);
+}
+
+.reportBad {
+  background: var(--lab-danger-softer);
+}
