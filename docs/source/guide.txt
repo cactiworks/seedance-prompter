@@ -1,0 +1,905 @@
+
+Cinema Ai Tech · Разбор ролика: как сделать ИИ-видео, в которое верит мозг
+- 
+- 
+- 
+- 
+↑
+Cinema Ai TechSCHOOL← Главный экранИдеяРеализмМеханикаАнатомияКадр 1Кадр 2Кадр 3ПриёмыОшибкиШаблон
+Cinema Ai Tech • school · разбор ролика
+# Как сделать ИИ-видео, в которое верит мозг
+Полный разбор ролика: 3 кадра, 6 генераций, 6 промтов без единого сокращения, референсы, видео-результаты и объяснение каждого абзаца. Бери логику, применяй к своим референсам и получай реализм, в котором зритель забывает, что это сгенерировано.
+Начать разбор ↓Сразу к шаблону промта
+3кадра · 3 камеры
+6генераций
+3не вошли в монтаж
+8 254слов промтов
+0сокращений
+О ролике
+## Три кадра. Три камеры. Один вопрос: почему это выглядит настоящим?
+Ролик показывает, как отличается картинка разных кинокамер и объективов, но главный урок — в другом: как собрать промт, после которого зритель забывает, что видео сгенерировано. Всё сделано в Higgsfield, одним 30-секундным дублем на кадр, вертикаль 9:16.
+01
+### ARRI Alexa 35 + Cooke S4/i
+Плёнка. Зерно, тёплый цвет, круглое боке. Кадр-представление: занос пикапа, борт, три камеры.
+02
+### Sony VENICE 2 + ZEISS Supreme Prime
+Чистая цифра. Холодные нейтральные тона, сдержанные блики. Кадр-демонстрация: драка и разговор о качестве.
+03
+### RED V-RAPTOR + Laowa Proteus 2x
+Анаморфот. Горизонтальные блики, овальное боке, глобальный затвор. Кадр-финал: «у каждой камеры свой характер».
+### Как читать этот гайд
+Каждый промт показан целиком и дословно, блок за блоком. Слева текст, справа объяснение, зачем этот абзац и что случится, если его убрать. Ссылки <<<image_N>>> — это номера картинок в панели референсов Higgsfield. Подсветка помогает увидеть, из каких «кирпичей» состоит промт. Нажимай на категории, чтобы включать и выключать:
+Референс <<<image_N>>>Камера и оптикаДефекты оператораХарактер картинкиМир, погода, светРепликиЗапреты
+Принцип
+## 8 сигналов реальности, которые проверяет мозг
+Мозг не разглядывает пиксели, он проверяет сигналы. Когда все сигналы на месте, глаз доверяет картинке. Когда один-два отсутствуют (например, идеально плавная камера), возникает ощущение «это сгенерировано». Каждый сигнал ниже мы прописываем в промте отдельными словами.
+01
+### Несовершенная рука
+Живой оператор дышит, шагает, чуть уводит кадр. Идеально плавная «камера-дрон» — первый признак генерации.
+- unstabilized handheld camera, no stabilization whatsoever
+- breathing audible and visible in the frame rhythm
+- camera dips when the operator listens
+02
+### Ошибки техники
+Реальная камера ошибается: фокус «охотится», автоэкспозиция прыгает при повороте к небу, зум дёргается, горизонт заваливается.
+- auto-exposure jumps when the camera turns from bright sky to darker ground
+- brief focus hunting during fast movements
+- horizon slightly tilted
+03
+### Отпечаток стекла
+Каждая пара «камера + объектив» оставляет свой почерк: зерно, форма боке, аберрации, виньетирование, характер бликов.
+- shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0
+- soft circular bokeh, slight chromatic aberration at the edges, natural vignetting
+04
+### Физика мира
+Мокрый асфальт, отражения, пар, брызги, ветер в одежде. Мозг сразу замечает, когда мир «пластиковый» и ничего не отражает.
+- Wet asphalt, puddles reflecting the sky and the building
+- A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly
+05
+### Жизнь вокруг
+За героями идёт чужая жизнь: собака, охранник, студент, ребёнок с шариком. Никто не смотрит в камеру и не «играет» на неё.
+- A dog pulls on its leash, the owner tugs it back
+- No one in the foreground reacts
+06
+### Неидеальные люди
+Люди запинаются, переспрашивают, смеются, морщатся, тяжело дышат. Идеальная дикция и театральные жесты выдают постановку.
+- He stumbles on a word, repeats it, keeps going
+- Real human behavior, no staged acting, no theatrical gestures
+07
+### Звук
+Половина реализма — в ушах: ветер в микрофоне, дыхание оператора, смех за кадром, тишина в конце дубля.
+- The wind hits the microphone
+- A second of silence, just the wind and seagulls. Someone laughs off-screen.
+08
+### Память мира
+Мир помнит, что в нём произошло: вмятина на пикапе, мокрые отпечатки, синяк после драки. Между кадрами это работает как непрерывность.
+- The dent from a previous impact is visible on the truck's side panel
+- a light bruise forming under the skin, like a fresh impact
+Наша цель не обмануть эксперта, а дать мозгу зрителя достаточно причин не искать подвох.
+Пока зритель ищет ошибку, он не переживает за героев. Как только он перестаёт искать, включается сопереживание. Даже если часть сознания знает, что это генерация, другая часть воспринимает картинку как настоящую. Поэтому реализм для нас это не «красивое изображение», а набор сигналов, которые мозг привык связывать с реальной съёмкой.
+ИИ-слоп против реальной съёмки
+Типичный ИИ-слопКак делаем мы
+КамераПлавный дрон-пролёт, идеальная компоновка, всегда «красиво».Ручная камера без стабилизации: шаги, дыхание, заваленный горизонт, потеря фокуса.
+СветРовный студийный свет, одинаковый весь ролик.Свет — событие: солнце пробивается, облако на 2 секунды гасит, блик слепит объектив.
+ЛюдиКрасивые лица смотрят в камеру и «играют».Запинки, смех, усталость, взгляд на партнёра, а не на камеру.
+ФонПустая или статичная декорация, «массовка» стоит.Собака, охранник, ребёнок, машина, птица. Жизнь идёт без оглядки на камеру.
+ЗвукЧистый голос поверх тишины.Ветер в микрофоне, дыхание, чихание за кадром, тишина в конце.
+ФиналСцена обрывается на середине движения.Пауза, взгляд, смех за кадром, камера «устаёт» и опускается.
+Механика
+## Почему промты такие длинные и что в них нужно писать
+Длина промта не самоцель. Каждая строка либо убирает у модели возможность выбрать «среднее», либо добавляет сигнал реальности, либо защищает от известной ошибки. Ниже 11 правил, которые мы вывели из шести генераций.
+### Всё, что ты не написал, модель выберет за тебя, и выберет усреднённо
+Каждое «пустое место» в промте модель заполняет самым вероятным вариантом. А самый вероятный вариант — это глянцевая, симметричная, стабилизированная картинка, то есть тот самый ИИ-слоп. Поэтому длинный промт — не многословие, а сужение выбора: с каждой строкой у модели остаётся меньше возможностей выбрать «среднее».
+### Пиши как сценарий: порядок абзацев = порядок во времени
+Промт у нас читается сверху вниз как таймлайн: старт → событие → реплика → действие → свет → финал. Один абзац отвечает за один отрезок ролика. Так проще управлять: понятно, какой абзац виновен, если что-то пошло не так на 12-й секунде.
+### Сначала «как снято», потом «что снято»
+Первый блок всегда о съёмке: формат, ручная камера, модель камеры, объективы, характер картинки, дефекты оператора, язык речи. Дальше идут локация, герои, действия. Стиль-блок задаёт «оптику мира», сцена наполняет её людьми.
+### Реальные названия камер и линз работают как якоря
+Название камеры и объективов связывает будущую картинку с тем, как выглядит реальный материал с этой техники. Но одного названия мало: рядом мы описываем характер (зерно, боке, блики, цветокор). Цифры вроде 8.6K или dual native ISO скорее сигнализируют «класс техники», чем реально настраивают что-то. Это наше рабочее допущение, оно подтверждается тем, что три кадра с разной техникой действительно выглядят по-разному, а точные числовые параметры модель не «считает».
+### Референс без роли — это лотерея
+Референсы вызываются по номеру: <<<image_N>>> — это порядок картинок в панели Higgsfield. Для каждой картинки пишется роль: «берём только локацию, людей игнорируем», «герой соответствует image_N», «пикап из image_N», «объектив из image_N». Без роли модель забирает из картинки всё подряд: людей с фона, текст с карточки, случайные детали.
+### Запрет тоже инструкция, но его нужно объяснить
+Строка no operator visible сама по себе не спасла нас в первой попытке: в тексте ниже оператор оставался главным действующим лицом. Сработало другое: сменили позицию камеры, добавили запрет и объяснили, как читать слова об операторе («каждое упоминание оператора — это поведение камеры»). Запрет работает, когда весь остальной текст с ним не спорит.
+### Один объект — одна роль
+В Кадре 3 камера RED есть дважды: та, которой снимаем, и та, что стоит в руках героя. Если не разделить роли, модель переносит эффекты объектива (анаморфный блик) на предмет в кадре. Решение: явно написать, что снимающая камера даёт эффекты на изображение, а камера-реквизит — просто предмет.
+### У внимания модели есть бюджет
+В 30 секунд помещается около 4–6 крупных событий. Всё, что сверх этого (мы дали фону около 15 микро-событий), модель выполняет частично. Это нормально: фон работает как «приправа» и даёт ощущение жизни, даже если исполнена его часть. Но главное действие должно быть простым и единственным в абзаце.
+### Реплики в кавычках — это озвучка, буква в букву
+Русский текст в «ёлочках» модель произносит как написано. Опечатка или странное слово попадёт в звук. Поэтому реплики вычитываем, а вокруг них фиксируем язык и произношение: «clear, native Russian, perfect pronunciation, natural intonation». Реплики делаем короткими и добавляем живые ошибки: запнулся, повторил, продолжил.
+### Кадры связаны: продумывай последствия
+Что случилось в кадре N, то должно быть видно в кадре N+1. Удар в голову в Кадре 2 стал синяком на правой стороне лица в Кадре 3. Когда синяк оказался не с той стороны и слишком сильным, начало кадра не вошло в монтаж. Пиши сторону, степень и как это выглядит («лёгкое покраснение, без крови»).
+### Механику лови в монтаже
+Открывающиеся борта, двери, крышки кейсов остаются слабым местом видеомоделей. Мы не боремся с этим бесконечными перегенерациями: сцену строим так, чтобы огрехи можно было спрятать шрифтом в монтаже или принять как «ящик с отсеками».
+Анатомия
+## Из чего состоит промт: 12 слоёв
+Любой наш промт собирается из одних и тех же слоёв. Слева направо: что это, пример из реального промта, зачем оно нужно. Дальше ты увидишь эти слои в действии на каждом кадре.
+01
+#### Формат и жанр
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits.
+Жанр «документальное кино» и прямая цель «неотличимо от реальной съёмки» задают планку. Вертикаль 9:16 нужна для Reels/Shorts. Один дубль без склеек запрещает модели «красиво нарезать».
+02
+#### Способ съёмки
+unstabilized handheld camera, no stabilization whatsoever
+Главный переключатель документальности. Ручная камера без стабилизации сразу убирает «плавающий» вид и добавляет естественную тряску.
+03
+#### Камера и объективы
+shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0
+Точные названия реальной техники. T2.0 подсказывает светосилу и малую глубину резкости. Для других кадров: Sony VENICE 2 + ZEISS Supreme Prime, RED V-RAPTOR + Laowa Proteus 2x Anamorphic.
+04
+#### Характер картинки
+Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones.
+Что видит глаз: зерно, цветокор, мягкий уход светов в белое, тона кожи. Это то, чем отличается «ARRI и плёнка» от «холодной чистой цифры» Sony.
+05
+#### Дефекты оператора
+auto-exposure jumps…, brief focus hunting…, manual autofocus that breathes and occasionally misses, mechanical zoom that jerks, horizon slightly tilted, camera hand repositioning, breathing audible and visible in the frame rhythm.
+Список человеческих и технических ошибок. Именно они дают ощущение, что за камерой человек, а не алгоритм.
+06
+#### Правило про оператора
+The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera.
+Появилось после того, как в кадре начали появляться камера и руки оператора. Слова «оператор двигается» превращаются в «камера двигается».
+07
+#### Локация и погода
+Location: exactly as in <<<image_1>>> and <<<image_2>>>… Take only the location itself: no people… The rain has just stopped… Wet asphalt, puddles reflecting the sky…
+Референсы места, что из них брать и что игнорировать, плюс погода, которая даёт физику: отражения, пар, мягкий свет.
+08
+#### Герои и предметы
+Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>… the main pickup from <<<image_11>>>…
+Внешность героев берётся из character sheet, предметы — из референсов. Каждая ссылка имеет роль.
+09
+#### Сценарий по таймлайну
+As soon as the cars stop, the operator throws open the door… Alexander starts talking immediately… He stumbles on a word, repeats it, keeps going…
+Действия и реплики в порядке времени. В каждой сцене одно главное действие и мелкие живые детали.
+10
+#### Свет как событие
+A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.
+Свет не постоянен: он приходит и уходит. Это даёт ритм и объём.
+11
+#### Мир вокруг и звук
+A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash… The wind hits the microphone… Someone off-screen sneezes…
+Фон, звуки за кадром и микро-реакции людей. Их не обязательно показывать все: они работают даже частично.
+12
+#### Финал
+A second of silence, just the wind and seagulls. Someone laughs off-screen. The camera lowers slightly, the shot settling into stillness…
+Прописанный конец дубля: состояние покоя, тишина, звук. Без него модель обрывает сцену на середине движения.
+01
+Разбор кадра
+## Кадр 1
+ARRI Alexa 35 + Cooke S4/i Prime
+Плёнка, тёплый цвет, круглое боке
+Открывающий кадр ролика. Alexander и John подъезжают на пикапе, открывают борт и представляют три кинокамеры и три комплекта объективов. Задача кадра: зритель должен поверить в реальность сцены раньше, чем поймёт, что она сгенерирована. Поэтому кадр начинается с экшена (занос на мокрой дороге), продолжается живой речью, и заканчивается рукой Alexander на Sony: следующий кадр будет как раз про неё.
+Здесь пройден самый длинный путь: три генерации. Две не вошли в монтаж, третья стала начальным кадром ролика. Именно на этих ошибках проще всего понять, как строится реалистичный промт.
+Референсы
+Панель Higgsfield для попыток 2 и 3: 11 референсов. Порядок картинок в панели — это порядок номеров <<<image_N>>> в промте.
+<<<image_1>>>Локация: набережнаяБерём только пространство. Человека с референса игнорируем (в промте это прописано дважды).
+<<<image_2>>>Локация: высоткаВторой ракурс места: здание МГУ вдали, парапет, небо.
+<<<image_3>>>ARRI Alexa 35Собранный риг: камера в борту пикапа.
+<<<image_4>>>Sony VENICE 2Миниатюра из панели: исходный файл референса не сохранился. Эту камеру Alexander держит в руках.
+<<<image_5>>>RED V-RAPTORКарточка со спецификациями: надписи с неё могут просочиться в кадр. Чистое фото камеры надёжнее.
+<<<image_6>>>Объективы CookeНа референсе подпись Cooke Panchro Classic FF, а в тексте S4/i. Для модели это два разных сигнала, лучше согласовать.
+<<<image_7>>>ZEISS Supreme PrimeКомплект объективов для Sony.
+<<<image_8>>>Laowa Proteus 2xАнаморфотные объективы для RED.
+<<<image_9>>>AlexanderCharacter sheet: лицо, профиль, поза в полный рост, одежда.
+<<<image_10>>>JohnCharacter sheet в той же логике.
+<<<image_11>>>Главный пикапМашина из референса. На картинке рядом стоит человек, поэтому лучше добавлять оговорку «только машина».
+Генерации и полные промты
+Попытка 1Попытка 2Попытка 3
+- 0:00«Актёр» стоит в центре кадра, на фоне охранник и собака
+- ≈0:03Пикап тормозит, из-под колёс густой дым
+- ≈0:05Взлетают птицы, вдали виден шарик
+- ≈0:09Alexander и John подходят к машине
+- ≈0:17Борт открыт: три рига и отдельные кейсы с линзами
+- ≈0:29Финал: четверо у борта
+● Не вошла в монтаж
+### Нет референса пикапа, лишний персонаж, не та одежда
+Скрин панели этой попытки не сохранился. По тексту промта референсы шли так: 1 John, 2–3 локация, 4 Alexander, 5 «актёр» (лишний персонаж), 6 ARRI, 7 Sony, 8 RED, 9 Cooke, 10 Zeiss, 11 Proteus. Референса пикапа среди них нет.
+Как всё началось
+- Первая версия кадра: сама идея уже здесь (занос пикапа, выход героев, борт с тремя камерами).
+- В референсы добавили отдельного героя, мужчину, который стоит на парковке и отпрыгивает от машины.
+- Портрет Alexander на референсе был в другой одежде.
+- Пикап описан только словами, без картинки.
+Что получилось
+- Борт открывается по физике, как у настоящего пикапа.
+- Три кейса с линзами стоят отдельно, у каждого свои вырезы под линзы, три рига читаются.
+- Есть жизнь вокруг: охранник, собака, взлетающие голуби, шарик в небе.
+- Оператор и его камера в кадре не появились.
+Что не получилось
+- Машина не та: старый серебристо-серый пикап с дугой вместо тёмного RAM из референсов.
+- «Случайный» мужчина в синей рубашке и шортах занимает кадр первые ~12 секунд и остаётся рядом с героями до самого финала.
+- Alexander в тёмной рубашке и чёрных брюках, не как задумано.
+- Выход героев из пикапа не показан: они уже идут к машине.
+- Финал: общий план четверых у борта, а не отъезд на три камеры.
+Главная причина отказа: забыли добавить референс пикапа. Модель нарисовала свою машину, и она не сошлась с остальным материалом. Ко всему добавились лишний персонаж и не та одежда Alexander. В следующей попытке референс пикапа добавили, «актёра» убрали, одежду Alexander поменяли.
+#### Полный промт · Кадр 1 · Попытка 1
+Полный текст без сокращений · 4 блоков · 1 453 слов · 8 944 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, operator hand repositioning, camera dips when operator listens, operator breathing audible and visible in the frame rhythm. The operator moves continuously — steps closer, steps back, circles around the subjects, never cutting, always tracking. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation.
+Location: exactly as in <<<image_2>>> and <<<image_3>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_2>>> and <<<image_3>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. After rain: the asphalt is wet, puddles reflect the sky, the building, and the truck. The parapet glistens. Steam rises faintly from the warming road. The overcast has not yet cleared, but sunlight breaks through in places — long, sharp shadows stretch across the wet ground. Wind off the water. Seagulls crying. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+The camera first catches the parking area — the male actor from <<<image_5>>> stands in the frame, not looking at the camera, just waiting, hands in his pockets, looking around casually. Then he notices the pickup truck approaching fast from a distance. His eyes widen slightly. He quickly steps back and to the side, out of the way — he slips slightly on the wet asphalt, catches himself, mutters something under his breath, no sound. The truck brakes hard right where he was standing — the wheels lock, the tires screech and skid on the wet asphalt, the rear end slides slightly, the truck rotates a few degrees before the driver corrects it and stops at an angle. A light spray of water from under the wheels. A faint wisp of steam rises where hot rubber meets the wet road. The truck rocks slightly on its suspension before settling. Water drips from the body onto the asphalt. A puddle nearby trembles from the engine vibration. The actor from <<<image_5>>> stands to the side, catching his breath, watching the truck, slightly annoyed. He brushes splashes off his pants. The operator flinches at the sound of the brakes. A passerby turns. A guard instinctively places a hand on his holster. Pigeons take off. Someone wrinkles their nose at the smell of burnt rubber. The truck has dirt splashes on the sides, a grimy license plate, wet streaks on the body, mud on the running boards. The antenna sways slightly. The side mirrors are covered in droplets. The engine still running, a light exhaust haze from the pipe, condensation dripping from the exhaust tip, rear brake lights glowing red.
+In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away, calming him. No one in the foreground reacts — it is just a background moment, the camera does not focus on them.
+Alexander, matching <<<image_4>>>, and John, matching <<<image_1>>>, get out of the pickup. Alexander starts talking immediately, turning toward the camera as he walks. He rubs his hands together — cold after the street. He squints as the sun comes out. He glances at the MSU building, as if checking the location, and nods to himself. He looks at the actor from <<<image_5>>> who just jumped away and laughs shortly — a real laugh, not staged. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going. The operator steps closer, then back, the focus breathing slightly as Alexander moves. The zoom jerks once, mechanically, then settles. The camera briefly loses frame as the operator glances at the actor.
+John glances at his phone briefly, puts it away. He looks at the actor with a faint smirk, says something short to him without sound. They walk to the back of the pickup. The operator circles around them, still tracking, his breath audible, sometimes through the nose, sometimes through the mouth. John opens the tailgate with effort — it is heavy. The latch clicks loudly. He wipes his hands on his pants after touching the wet metal. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_6>>>, the Sony VENICE 2 from <<<image_7>>>, and the RED V-RAPTOR from <<<image_8>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_9>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_10>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_11>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray. Someone picks up a battery, checks it, puts it back. John lifts one camera briefly, feels its weight, sets it down. He smiles faintly, as if remembering a shoot. Alexander speaks and John nods slightly, still looking at the equipment.
+The sun comes out from behind a cloud as the tailgate opens — a brief lens flare passes across the lenses in the cases. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. The shadow of the truck moves as the sun comes out. A glare flashes off the truck's windshield, briefly blinding the lens.
+Alexander gestures toward them and says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.» He pauses, adjusts one camera so it sits straight, then says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The operator moves in closer, the focus briefly slips, then catches again. The operator laughs quietly — the camera shakes slightly.
+The camera continues to follow them, handheld, shaking with the operator's steps, never cutting. The operator breathes steadily, sometimes through the nose, sometimes through the mouth when he moves. He shifts the camera from one hand to the other, adjusts the strap, checks focus with his hand on the lens barrel. He almost trips on a curb as he steps back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. Someone in the distance calls out to someone else, waving. A bird lands on the parapet, then takes off again. Somewhere in the distance, a car horn sounds. A door of the MSU building slams, a student walks out. The wind hits the microphone — the operator winces slightly. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down. Sunlight catches Alexander's hair from behind, briefly making it glow.
+The shot ends on the three cameras in the open tailgate. The operator slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander places his hand on one of the cameras. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The operator lowers the camera slightly, the shot settling into stillness, the frame tilting just a little as if his arms are tired.БЛОК 01 / 04Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, operator hand repositioning, camera dips when operator listens, operator breathing audible and visible in the frame rhythm. The operator moves continuously — steps closer, steps back, circles around the subjects, never cutting, always tracking. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation.
+Разбор абзацаСтиль-блок
+- Тот же каркас, что во всех попытках Кадра 1: формат, ручная камера, ARRI Alexa 35 + Cooke S4/i, характер картинки, дефекты оператора, язык.
+- Два отличия от следующих версий: нет no stabilization whatsoever, а хвост про речь короче (без «as spoken by native Russian speakers. No accent…»).
+- Оператор описан как человек: The operator moves continuously — steps closer, steps back, circles around the subjects. В этой попытке он в кадре не появился, но именно такие формулировки позже сыграют против нас.
+БЛОК 02 / 04Копировать блок
+Location: exactly as in <<<image_2>>> and <<<image_3>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_2>>> and <<<image_3>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. After rain: the asphalt is wet, puddles reflect the sky, the building, and the truck. The parapet glistens. Steam rises faintly from the warming road. The overcast has not yet cleared, but sunlight breaks through in places — long, sharp shadows stretch across the wet ground. Wind off the water. Seagulls crying. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+The camera first catches the parking area — the male actor from <<<image_5>>> stands in the frame, not looking at the camera, just waiting, hands in his pockets, looking around casually. Then he notices the pickup truck approaching fast from a distance. His eyes widen slightly. He quickly steps back and to the side, out of the way — he slips slightly on the wet asphalt, catches himself, mutters something under his breath, no sound. The truck brakes hard right where he was standing — the wheels lock, the tires screech and skid on the wet asphalt, the rear end slides slightly, the truck rotates a few degrees before the driver corrects it and stops at an angle. A light spray of water from under the wheels. A faint wisp of steam rises where hot rubber meets the wet road. The truck rocks slightly on its suspension before settling. Water drips from the body onto the asphalt. A puddle nearby trembles from the engine vibration. The actor from <<<image_5>>> stands to the side, catching his breath, watching the truck, slightly annoyed. He brushes splashes off his pants. The operator flinches at the sound of the brakes. A passerby turns. A guard instinctively places a hand on his holster. Pigeons take off. Someone wrinkles their nose at the smell of burnt rubber. The truck has dirt splashes on the sides, a grimy license plate, wet streaks on the body, mud on the running boards. The antenna sways slightly. The side mirrors are covered in droplets. The engine still running, a light exhaust haze from the pipe, condensation dripping from the exhaust tip, rear brake lights glowing red.
+Причина проблемыЛокация и «актёр»
+- Локация вызвана номерами <<<image_2>>> и <<<image_3>>>: на первом месте здесь стоит портрет John, поэтому номера сдвинуты. Роль расписана: берём только пространство, людей игнорируем.
+- Погода другая: After rain, overcast has not yet cleared, long, sharp shadows, ветер и чайки. Позже кадр перейдёт на «дождь только закончился, выходит солнце»: мягкие лучи, блики, отражения.
+- Лишний персонаж. Мужчина from <<<image_5>>> получил свой референс и длинный абзац (руки в карманах, глаза расширились, поскользнулся, ворчит, стряхивает брызги). Модель сделала его главным героем сцены. Правило: у случайного прохожего не должно быть ни референса, ни подробной роли.
+- Пикап описан только словами. Грязь, номер, потёки, мутные зеркала, дымок из трубы: описание очень точное, но без картинки модель нарисовала свою машину. Текст не заменяет референс.
+- Мелочи, которые не сработают: mutters something under his breath, no sound (реплика без звука), wrinkles their nose at the smell of burnt rubber (запах не покажешь).
+БЛОК 03 / 04Копировать блок
+In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away, calming him. No one in the foreground reacts — it is just a background moment, the camera does not focus on them.
+Alexander, matching <<<image_4>>>, and John, matching <<<image_1>>>, get out of the pickup. Alexander starts talking immediately, turning toward the camera as he walks. He rubs his hands together — cold after the street. He squints as the sun comes out. He glances at the MSU building, as if checking the location, and nods to himself. He looks at the actor from <<<image_5>>> who just jumped away and laughs shortly — a real laugh, not staged. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going. The operator steps closer, then back, the focus breathing slightly as Alexander moves. The zoom jerks once, mechanically, then settles. The camera briefly loses frame as the operator glances at the actor.
+John glances at his phone briefly, puts it away. He looks at the actor with a faint smirk, says something short to him without sound. They walk to the back of the pickup. The operator circles around them, still tracking, his breath audible, sometimes through the nose, sometimes through the mouth. John opens the tailgate with effort — it is heavy. The latch clicks loudly. He wipes his hands on his pants after touching the wet metal. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_6>>>, the Sony VENICE 2 from <<<image_7>>>, and the RED V-RAPTOR from <<<image_8>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_9>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_10>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_11>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray. Someone picks up a battery, checks it, puts it back. John lifts one camera briefly, feels its weight, sets it down. He smiles faintly, as if remembering a shoot. Alexander speaks and John nods slightly, still looking at the equipment.
+Причина проблемыРебёнок, герои, оборудование
+- Ребёнок с шариком стоит в самом начале, до героев. На видео от этого остался только шарик вдали: фон исполнен лишь частично.
+- Alexander, matching <<<image_4>>> и John, matching <<<image_1>>>: внешность берётся с character sheet. У Alexander портрет был в другой одежде, поэтому он в ролике другой.
+- У героев здесь больше 15 мелких действий подряд: потирает руки, щурится, кивает на МГУ, смеётся, смотрит в телефон, ухмыляется, вытирает руки, берёт батарейку… За 30 секунд модель это не покажет. Лучше оставить одно действие на героя.
+- Борт и оборудование описаны одинаково во всех попытках (три камеры, три кейса, износ, беспорядок кабелей). Именно здесь борт открылся по физике, а кейсы стояли отдельно. В удачной третьей попытке тот же текст дал другой результат: повтор не гарантирован.
+БЛОК 04 / 04Копировать блок
+The sun comes out from behind a cloud as the tailgate opens — a brief lens flare passes across the lenses in the cases. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. The shadow of the truck moves as the sun comes out. A glare flashes off the truck's windshield, briefly blinding the lens.
+Alexander gestures toward them and says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.» He pauses, adjusts one camera so it sits straight, then says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The operator moves in closer, the focus briefly slips, then catches again. The operator laughs quietly — the camera shakes slightly.
+The camera continues to follow them, handheld, shaking with the operator's steps, never cutting. The operator breathes steadily, sometimes through the nose, sometimes through the mouth when he moves. He shifts the camera from one hand to the other, adjusts the strap, checks focus with his hand on the lens barrel. He almost trips on a curb as he steps back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. Someone in the distance calls out to someone else, waving. A bird lands on the parapet, then takes off again. Somewhere in the distance, a car horn sounds. A door of the MSU building slams, a student walks out. The wind hits the microphone — the operator winces slightly. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down. Sunlight catches Alexander's hair from behind, briefly making it glow.
+The shot ends on the three cameras in the open tailgate. The operator slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander places his hand on one of the cameras. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The operator lowers the camera slightly, the shot settling into stillness, the frame tilting just a little as if his arms are tired.
+Разбор абзацаСвет, реплики, фон и финал
+- Свет привязан к событиям: солнце выходит, когда открывается борт, блик от лобового стекла слепит объектив, тень пикапа движется. Такой свет требует, чтобы пикап был в кадре, а он не тот.
+- Две реплики стоят одна за другой, между ними пауза и жест: adjusts one camera so it sits straight. Так речь получает ритм и действие.
+- Финал: рука Alexander на «одной из камер». В третьей попытке это уточнили до Sony, чтобы связать кадр со следующим.
+- 0:00Ребристый пол кузова и камера оператора внизу кадра
+- ≈0:02Занос пикапа: пар, вода из-под колёс, крен камеры
+- ≈0:06Alexander идёт к камере, речь идёт непрерывно до ≈0:27
+- ≈0:12Открытый борт, кейс с линзами в руках Alexander
+- весь роликКамера и руки оператора остаются в нижней части кадра
+- ≈0:29Тишина: ветер, смех за кадром по промту
+● Не вошла в монтаж
+### В кадре постоянно камера и руки оператора
+Референсы: 11 штук (см. панель выше). Пикап добавлен, лишний «актёр» удалён, портрет Alexander заменён.
+Что поменяли
+- Добавили референс пикапа (<<<image_11>>>).
+- Убрали лишнего персонажа и заменили портрет Alexander: одежда и комплекция как задумано.
+- Кадр снимает «оператор в кузове второго пикапа»: он же бросается вперёд при торможении, ловит камеру, выпрыгивает из кузова.
+Что получилось
+- Пикап тёмный, как в референсе; номера читаются.
+- Alexander и John выглядят как в референсах, Alexander смотрит в объектив и показывает открытый кейс.
+- Занос с брызгами и паром, лужа с отражениями, высотка, контровой свет.
+- Финал: отъезд, оба смотрят в камеру, звук стихает.
+Что не получилось
+- В нижней части кадра почти весь ролик видны камера оператора с меховой ветрозащитой и его руки.
+- Ракурс «из-за камеры» с широким углом: выглядит как экшн-камера, а не как Cooke на ARRI.
+- Три камеры в борту не читаются по отдельности, кейсы со слишком мелкой деталью.
+- Не видно, как John берёт VENICE 2 и поворачивает её перед объективом.
+Проблема в том, что камера, которая снимает, оказалась в кадре. Оператор описан как действующее лицо, модель нарисовала оператора с камерой. Реалистичность страдает: мы видим не «реальную съёмку», а «съёмку про съёмку». Решение в следующей попытке: сменили точку съёмки, добавили запрет и переписали слова про оператора.
+#### Полный промт · Кадр 1 · Попытка 2
+Полный текст без сокращений · 7 блоков · 1 194 слов · 7 435 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, operator hand repositioning, camera dips when operator listens, operator breathing audible and visible in the frame rhythm. The operator moves continuously — steps closer, steps back, circles around the subjects, never cutting, always tracking. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+The scene starts dynamic. The operator rides in the cargo bed of a second pickup truck, filming from behind as the main pickup from <<<image_11>>>, driven by Alexander and John, speeds along the road. Ahead, on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both pickups brake hard at the same moment. The operator in the second truck is thrown forward, slams into the side of the cargo bed, the camera swings violently, nearly drops, he catches it, the frame tilts, then he steadies it, breathing hard. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.
+As soon as the trucks stop, the operator jumps out of the cargo bed and runs toward the main pickup, camera already rolling. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.
+John opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.
+John lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles. Alexander, still talking, lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»
+The sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.
+Alexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The operator moves in closer, the focus briefly slips, then catches again. The operator laughs quietly — the camera shakes slightly.
+The camera continues to follow them, handheld, shaking with the operator's steps, never cutting. The operator breathes steadily, sometimes through the nose, sometimes through the mouth when he moves. He shifts the camera from one hand to the other, adjusts the strap, checks focus with his hand on the lens barrel. He almost trips on a curb as he steps back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — the operator winces slightly. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down
+The shot ends on the three cameras in the open tailgate. The operator slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The operator lowers the camera slightly, the shot settling into stillness, the frame tilting just a little as if his arms are tired.БЛОК 01 / 07Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, operator hand repositioning, camera dips when operator listens, operator breathing audible and visible in the frame rhythm. The operator moves continuously — steps closer, steps back, circles around the subjects, never cutting, always tracking. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Причина проблемыСтиль-блок
+- Сюда впервые добавлен полный «портрет оператора»: operator hand repositioning, camera dips when operator listens, operator breathing audible and visible in the frame rhythm. The operator moves continuously — steps closer, steps back, circles around the subjects.
+- Все эти строки сообщают модели, что у сцены есть человек с камерой. Что она и нарисует.
+БЛОК 02 / 07Копировать блок
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+Ключевое решениеЛокация
+- Идентична удачной третьей попытке. Значит, не виновата: в одном и том же месте кадр одинаково работает в обоих случаях.
+- Роль референсов ясна: берём пространство, людей игнорируем (Ignore any people present…).
+БЛОК 03 / 07Копировать блок
+The scene starts dynamic. The operator rides in the cargo bed of a second pickup truck, filming from behind as the main pickup from <<<image_11>>>, driven by Alexander and John, speeds along the road. Ahead, on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both pickups brake hard at the same moment. The operator in the second truck is thrown forward, slams into the side of the cargo bed, the camera swings violently, nearly drops, he catches it, the frame tilts, then he steadies it, breathing hard. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.
+Причина проблемыСтартовая сцена: оператор в кузове
+- The operator rides in the cargo bed of a second pickup truck, filming from behind: точка съёмки задана через человека. Чтобы показать эту точку, модель показывает кузов, руки и камеру.
+- thrown forward, slams into the side of the cargo bed, the camera swings violently, nearly drops, he catches it: очень выразительный, но опасный абзац. Он требует, чтобы оператор был виден: иначе как он «ловит камеру»?
+- Пикап из референса <<<image_11>>>. Здесь он на месте, в отличие от попытки 1.
+- Цепочка событий та же, что в удачной попытке: человек на дороге → отскок → торможение → занос → брызги и пар → реакция человека.
+БЛОК 04 / 07Копировать блок
+As soon as the trucks stop, the operator jumps out of the cargo bed and runs toward the main pickup, camera already rolling. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.
+John opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.
+Причина проблемыВыход, реплика 1, борт
+- the operator jumps out of the cargo bed and runs toward the main pickup, camera already rolling: ещё одно действие оператора. В удачной версии оно превращено в «камера бежит».
+- Герои привязаны к референсам: Alexander, matching <<<image_9>>>, John, matching <<<image_10>>>.
+- Реплика 1 и запинка (He stumbles on a word, repeats it, keeps going, hands moving) те же, что и в третьей попытке.
+- Борт и техника: три камеры (<<<image_3>>>, <<<image_4>>>, <<<image_5>>>), три кейса (<<<image_6>>>, <<<image_7>>>, <<<image_8>>>), износ и беспорядок. Здесь размер плана не задан, и модель выбирает общий план.
+БЛОК 05 / 07Копировать блок
+John lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles. Alexander, still talking, lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»
+The sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.
+Разбор абзацаДемонстрация камеры и свет
+- Действия разнесены на двух героев: John поднимает Sony и крутит, Alexander «продолжая говорить» открывает кейс. В удачной версии всё делает Alexander: меньше субъектов — меньше ошибок.
+- Свет как событие (солнце, блик по стеклу, отражение камер в луже, облако на 2 секунды, контровой свет на волосах) описан так же, как в удачной попытке.
+БЛОК 06 / 07Копировать блок
+Alexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The operator moves in closer, the focus briefly slips, then catches again. The operator laughs quietly — the camera shakes slightly.
+The camera continues to follow them, handheld, shaking with the operator's steps, never cutting. The operator breathes steadily, sometimes through the nose, sometimes through the mouth when he moves. He shifts the camera from one hand to the other, adjusts the strap, checks focus with his hand on the lens barrel. He almost trips on a curb as he steps back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — the operator winces slightly. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down
+Причина проблемыРеплика 3, поведение оператора, фон
+- The operator laughs quietly — the camera shakes slightly, shifts the camera from one hand to the other, adjusts the strap, checks focus with his hand on the lens barrel, The wind hits the microphone — the operator winces slightly. Каждая из этих фраз описывает руки и камеру, а не картинку.
+- Фон (около 15 микро-событий: собака, охранник, студент, ребёнок с шариком, птица, чихание) полностью совпадает с удачной версией. Значит, и здесь он исполнен частично.
+БЛОК 07 / 07Копировать блок
+The shot ends on the three cameras in the open tailgate. The operator slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The operator lowers the camera slightly, the shot settling into stillness, the frame tilting just a little as if his arms are tired.
+Разбор абзацаФинал
+- Сам финал хороший: A second of silence, just the wind and seagulls. Someone laughs off-screen. Он же остался и в удачной третьей попытке.
+- Отличие только в подлежащем: The operator slowly pulls back вместо The camera slowly pulls back.
+- 0:00Кадр через окно машины: зеркало, дверь, рядом едет пикап
+- ≈0:02Занос пикапа, вода и пар из-под колёс
+- ≈0:03Рука на дверной ручке: оператор выходит из машины
+- ≈0:04–0:07Розовый шарик в небе
+- ≈0:06Alexander идёт к камере; речь до ≈0:28
+- ≈0:10Борт открывается (в монтаже перекрыт шрифтом)
+- ≈0:16Alexander держит камеру, показывает линзы
+- ≈0:29Отъезд, взгляды в камеру, тишина
+● В монтаже: начальный кадр
+### Камера едет из салона машины, оператор не в кадре
+Референсы те же, что и в попытке 2: 11 штук.
+Что поменяли
+- Точка съёмки: не оператор в кузове, а камера в переднем салоне второй машины, которая едет параллельно пикапу.
+- Запрет в тексте: No camera, no hands, no operator visible in frame.
+- Глаголы оператора заменены глаголами камеры: «камера дышит», «камера поправляет ремень», «камера спотыкается».
+- Из стиль-блока убрали портрет оператора (The operator moves continuously…).
+- Добавили размер плана: средний план на Alexander в момент выхода.
+- Alexander теперь всё делает сам (берёт Sony, открывает кейс): героев в действии меньше.
+Что получилось
+- В кадре нет камеры и рук оператора (кроме одной руки с часами на двери около 3-й секунды: её же требует промт).
+- Начало через окно машины: зеркало, дверь, проезжает зелёная «копейка», занос пикапа с паром.
+- Alexander крупно, в фокусе, контровой свет на волосах, лужа с отражениями, высотка.
+- В борту три рига и оранжевый кейс с линзами; в финале камера отъезжает, у Alexander рука на Sony.
+Что не получилось
+- Борт при открытии нарушает физику: вместо откидывающегося борта поднимается заднее стекло. Это перекрыли в монтаже жирным шрифтом.
+- Три кейса с линзами слились в один с тремя отсеками. Решили оставить: зритель воспринимает как один большой кейс.
+- Фон получился скромнее описания: заметны собака, мужчина на дороге, розовый шарик; ребёнка, охранника и студента в кадре не видно.
+- На рубашке у Alexander появилась петличка, которой не было в промте.
+Кадр вошёл в монтаж как начальный с одной правкой: галлюцинацию с бортом закрыли шрифтом. Именно здесь видно главное: чтобы убрать оператора из кадра, недостаточно одного запрета. Мы сменили точку съёмки, прописали правило и переписали слова про оператора.
+#### Полный промт · Кадр 1 · Попытка 3
+Полный текст без сокращений · 7 блоков · 1 236 слов · 7 611 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, camera hand repositioning, camera dips when the operator listens, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+The scene starts dynamic. The camera is inside the front seat of a second car driving parallel to the main pickup from <<<image_11>>>. The camera looks sideways through the window at the main pickup — the main pickup is fully in frame, both vehicles moving side by side at speed. No camera, no hands, no operator visible in frame — only the main pickup and the road. Inside the main pickup, Alexander and John are visible through the windows. Ahead on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both vehicles brake hard at the same moment. The camera lurches forward with the braking, the frame swings, tilts, then steadies. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.
+As soon as the cars stop, the operator throws open the door of the second car, jumps out through the open door, and sprints toward the main pickup, already rolling, the frame shaking violently with each step. The camera quickly closes the distance and settles into a medium shot of Alexander just as he gets out of the pickup. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.
+John opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.
+Alexander reaches into the tailgate, lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles as he speaks. He lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»
+The sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.
+Alexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The camera moves in closer, the focus briefly slips, then catches again. A quiet laugh shakes the frame slightly.
+The camera continues to follow them, handheld, shaking with each step, never cutting. Breathing is steady, sometimes through the nose, sometimes through the mouth when moving. The camera shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel. It almost trips on a curb while stepping back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — a slight wince shakes the frame. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down.
+The shot ends on the three cameras in the open tailgate. The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The camera lowers slightly, the shot settling into stillness, the frame tilting just a little as if the arms holding it are tired.БЛОК 01 / 07Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, camera hand repositioning, camera dips when the operator listens, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Разбор абзацаСтиль-блок: жанр, формат, камера, картинка, дефекты, язык
+- Hyperrealistic cinematic documentary, indistinguishable from real footage: жанр и прямая цель. Мы просто говорим модели, что зритель не должен отличить это от реальной съёмки.
+- Vertical 9:16 и One continuous 30-second take, no cuts, no edits: формат под Reels и один дубль. Без склеек модель не «перескакивает» на красивые планы, и остаётся ощущение живой съёмки.
+- unstabilized handheld camera, no stabilization whatsoever: главный переключатель документальности. Гладкая камера — первый признак ИИ-слопа.
+- shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0: реальные названия техники и светосила. T2.0 подсказывает малую глубину резкости.
+- shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting: отпечатки стекла. Они говорят мозгу «это оптика», а не «это рендер».
+- Film grain, subtle Kodak texture, … teal-and-orange color grade, slightly desaturated, natural skin tones: характер картинки: зерно, цветокор, живые тона кожи.
+- auto-exposure jumps…, brief focus hunting…, manual autofocus that breathes and occasionally misses…, horizon slightly tilted, camera hand repositioning, breathing audible…: ошибки техники и человека. Здесь уже camera, а не operator.
+- Real human behavior, no staged acting… и All dialogue in clear, native Russian…: люди без театральности и русская речь без акцента и «роботизации».
+БЛОК 02 / 07Копировать блок
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.
+Разбор абзацаЛокация
+- Location: exactly as in <<<image_1>>> and <<<image_2>>>: ссылки на референсы места по номерам панели.
+- Take only the location itself… Ignore any people present in <<<image_1>>> and <<<image_2>>>: на референсе стоит человек в очках. Без этого запрета он бы «утёк» в кадр. Повтор с номерами усиливает эффект.
+- The rain has just stopped… Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air: мокрая поверхность даёт отражения и блики, то есть физику, которую мозг проверяет автоматически. Плюс мягкий рассеянный свет.
+- Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed: солнечные лучи и контровой свет добавляют кинематографичности.
+- No trees, no leaves on the asphalt: короткий запрет убирает случайные элементы, которые модель любит добавлять.
+- The auto-exposure reacts naturally: darkens when the camera turns to the bright sky…: эффект камеры привязан к событиям сцены, а не висит отдельно.
+БЛОК 03 / 07Копировать блок
+The scene starts dynamic. The camera is inside the front seat of a second car driving parallel to the main pickup from <<<image_11>>>. The camera looks sideways through the window at the main pickup — the main pickup is fully in frame, both vehicles moving side by side at speed. No camera, no hands, no operator visible in frame — only the main pickup and the road. Inside the main pickup, Alexander and John are visible through the windows. Ahead on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both vehicles brake hard at the same moment. The camera lurches forward with the braking, the frame swings, tilts, then steadies. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.
+Ключевое решениеСтартовая сцена: камера в салоне машины
+- The camera is inside the front seat of a second car driving parallel to the main pickup: точка съёмки теперь физическое место в мире, где оператору не нужно быть в кадре.
+- No camera, no hands, no operator visible in frame — only the main pickup and the road: прямой запрет, который теперь никто в тексте не оспаривает.
+- Inside the main pickup, Alexander and John are visible through the windows: герои показаны заранее, поэтому выход из машины воспринимается как продолжение.
+- Причинно-следственная цепочка: человек стоит на дороге → видит машину → отскакивает → обе машины тормозят → занос, вода, пар → человек отряхивает штаны. Каждое событие вытекает из предыдущего.
+- The camera lurches forward with the braking, the frame swings, tilts, then steadies: камера реагирует на физику мира. Так появляется ощущение массы и инерции.
+- Машина из референса <<<image_11>>>: пикап теперь тот, что нужен.
+БЛОК 04 / 07Копировать блок
+As soon as the cars stop, the operator throws open the door of the second car, jumps out through the open door, and sprints toward the main pickup, already rolling, the frame shaking violently with each step. The camera quickly closes the distance and settles into a medium shot of Alexander just as he gets out of the pickup. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.
+Разбор абзацаВыход из машины и реплика 1
+- the operator throws open the door… sprints toward the main pickup, already rolling, the frame shaking violently with each step: переход от статичной точки к бегу описан как движение кадра.
+- settles into a medium shot of Alexander: явный размер плана. В попытке 2 его не было, и модель показывала общий план.
+- Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>: персонажи привязаны к character sheet, внешность и одежда берутся оттуда.
+- Реплика в «ёлочках» произносится дословно. Вокруг неё: язык, произношение, интонация и He stumbles on a word, repeats it, keeps going, hands moving. Живая запинка убирает «дикторский» эффект.
+- walks quickly to the back of the pickup, turns to the camera, energetic, no pause: речь сочетается с движением, актёр не стоит столбом.
+БЛОК 05 / 07Копировать блок
+John opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.
+Alexander reaches into the tailgate, lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles as he speaks. He lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»
+Разбор абзацаБорт, техника, реплика 2
+- Три камеры со ссылками на референсы (<<<image_3>>>, <<<image_4>>>, <<<image_5>>>) и три кейса (<<<image_6>>>, <<<image_7>>>, <<<image_8>>>) с оптикой для каждой. Так модель понимает, какая линза какой камере соответствует.
+- signs of use — small scratches, dust in the crevices, worn straps hanging loose и Cables, batteries, and memory cards lie nearby in slight disarray: износ и беспорядок. Идеально чистая техника выглядит как рендер.
+- Все действия делает один человек: поднимает Sony, показывает, открывает кейс, показывает линзы, ставит обратно.
+- Реплика 2 называет предмет разговора. Зритель слышит то, что видит: три камеры и комплекты объективов.
+- Слабое место: именно здесь борт открылся неестественно, а три кейса слились в один. Механика открывающихся частей остаётся проблемой моделей, поэтому такие места мы закрываем в монтаже.
+БЛОК 06 / 07Копировать блок
+The sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.
+Alexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The camera moves in closer, the focus briefly slips, then catches again. A quiet laugh shakes the frame slightly.
+The camera continues to follow them, handheld, shaking with each step, never cutting. Breathing is steady, sometimes through the nose, sometimes through the mouth when moving. The camera shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel. It almost trips on a curb while stepping back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — a slight wince shakes the frame. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down.
+Разбор абзацаСвет, реплика 3, поведение камеры, фон
+- A cloud passes, the light shifts for two seconds, then returns: время в свете. Постоянный свет выглядит мёртвым, а «облако на две секунды» задаёт ритм.
+- Backlight glows softly around Alexander's hair: контровой свет отделяет героя от фона и добавляет объём.
+- The camera continues to follow them, handheld, shaking with each step… shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel: описано поведение камеры, а не человека. Это работает благодаря правилам выше.
+- almost trips on a curb, Focus hunts, then locks: микро-ошибки.
+- Фон: около 15 событий (машина, собака, охранник, студент, ребёнок с шариком, птица, гудок, хлопок двери, чихание). Модель исполняет часть, но даже частично исполненный фон делает мир живым. При этом No one in the foreground reacts не даёт массовке играть на камеру.
+- The wind hits the microphone, Someone off-screen sneezes, The case thuds against the tailgate: звуковой слой. Звук даёт половину реализма.
+БЛОК 07 / 07Копировать блок
+The shot ends on the three cameras in the open tailgate. The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The camera lowers slightly, the shot settling into stillness, the frame tilting just a little as if the arms holding it are tired.
+Разбор абзацаФинал
+- The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building: кадр заканчивается композицией, где есть всё, что важно.
+- Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera: взгляд в объектив создаёт контакт со зрителем, рука на Sony подводит к следующему кадру.
+- A second of silence, just the wind and seagulls. Someone laughs off-screen.: тишина и живой звук в конце.
+- The camera lowers slightly… as if the arms holding it are finally tired: усталость камеры как конец дубля. Без прописанного финала модель обычно обрывает движение на середине.
+02
+Разбор кадра
+## Кадр 2
+Sony VENICE 2 + ZEISS Supreme Prime
+Чистая цифра, холодные нейтральные тона, мягкие сдержанные блики
+Второй кадр — уже не представление, а демонстрация. В первом кадре Alexander обещает «показать, какая камера какое качество даёт». Здесь он это делает: кадр снят на Sony VENICE 2 с ZEISS Supreme Prime. Герои дерутся, чтобы удерживать динамику 30 секунд, и параллельно объясняют, чем эта картинка отличается от предыдущей.
+Референсов стало 7: остались только те, что нужны этому кадру. Одна генерация ушла в монтаж целиком, без правок.
+Референсы
+Панель Higgsfield для Кадра 2: 7 референсов. Убраны ARRI, RED, Cooke и Proteus.
+<<<image_1>>>Локация: набережнаяБерём только пространство.
+<<<image_2>>>Локация: высоткаВторой ракурс места.
+<<<image_3>>>Sony VENICE 2Камера в руках Alexander (миниатюра из панели). Её он бросает за кадр.
+<<<image_4>>>ZEISS Supreme PrimeОбъективы в кейсе, который держит John.
+<<<image_5>>>AlexanderCharacter sheet.
+<<<image_6>>>JohnCharacter sheet.
+<<<image_7>>>Главный пикапМашина с вмятиной от «предыдущего удара»; в неё врезается John.
+Генерации и полные промты
+Единственная попытка
+- 0:00Alexander держит Sony и произносит реплику 1
+- ≈0:03Камера летит за кадр, John ставит кейс на асфальт
+- ≈0:05Начало боя
+- ≈0:10–0:20Клинчи и удары, охранник на заднем плане, ветер в одежде
+- ≈0:25Прыжок John, Alexander вылетает из кадра
+- ≈0:28Тишина и ветер
+● В монтаже без правок
+### Чистая цифра: оператор не виден, драка держит ритм
+Референсы: 7 штук (см. панель выше).
+Что поменяли
+- Другая камера и другой характер картинки: холодная чистая цифра вместо тёплой плёнки.
+- Референсов 7 вместо 11: кадр про одну пару «камера + объектив».
+- Появилось правило: оператор не виден, слова об операторе описывают поведение камеры.
+- Главное действие — драка: она даёт динамику, а камера получает повод бегать, приседать, отдёргиваться.
+- Реплики пересказывают визуальные параметры кадра (холодные тона, сдержанные блики).
+Что получилось
+- Оператор не виден: ни рук, ни тела, ни камеры.
+- Alexander с камерой в руках говорит реплику в объектив; на 3-й секунде камера улетает за кадр, John ставит кейс на асфальт.
+- Драка читается: стойки, клинчи, скольжение по мокрому асфальту, отражения и тени.
+- Охранник и голуби на заднем плане, контровой свет ореолом на волосах.
+- Финал: John влетает в кадр, Alexander вылетает влево, John смотрит в объектив, звук стихает.
+Что не получилось
+- Красное пятно на скуле и разбитая губа по кадрам читаются слабо.
+- Отражение оператора на кузове по кадрам подтвердить не удалось.
+- Прохожего с телефоном, дворника и студента не видно: фон исполнен частично.
+Кадр вошёл в монтаж целиком, без правок. Он показывает, как выглядит промт, когда все накопленные уроки уже учтены: правило про оператора, ссылки на референсы с ролями, простая динамика вместо перегруженного сценария и прописанный финал.
+#### Полный промт · Кадр 2 · единственная генерация
+Полный текст без сокращений · 6 блоков · 1 545 слов · 9 567 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on Sony VENICE 2 with ZEISS Supreme Prime lenses, 8.6K full-frame sensor, 16 stops of dynamic range, dual native ISO 800/3200, wide color gamut exceeding BT.2020, precise color reproduction, natural skin tones, cool neutral tones, clean sharp image, high detail, modern digital look, minimal fine film-like grain instead of electronic noise, smooth creamy bokeh with natural fall-off, round highlights in out-of-focus areas, no busy background rendering, slight chromatic aberration at the edges, natural vignetting, soft highlight roll-off. The lens coating controls light — when sunlight hits the glass, the flare is soft and restrained, never washing out the image. Contrast stays high even in backlight. Light refracts gently across the lens surface, creating a subtle, controlled glow, not a harsh flare. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, horizon slightly tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera: when the operator moves, the frame moves; when the operator breathes, the camera shakes slightly; when the operator ducks or steps back, the camera drops or pulls back. The audience only sees what the camera sees.
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Alexander, matching <<<image_5>>>, stands near the main pickup from <<<image_7>>>. He holds the Sony VENICE 2 from <<<image_3>>> in his hands. John, matching <<<image_6>>>, stands beside him, holding an open case with the ZEISS Supreme Prime lenses from <<<image_4>>>. The dent from a previous impact is visible on the truck's side panel. Wet handprints on the metal. Condensation drips from the exhaust pipe. The truck's reflection ripples in the puddle below. Alexander turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы снимаем на Sony VENICE 2 с объективами ZEISS Supreme Prime.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes. A glare from the puddle briefly hits his face.
+As soon as he finishes the line, Alexander casually tosses the camera out of frame, to the side. Off-screen, a young reddish-haired assistant in glasses catches it — just barely, fumbling, catching it at the last second, a look of surprise on his face. The camera does not linger on him — the frame stays on Alexander. John sets the open lens case down on the wet asphalt.
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He taps his nose lightly with one finger, bounces on his feet, a faint smile of enjoyment on his face. Alexander shifts into a mixed martial arts stance. They start sparring — real, gritty, not always clean. John moves like Bruce Lee: precise, fast, controlled. Alexander moves like an MMA fighter: grounded, heavy, powerful. Both are damp from the rain, hair slightly wet, clothes clinging lightly to their bodies, sweat on their skin. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Some punches miss, some are blocked. At one point they clinch — pushing, shoving, unable to break apart, breathing hard in each other's faces. Then they separate, circle, catch their breath. Water splashes under their feet with each step. Wet footprints stay on the ground. Their breath is short and audible. When a punch lands, one of them exhales sharply, the other grimaces briefly, then recovers. A red mark appears on Alexander's cheekbone. John's lip is split — he wipes it, looks at his finger, smirks. Alexander rotates his shoulder after a block, checking it. The wind moves their damp hair and clothes as they fight, adding constant subtle motion to every frame.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обратите внимание — качество изображения отличается от прошлого, потому что прошлое было снято на ARRI Alexa 35.» He blocks a punch mid-sentence, keeps going. He says in clear, native Russian, perfect pronunciation, natural intonation: «Sony даёт холодные, нейтральные и точные тона. Современная, чистая картинка — без плёночной мягкости.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Касательно объектива. Вы можете заметить, что здесь блики ведут себя по-другому. Специальное покрытие объективов не позволяет бликам перекрывать всё изображение и терять контрастность.»
+The camera moves dynamically — running around the fighters, circling, ducking, crouching low when they close in, stepping closer, pulling back, dropping low and shooting upward, tilting the horizon slightly. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. There is a brief exhale of relief when it misses. The camera stumbles on a curb, the horizon tilts badly, then corrects. Breathing is heavy, sometimes through the mouth, sometimes through the nose. At one point, when the camera moves past the truck, the operator's faint reflection briefly appears in the wet body panel — a dark silhouette with the camera, gone in a split second. No one reacts. The reflection also ripples in the puddle below. The camera does not linger on it.
+At one point, John is pushed back hard and slams into the side of the pickup, his back hitting the metal with a dull thud. A small dent appears in the body panel. He winces, pushes off the truck, and keeps fighting. The camera shakes from the impact. John glances at the lens and gestures a quick apology with a grin, then keeps fighting. A passerby stops and watches, pulling out a phone to film. Another passerby keeps walking, not interested. A guard takes a step forward, reaches for his radio, then stops, does not call. Someone in the distance laughs when John misses a punch. A car slows on the road, the driver looking over, then honks and drives off. Everyone glances at the sound for a split second. Pigeons scatter. A dog barks and pulls on its leash. In the distance, a street cleaner sweeps, not paying attention. A student with headphones walks by without looking. Someone photographs the building, then turns at the noise.
+The sun catches the lens from behind the fighters — backlight glows softly around their silhouettes, hair glowing, a controlled soft flare drifting across the frame without washing out the image. A cloud passes, the light shifts for two seconds, then returns. The shadow of the truck moves. A glare flashes off the wet asphalt and briefly blinds the lens. The camera keeps moving, shaking, hunting for focus, losing and catching it again.
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает камера Sony. Сейчас покажу вам, как снимает другая камера.» He is about to continue — but from behind, John leaps into the frame with a jumping spin kick. His foot hits Alexander in the head. Alexander is knocked out of frame, out of the shot. The camera jerks, loses focus, the frame tilts, then holds on the empty space where Alexander stood. John lands on his feet, breathing hard, looking down at where Alexander fell. He takes a step forward, as if to help. He looks directly at the camera for the first time — tired, a little stunned. The fight is over. The shot ends on the puddle, the wet asphalt, and John standing in the background, chest heaving. The wind keeps blowing across the empty space where Alexander stood, moving John's clothes and hair as he catches his breath. A second of silence, just the wind and the water. Someone laughs quietly off-screen. The camera slowly lowers, as if the arms holding it are finally tired.БЛОК 01 / 06Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on Sony VENICE 2 with ZEISS Supreme Prime lenses, 8.6K full-frame sensor, 16 stops of dynamic range, dual native ISO 800/3200, wide color gamut exceeding BT.2020, precise color reproduction, natural skin tones, cool neutral tones, clean sharp image, high detail, modern digital look, minimal fine film-like grain instead of electronic noise, smooth creamy bokeh with natural fall-off, round highlights in out-of-focus areas, no busy background rendering, slight chromatic aberration at the edges, natural vignetting, soft highlight roll-off. The lens coating controls light — when sunlight hits the glass, the flare is soft and restrained, never washing out the image. Contrast stays high even in backlight. Light refracts gently across the lens surface, creating a subtle, controlled glow, not a harsh flare. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, horizon slightly tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Разбор абзацаСтиль-блок: Sony VENICE 2 + ZEISS Supreme Prime
+- Каркас тот же (формат, дубль, ручная камера, язык), а вот камера и картинка другие: shot on Sony VENICE 2 with ZEISS Supreme Prime lenses.
+- 8.6K full-frame sensor, 16 stops of dynamic range, dual native ISO 800/3200, wide color gamut exceeding BT.2020: технические параметры сигнализируют «класс камеры». Мы не настраиваем ими картинку, а помогаем модели угадать, к какой технике относится кадр.
+- cool neutral tones, clean sharp image, high detail, modern digital look, minimal fine film-like grain instead of electronic noise: главный контраст с Кадром 1. Там были зерно, Kodak, teal-and-orange; здесь холодные нейтральные тона и «чистая цифра».
+- smooth creamy bokeh with natural fall-off, round highlights in out-of-focus areas, no busy background rendering: характер размытия. «No busy background» просит не рисовать шумное боке.
+- Абзац про покрытие линз. The lens coating controls light — when sunlight hits the glass, the flare is soft and restrained, never washing out the image. Contrast stays high even in backlight. В Кадре 1 блики были желанным эффектом, здесь они сдержанные: это особенность конкретных объективов, и её нужно прописать.
+- Дефекты оператора остались (focus hunting, autofocus that breathes, horizon slightly tilted), убраны mechanical zoom и портрет оператора. Цвет, стиль и дефекты работают вместе: чистая картинка + живая рука.
+БЛОК 02 / 06Копировать блок
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera: when the operator moves, the frame moves; when the operator breathes, the camera shakes slightly; when the operator ducks or steps back, the camera drops or pulls back. The audience only sees what the camera sees.
+Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Ключевое решениеПравило про оператора и локация
+- Новый блок. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera: when the operator moves, the frame moves; when the operator breathes, the camera shakes slightly; when the operator ducks or steps back, the camera drops or pulls back.
+- Это третий способ решения проблемы «оператор в кадре» после смены точки съёмки и запрета: объяснить модели, как читать слова об операторе. Дальше в тексте можно писать «дыхание», «споткнулся», «отдёрнулся» и не бояться, что появится человек.
+- Локация: Location: exactly as in <<<image_1>>> and <<<image_2>>> с той же логикой «берём пространство, людей игнорируем», но короче: Take only the location itself: no people, no poses from the references. Ignore any people present.
+- Погода почти та же (дождь закончился, мокрый асфальт, лужи, лучи солнца). Добавились Clouds move slowly, light shifts across the scene, shadows drift и ветер, который шевелит волосы, одежду и рябь на лужах. Ветер даёт постоянное «микродвижение» в кадре.
+БЛОК 03 / 06Копировать блок
+Alexander, matching <<<image_5>>>, stands near the main pickup from <<<image_7>>>. He holds the Sony VENICE 2 from <<<image_3>>> in his hands. John, matching <<<image_6>>>, stands beside him, holding an open case with the ZEISS Supreme Prime lenses from <<<image_4>>>. The dent from a previous impact is visible on the truck's side panel. Wet handprints on the metal. Condensation drips from the exhaust pipe. The truck's reflection ripples in the puddle below. Alexander turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы снимаем на Sony VENICE 2 с объективами ZEISS Supreme Prime.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes. A glare from the puddle briefly hits his face.
+As soon as he finishes the line, Alexander casually tosses the camera out of frame, to the side. Off-screen, a young reddish-haired assistant in glasses catches it — just barely, fumbling, catching it at the last second, a look of surprise on his face. The camera does not linger on him — the frame stays on Alexander. John sets the open lens case down on the wet asphalt.
+Разбор абзацаГерои, реплика 1, бросок камеры
+- Все роли вызваны по номерам этого кадра: Sony <<<image_3>>>, ZEISS <<<image_4>>>, Alexander <<<image_5>>>, John <<<image_6>>>, пикап <<<image_7>>>. Номера другие, чем в Кадре 1, потому что панель другая.
+- The dent from a previous impact… Wet handprints on the metal. Condensation drips from the exhaust pipe. The truck's reflection ripples in the puddle: следы жизни на предмете. Вмятина позже «появится» снова, когда John врежется в пикап: сцена помнит удары.
+- Реплика 1 короткая и говорит главное: «Сейчас мы снимаем на Sony VENICE 2 с объективами ZEISS Supreme Prime». He speaks directly to the camera, calm, confident.
+- Бросок камеры — драматургический приём. Камера, которую Alexander бросает в сторону, уходит из кадра, а The camera does not linger on him — the frame stays on Alexander запрещает модели рисовать ассистента без референса. Мы получаем шутку, не заводя нового героя.
+БЛОК 04 / 06Копировать блок
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He taps his nose lightly with one finger, bounces on his feet, a faint smile of enjoyment on his face. Alexander shifts into a mixed martial arts stance. They start sparring — real, gritty, not always clean. John moves like Bruce Lee: precise, fast, controlled. Alexander moves like an MMA fighter: grounded, heavy, powerful. Both are damp from the rain, hair slightly wet, clothes clinging lightly to their bodies, sweat on their skin. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Some punches miss, some are blocked. At one point they clinch — pushing, shoving, unable to break apart, breathing hard in each other's faces. Then they separate, circle, catch their breath. Water splashes under their feet with each step. Wet footprints stay on the ground. Their breath is short and audible. When a punch lands, one of them exhales sharply, the other grimaces briefly, then recovers. A red mark appears on Alexander's cheekbone. John's lip is split — he wipes it, looks at his finger, smirks. Alexander rotates his shoulder after a block, checking it. The wind moves their damp hair and clothes as they fight, adding constant subtle motion to every frame.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обратите внимание — качество изображения отличается от прошлого, потому что прошлое было снято на ARRI Alexa 35.» He blocks a punch mid-sentence, keeps going. He says in clear, native Russian, perfect pronunciation, natural intonation: «Sony даёт холодные, нейтральные и точные тона. Современная, чистая картинка — без плёночной мягкости.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Касательно объектива. Вы можете заметить, что здесь блики ведут себя по-другому. Специальное покрытие объективов не позволяет бликам перекрывать всё изображение и терять контрастность.»
+Разбор абзацаДрака и реплики 2–4
+- John moves like Bruce Lee: precise, fast, controlled. Alexander moves like an MMA fighter: grounded, heavy, powerful. Разный словарь движений у двух героев помогает модели различать хореографию.
+- real, gritty, not always clean, Some punches miss, some are blocked, slipping slightly: настоящая драка неаккуратна. «Идеальные удары» выглядят как танец.
+- damp from the rain… clothes clinging… sweat, Water splashes under their feet, Wet footprints stay on the ground: физика мокрой сцены.
+- A red mark appears on Alexander's cheekbone. John's lip is split: последствия ударов, которые появляются по ходу боя. Здесь важно помнить: в следующем кадре они отражаются как травма.
+- Реплики в драке. Alexander говорит между ударами, слова рвутся, что даёт живость. Содержание реплик пересказывает визуальные параметры: «холодные, нейтральные и точные тона», «без плёночной мягкости», «покрытие не позволяет бликам перекрывать всё изображение». Зритель слышит то же, что заложено в промте.
+- качество изображения отличается от прошлого, потому что прошлое было снято на ARRI Alexa 35: мостик к Кадру 1.
+БЛОК 05 / 06Копировать блок
+The camera moves dynamically — running around the fighters, circling, ducking, crouching low when they close in, stepping closer, pulling back, dropping low and shooting upward, tilting the horizon slightly. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. There is a brief exhale of relief when it misses. The camera stumbles on a curb, the horizon tilts badly, then corrects. Breathing is heavy, sometimes through the mouth, sometimes through the nose. At one point, when the camera moves past the truck, the operator's faint reflection briefly appears in the wet body panel — a dark silhouette with the camera, gone in a split second. No one reacts. The reflection also ripples in the puddle below. The camera does not linger on it.
+At one point, John is pushed back hard and slams into the side of the pickup, his back hitting the metal with a dull thud. A small dent appears in the body panel. He winces, pushes off the truck, and keeps fighting. The camera shakes from the impact. John glances at the lens and gestures a quick apology with a grin, then keeps fighting. A passerby stops and watches, pulling out a phone to film. Another passerby keeps walking, not interested. A guard takes a step forward, reaches for his radio, then stops, does not call. Someone in the distance laughs when John misses a punch. A car slows on the road, the driver looking over, then honks and drives off. Everyone glances at the sound for a split second. Pigeons scatter. A dog barks and pulls on its leash. In the distance, a street cleaner sweeps, not paying attention. A student with headphones walks by without looking. Someone photographs the building, then turns at the noise.
+Разбор абзацаПоведение камеры и фон
+- running around the fighters, circling, ducking, crouching low when they close in, dropping low and shooting upward: камера ведёт себя как живая. Она реагирует на события: When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. Так рождается страх оператора, а значит достоверность.
+- There is a brief exhale of relief when it misses, Breathing is heavy…: дыхание как звук и как ритм кадра.
+- the operator's faint reflection briefly appears in the wet body panel: осознанное исключение из правила «оператор не виден». Мимолётное отражение считывается как реальность съёмки. Мы не смогли надёжно подтвердить его в видео, поэтому его лучше считать бонусом.
+- John slams into the side of the pickup… A small dent appears: удар о машину, вмятина, камера трясётся, John glances at the lens and gestures a quick apology with a grin. Взгляд в объектив и извинение ломают четвёртую стену в шутку.
+- Фон: прохожие, охранник, машина с сигналом, голуби, собака, дворник, студент. Около десяти событий. Исполнились не все, но охранник и голуби живут в кадре.
+БЛОК 06 / 06Копировать блок
+The sun catches the lens from behind the fighters — backlight glows softly around their silhouettes, hair glowing, a controlled soft flare drifting across the frame without washing out the image. A cloud passes, the light shifts for two seconds, then returns. The shadow of the truck moves. A glare flashes off the wet asphalt and briefly blinds the lens. The camera keeps moving, shaking, hunting for focus, losing and catching it again.
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает камера Sony. Сейчас покажу вам, как снимает другая камера.» He is about to continue — but from behind, John leaps into the frame with a jumping spin kick. His foot hits Alexander in the head. Alexander is knocked out of frame, out of the shot. The camera jerks, loses focus, the frame tilts, then holds on the empty space where Alexander stood. John lands on his feet, breathing hard, looking down at where Alexander fell. He takes a step forward, as if to help. He looks directly at the camera for the first time — tired, a little stunned. The fight is over. The shot ends on the puddle, the wet asphalt, and John standing in the background, chest heaving. The wind keeps blowing across the empty space where Alexander stood, moving John's clothes and hair as he catches his breath. A second of silence, just the wind and the water. Someone laughs quietly off-screen. The camera slowly lowers, as if the arms holding it are finally tired.
+Разбор абзацаСвет и финал
+- The sun catches the lens from behind the fighters — backlight glows softly around their silhouettes… a controlled soft flare drifting across the frame without washing out the image: свет согласован со стиль-блоком (сдержанные блики).
+- A cloud passes, the light shifts for two seconds, then returns, The shadow of the truck moves, A glare flashes off the wet asphalt and briefly blinds the lens: события в свете.
+- Финал как шутка: Alexander объявляет «покажу, как снимает другая камера», и в этот момент John прыгает с вертушкой и выбивает его из кадра. Кадр holds on the empty space where Alexander stood, потом John смотрит в объектив, наступает секунда тишины, слышен смех за кадром.
+- He looks directly at the camera for the first time: взгляд в камеру как эмоциональная точка. До этого герои её «игнорировали».
+- Реплика 5 («Сейчас покажу вам, как снимает другая камера») сшивает кадр со следующим. Похожий финал повторится в Кадре 3: приём «рифмы» между кадрами.
+03
+Разбор кадра
+## Кадр 3
+RED V-RAPTOR 8K VV + Laowa Proteus 2x Anamorphic
+Глобальный затвор, анаморфный характер: овальное боке и горизонтальные блики
+Третий кадр: RED V-RAPTOR 8K VV с анаморфотом Laowa Proteus 2x. Задача — показать характер анаморфотной оптики (горизонтальные блики, овальное боке) и глобальный затвор без «эффекта желе» при быстрых движениях.
+Особенно важна связь с Кадром 2. Alexander приходит с синяком и пакетом льда после удара ногой в голову. Из-за этой детали получилось две попытки: первая не вошла в монтаж из-за лица, вторая вошла.
+Референсы
+Панель Higgsfield для финальной попытки Кадра 3: 7 референсов. Порядок в панели: RED, Proteus, пикап, две локации, Alexander, John.
+<<<image_1>>>RED V-RAPTORКамера в руках Alexander. Референс с карточкой характеристик: чистое фото было бы надёжнее.
+<<<image_2>>>Laowa Proteus 2xАнаморфотные объективы в кейсе.
+<<<image_3>>>Главный пикапМашина, в которую врезается John.
+<<<image_4>>>Локация: набережнаяБерём только пространство.
+<<<image_5>>>Локация: высоткаВторой ракурс места.
+<<<image_6>>>AlexanderCharacter sheet.
+<<<image_7>>>JohnCharacter sheet.
+Генерации и полные промты
+Попытка 1Попытка 2
+- 0:00Alexander держит RED, прижимает лёд к лицу, реплика 1
+- ≈0:02Камера ставится на асфальт
+- ≈0:05Крупный план линзы: горизонтальная линия лежит на самом стекле
+- ≈0:09Начало драки
+- ≈0:15Смена света и места: золотой закат у парапета
+- ≈0:27Alexander лежит, John стоит над ним
+● Начало не вошло в монтаж
+### Лицо: разбитая щека не с той стороны
+Скрин панели этой попытки не сохранился. В тексте ссылки на референсы пропали при копировании (см. from with в стиль-блоке).
+Как всё началось
+- Первая версия кадра: RED V-RAPTOR 8K VV и Laowa Proteus 2x описаны одной строкой в стиль-блоке.
+- Ссылки на референсы в тексте пропали: shot on RED V-RAPTOR 8K VV from with Laowa Proteus….
+- Травма: a red mark and a slight scrape on the right side — a previous injury. Лёд: in his left hand, pressing it to the right side of his face.
+- Блик описан как эффект на линзе, которую показывает John: the anamorphic flare appears.
+- В тексте остались опечатки («внимание», «Ка», «Обратичество»).
+Что получилось
+- Камера RED читается: красный корпус, риг, камера ставится на асфальт.
+- Тяжёлая драка, открытая дверь пикапа; финал: Alexander лежит, John стоит над ним.
+- Пакет со льдом остаётся в руке Alexander в течение боя: предмет не теряется.
+Что не получилось
+- Лицо. Красный след и ссадина выглядят сильнее нужного, лёд у другой стороны лица; всё это не совпадает с тем, куда John ударил Alexander в предыдущем кадре.
+- Горизонтальная полоса блика лежит на самом стекле линзы, которую держит John, то есть на предмете, а не на изображении.
+- Свет и место меняются прямо посреди дубля: от хмурого света у пикапа к золотому закату у парапета.
+- В тексте промта опечатки и оговорки: реплики в «ёлочках» могут попасть в озвучку буквально.
+Начало не вошло в монтаж главным образом из-за лица: разбита щека справа, а лёд держится с левой стороны, и вообще травма не совпадает с ударом John в прошлом ролике. Проблемы с текстом тоже были, но менее критичные. В следующей попытке сторону и степень травмы прописали точно.
+#### Полный промт · Кадр 3 · Попытка 1
+Полный текст без сокращений · 5 блоков · 1 273 слов · 7 883 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on RED V-RAPTOR 8K VV from with Laowa Proteus 2x Anamorphic lenses from , 8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, large format global shutter with no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW, natural skin tones, precise color reproduction, clean shadows, uncompromising low-light performance, smooth highlight roll-off, extended highlight retention even in extreme light. The anamorphic lens delivers a constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, and signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas. Natural exposure shifts, brief focus hunting during fast movements, horizon tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.
+Location: exactly as in and — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Light steam rises faintly from the warming asphalt, thin and barely visible. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Alexander, matching , stands near the main pickup from . He holds the RED V-RAPTOR from in his right hand. John, matching @image7, stands beside him, holding an open case with the Laowa Proteus 2x Anamorphic lenses from . Alexander's face shows a red mark and a slight scrape on the right side — a previous injury. He holds a bag of ice in his left hand, pressing it to the right side of his face. He turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes.
+As soon as he finishes the line, Alexander sets the camera down on the wet asphalt. John sets the open lens case down on the ground next to it. The camera moves in close, showing the RED V-RAPTOR on the ground, the lens case beside it, the lenses inside glinting in the light. The operator approaches — the frame moves closer to the camera on the ground, then closer to the lenses in the case, then a close-up of a single lens as John lifts it briefly to show it, turning it slowly in the light. The sun catches the glass, and the anamorphic flare appears — a horizontal streak of silver light, changing color as it moves. The frame holds on the lens for a beat, then pulls back.
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He raises his leg high in a precise roundhouse kick, moving with the speed and control of Bruce Lee. Alexander shifts into a mixed martial arts stance. They explode into a fight — real, gritty, high-impact. John moves like Bruce Lee: fast, precise, controlled, with high kicks and sharp strikes. Alexander moves like an MMA fighter: grounded, heavy, powerful, with clinches, throws, and heavy punches. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Water splashes under their feet. Full contact — the sound of impact is audible through their breath and reactions. Alexander grabs John by the collar and drives him back, slamming him against the pickup. He pins him, starts punching. John headbutts him from below — Alexander staggers back. John kicks him in the chest. The fight is brutal, fast, and cinematic.
+The operator is not afraid — the camera moves in extremely close during the clinch, a tight close-up of Alexander's face as he is pinned, then John's face as he is hit. The camera runs around them, circling, ducking, dropping low and shooting upward from waist level, tilting the horizon violently. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. The camera stumbles on a curb, the horizon tilts badly, then corrects. The operator's reflection briefly appears in внимание a puddle — a dark silhouette, gone in a split second. The camera bumps into a fighter's back during a throw, the frame jolts, then recovers. Focus hunts constantly,. losing and catching the action.
+At one point, John grabs a car door and swings Ка it, trying to hit Alexander like Jackie Chan — the door slams, misses, the frame shakes. The sun breaks through the clouds again — the anamorphic lens catches the light, and a horizontal silver flare streaks across the frame, changing color as it moves, creating a cinematic, controlled effect. A cloud passes, the light shifts for two seconds, then returns. Steam rises faintly from the wet asphalt. The shadow of the truck moves. A glare flashes off the wet ground and briefly blinds the lens.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обратичество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.» He blocks a punch mid-sentence. He says in clear, native Russian, perfect pronunciation, natural intonation: «Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Покрытие держит контраст. Не перекрывает кадр.»
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает RED. Сейчас — другая камера. У каждой камеры свой характер.»
+He finishes the line. Behind him, John runs up, preparing to strike. Alexander, without turning around, anticipates the movement — throws his leg back in a kick to the chest. John blocks, pushes off, but manages to catch Alexander's leg. He sharply goes for a grapple, locks the leg. Alexander, in pain, taps the ground three times. John releases. Alexander falls, laughs, holds his leg. John stands over him, breathing hard, smiling. The scene ends.БЛОК 01 / 05Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on RED V-RAPTOR 8K VV from with Laowa Proteus 2x Anamorphic lenses from , 8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, large format global shutter with no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW, natural skin tones, precise color reproduction, clean shadows, uncompromising low-light performance, smooth highlight roll-off, extended highlight retention even in extreme light. The anamorphic lens delivers a constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, and signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas. Natural exposure shifts, brief focus hunting during fast movements, horizon tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Причина проблемыСтиль-блок: RED V-RAPTOR + Laowa Proteus 2x
+- Камера описана по характеристикам: 8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, … no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW. Глобальный затвор нужен, чтобы быстрые движения (драка) не «желейились».
+- Объектив описан по характеру: constant 2x squeeze ratio, elliptical bokeh, signature horizontal flares with a silver flare option…, subtle distortion at the edges, low focus breathing, pleasant oval highlights.
+- Ошибка копирования: from with Laowa Proteus 2x Anamorphic lenses from ,. После «from» должны были стоять ссылки на референсы, но они пропали. Модель получила висящие «from».
+- Кроме того, здесь нет отдельного разделения ролей (что снимает, а что в кадре как предмет).
+БЛОК 02 / 05Копировать блок
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.
+Location: exactly as in and — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Light steam rises faintly from the warming asphalt, thin and barely visible. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Alexander, matching , stands near the main pickup from . He holds the RED V-RAPTOR from in his right hand. John, matching @image7, stands beside him, holding an open case with the Laowa Proteus 2x Anamorphic lenses from . Alexander's face shows a red mark and a slight scrape on the right side — a previous injury. He holds a bag of ice in his left hand, pressing it to the right side of his face. He turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes.
+As soon as he finishes the line, Alexander sets the camera down on the wet asphalt. John sets the open lens case down on the ground next to it. The camera moves in close, showing the RED V-RAPTOR on the ground, the lens case beside it, the lenses inside glinting in the light. The operator approaches — the frame moves closer to the camera on the ground, then closer to the lenses in the case, then a close-up of a single lens as John lifts it briefly to show it, turning it slowly in the light. The sun catches the glass, and the anamorphic flare appears — a horizontal streak of silver light, changing color as it moves. The frame holds on the lens for a beat, then pulls back.
+Причина проблемыПравило, локация, герои, демонстрация линзы
+- Правило про оператора уже есть (в укороченной форме). Локация та же, что в Кадре 2, но ссылки на неё пропали: exactly as in and.
+- John, matching @image7: одна из ссылок написана иначе, чем <<<image_N>>>. Формат ссылок должен быть одинаковым везде.
+- Травма. Alexander's face shows a red mark and a slight scrape on the right side — a previous injury. He holds a bag of ice in his left hand, pressing it to the right side of his face. Тут две проблемы: слишком сильно (модель нарисовала разбитое лицо) и неудобно физически: рука перекрещивается с лицом.
+- Блик на реквизите. The sun catches the glass, and the anamorphic flare appears — a horizontal streak of silver light в сцене, где John показывает линзу: сам промт просит блик на предмете. Модель сделала ровно то, что написано.
+БЛОК 03 / 05Копировать блок
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He raises his leg high in a precise roundhouse kick, moving with the speed and control of Bruce Lee. Alexander shifts into a mixed martial arts stance. They explode into a fight — real, gritty, high-impact. John moves like Bruce Lee: fast, precise, controlled, with high kicks and sharp strikes. Alexander moves like an MMA fighter: grounded, heavy, powerful, with clinches, throws, and heavy punches. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Water splashes under their feet. Full contact — the sound of impact is audible through their breath and reactions. Alexander grabs John by the collar and drives him back, slamming him against the pickup. He pins him, starts punching. John headbutts him from below — Alexander staggers back. John kicks him in the chest. The fight is brutal, fast, and cinematic.
+The operator is not afraid — the camera moves in extremely close during the clinch, a tight close-up of Alexander's face as he is pinned, then John's face as he is hit. The camera runs around them, circling, ducking, dropping low and shooting upward from waist level, tilting the horizon violently. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. The camera stumbles on a curb, the horizon tilts badly, then corrects. The operator's reflection briefly appears in внимание a puddle — a dark silhouette, gone in a split second. The camera bumps into a fighter's back during a throw, the frame jolts, then recovers. Focus hunts constantly,. losing and catching the action.
+Разбор абзацаДрака и поведение камеры
+- Хореография драки почти та же, что в удачной версии: стойки Брюса Ли и ММА, удар воротником о пикап, удар головой снизу, удар ногой в грудь. Драка жёстче, чем в Кадре 2: клинчи, броски, «brutal».
+- The operator is not afraid — the camera moves in extremely close during the clinch: камера в клинче на крупных планах лиц.
+- Опечатки: in внимание a puddle (русское слово в английском тексте) и constantly,. losing (лишняя точка). Модель их проигнорировала, но такие вещи стоит вычитывать.
+БЛОК 04 / 05Копировать блок
+At one point, John grabs a car door and swings Ка it, trying to hit Alexander like Jackie Chan — the door slams, misses, the frame shakes. The sun breaks through the clouds again — the anamorphic lens catches the light, and a horizontal silver flare streaks across the frame, changing color as it moves, creating a cinematic, controlled effect. A cloud passes, the light shifts for two seconds, then returns. Steam rises faintly from the wet asphalt. The shadow of the truck moves. A glare flashes off the wet ground and briefly blinds the lens.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обратичество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.» He blocks a punch mid-sentence. He says in clear, native Russian, perfect pronunciation, natural intonation: «Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Покрытие держит контраст. Не перекрывает кадр.»
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает RED. Сейчас — другая камера. У каждой камеры свой характер.»
+Причина проблемыДверь, свет, реплики, пауза
+- John grabs a car door and swings Ка it: опечатка, но действие понятно. Открывающаяся дверь: механика, которая слабо предсказуема.
+- the anamorphic lens catches the light, and a horizontal silver flare streaks across the frame: описание блика как эффекта на кадре. Оно верное, но конфликтует с предыдущей просьбой о блике на линзе.
+- Реплики 2–4 содержат слова-оговорки: «Обратичество другое», «Великий горизонт». Русский текст в «ёлочках» идёт в озвучку буквально.
+БЛОК 05 / 05Копировать блок
+He finishes the line. Behind him, John runs up, preparing to strike. Alexander, without turning around, anticipates the movement — throws his leg back in a kick to the chest. John blocks, pushes off, but manages to catch Alexander's leg. He sharply goes for a grapple, locks the leg. Alexander, in pain, taps the ground three times. John releases. Alexander falls, laughs, holds his leg. John stands over him, breathing hard, smiling. The scene ends.
+Разбор абзацаФинал
+- Напоминание о финале Кадра 2: John нападает сзади. Здесь Alexander успевает ударить ногой назад, но John ловит ногу, идёт на болевой; Alexander трижды хлопает по земле, падает и смеётся.
+- Финал описан действиями, но без состояния покоя: нет паузы, звука за кадром, взгляда. Фраза The scene ends. — команда, а не картина. В Кадре 2 конец дубля расписан подробно (тишина, смех за кадром, камера опускается).
+- 0:00Alexander с RED в левой руке, лёд у правой щеки, реплика 1
+- ≈0:03Камера ставится на асфальт, кейс рядом
+- ≈0:04Линза как предмет: без блика на стекле
+- ≈0:08Начало драки
+- ≈0:10–0:14Горизонтальная линия блика по изображению, открытая дверь
+- ≈0:17Линзы из кейса на асфальте
+- ≈0:27Alexander на земле, John стоит
+● В монтаже
+### Роли разведены, травма точная, блик только на изображении
+Референсы: 7 штук, порядок как на панели выше. Ссылки на референсы в тексте на месте.
+Что поменяли
+- Стиль-блок переписан: сначала роль «камера и объектив, через которые мы видим сцену», потом «реквизит: камера и объективы в руках героев».
+- Отдельный абзац про блик: форма, поведение, «на изображении, а не на предмете».
+- Все ссылки на референсы на месте: <<<image_1>>>…<<<image_7>>>.
+- Травма: сторона («right side only»), степень («light bruise, no blood, no cut»). Камера в левой руке Alexander, лёд в правой и прижат к правой щеке.
+- Линза в руках John показана как предмет: «just glass, metal, and the reflection of the sky. No flares, no streaks».
+- Опечатки в английском тексте исправлены.
+Что получилось
+- Лицо: лёгкое покраснение на правой щеке, лёд прижат к той же стороне.
+- Линза в руках John без блика на стекле.
+- В драке через кадр на уровне голов проходит тонкая горизонтальная белая линия: блик на изображении.
+- Дверь пикапа открыта, финал: Alexander лежит, John стоит над ним.
+Что не получилось
+- Линзы из кейса разлетаются по асфальту (с ≈17 с): в промте про это нет ни слова.
+- Небо серое и хмурое, свет менее золотой, чем в первой попытке.
+- Три хлопка по земле и смех я по кадрам не подтвердил.
+Кадр вошёл в монтаж. Разница между двумя промтами: точное лицо и разведённые роли. Эти две проблемы решались разными приёмами: лицо — точным описанием стороны и степени, блик — явным разделением ролей «снимающий объектив» и «предмет в руках».
+#### Полный промт · Кадр 3 · Попытка 2
+Полный текст без сокращений · 6 блоков · 1 553 слов · 9 532 знаков
+Скопировать весь промт
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever.
+The entire scene is shot on a RED V-RAPTOR 8K VV from <<<image_1>>> with a Laowa Proteus 2x Anamorphic lens from <<<image_2>>>. This is the camera and lens through which the audience sees everything — the camera that is filming the scene. Every visual effect described below — the anamorphic flares, the horizontal streaks of light, the oval bokeh, the edge distortion — comes from this shooting lens. This is not the camera held by Alexander. This is not the lens shown by John. This is the optical system through which the entire scene is captured.
+Separately, Alexander holds a RED V-RAPTOR in his hands, and John holds an open case with Laowa Proteus lenses. These are props — physical objects in the scene. They have no optical effects on them. No flares, no streaks, no anamorphic distortions appear on these objects. They are just cameras and lenses as things.
+RED V-RAPTOR 8K VV: 8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, large format global shutter with no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW, natural skin tones, precise color reproduction, clean shadows, uncompromising low-light performance, smooth highlight roll-off, extended highlight retention even in extreme light.
+Laowa Proteus 2x Anamorphic lens: constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas.
+When the camera turns toward the sun, a horizontal streak of light appears across the image — a thin, blue-silver line stretching from one edge of the frame to the other. It is not a dot, not a circle, not a lens spot — it is a flat horizontal flare, the signature of an anamorphic lens. The streak pulses slightly, changes color from blue to silver as the camera moves, then retracts and disappears when the sun leaves the frame. It appears directly on the image, not on any object in the scene. This is the optical character of the shooting lens, visible only through the camera that captures the scene.
+Natural exposure shifts, brief focus hunting during fast movements, horizon tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.
+Location: exactly as in <<<image_4>>> and <<<image_5>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Light steam rises faintly from the warming asphalt, thin and barely visible. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Alexander, matching <<<image_6>>>, stands near the main pickup from <<<image_3>>>. He holds the RED V-RAPTOR from <<<image_1>>> in his left hand. John, matching <<<image_7>>>, stands beside him, holding an open case with the Laowa Proteus 2x Anamorphic lenses from <<<image_2>>>. Alexander's face shows a slight redness and a small scrape on the right side only — a mark from a recent hit, no blood, no cut, just a light bruise forming under the skin, like a fresh impact. He holds a bag of ice in his right hand, pressing it to the right side of his face. He turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes.
+As soon as he finishes the line, Alexander sets the camera down on the wet asphalt. John sets the open lens case down on the ground next to it. The camera moves in close, showing the RED V-RAPTOR on the ground, the lens case beside it, the lenses inside resting in foam cutouts. The operator approaches — the frame moves closer to the lenses in the case, then a close-up of a single lens as John lifts it briefly to show it, turning it slowly in the light. The lens is shown as a physical object — just glass, metal, and the reflection of the sky. No flares, no streaks, no anamorphic effects on the lens itself. The frame holds on the lens for a beat, then pulls back.
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He raises his leg high in a precise roundhouse kick, moving with the speed and control of Bruce Lee. Alexander shifts into a mixed martial arts stance. They explode into a fight — real, gritty, high-impact. John moves like Bruce Lee: fast, precise, controlled, with high kicks and sharp strikes. Alexander moves like an MMA fighter: grounded, heavy, powerful, with clinches, throws, and heavy punches. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Water splashes under their feet. Full contact — the sound of impact is audible through their breath and reactions. Alexander grabs John by the collar and drives him back, slamming him against the pickup. He pins him, starts punching. John headbutts him from below — Alexander staggers back. John kicks him in the chest. The fight is brutal, fast, and cinematic.
+The operator is not afraid — the camera moves in extremely close during the clinch, a tight close-up of Alexander's face as he is pinned, then John's face as he is hit. The camera runs around them, circling, ducking, dropping low and shooting upward from waist level, tilting the horizon violently. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. The camera stumbles on a curb, the horizon tilts badly, then corrects. The operator's reflection briefly appears in a puddle — a dark silhouette, gone in a split second. The camera bumps into a fighter's back during a throw, the frame jolts, then recovers. Focus hunts constantly, losing and catching the action.
+At one point, John grabs a car door and swings it, trying to hit Alexander like Jackie Chan — the door slams, misses, the frame shakes. The sun breaks through the clouds again — the shooting lens catches the light, and a horizontal silver flare streaks across the frame from the edge, changing color as it moves, creating a cinematic, controlled anamorphic effect on the image itself. A cloud passes, the light shifts for two seconds, then returns. Steam rises faintly from the wet asphalt. The shadow of the truck moves. A glare flashes off the wet ground and briefly blinds the shooting lens.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обрати внимание. Качество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.» He blocks a punch mid-sentence. He says in clear, native Russian, perfect pronunciation, natural intonation: «Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Покрытие держит контраст. Не перекрывает кадр.»
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает RED. Сейчас — другая камера. У каждой камеры свой характер.»
+He finishes the line. Behind him, John runs up, preparing to strike. Alexander, without turning around, anticipates the movement — throws his leg back in a kick to the chest. John blocks, pushes off, but manages to catch Alexander's leg. He sharply goes for a grapple, locks the leg. Alexander, in pain, taps the ground three times. John releases. Alexander falls, laughs, holds his leg. John stands over him, breathing hard, smiling. The scene ends.БЛОК 01 / 06Копировать блок
+Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever.
+The entire scene is shot on a RED V-RAPTOR 8K VV from <<<image_1>>> with a Laowa Proteus 2x Anamorphic lens from <<<image_2>>>. This is the camera and lens through which the audience sees everything — the camera that is filming the scene. Every visual effect described below — the anamorphic flares, the horizontal streaks of light, the oval bokeh, the edge distortion — comes from this shooting lens. This is not the camera held by Alexander. This is not the lens shown by John. This is the optical system through which the entire scene is captured.
+Separately, Alexander holds a RED V-RAPTOR in his hands, and John holds an open case with Laowa Proteus lenses. These are props — physical objects in the scene. They have no optical effects on them. No flares, no streaks, no anamorphic distortions appear on these objects. They are just cameras and lenses as things.
+RED V-RAPTOR 8K VV: 8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, large format global shutter with no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW, natural skin tones, precise color reproduction, clean shadows, uncompromising low-light performance, smooth highlight roll-off, extended highlight retention even in extreme light.
+Ключевое решениеРоли: камера, которая снимает, и камера в кадре
+- The entire scene is shot on a RED V-RAPTOR 8K VV from <<<image_1>>> with a Laowa Proteus 2x Anamorphic lens from <<<image_2>>>. This is the camera and lens through which the audience sees everything: определение «камеры-глаза».
+- Every visual effect described below — the anamorphic flares, the horizontal streaks of light, the oval bokeh, the edge distortion — comes from this shooting lens.: закрепляем, что эффекты принадлежат снимающему объективу.
+- This is not the camera held by Alexander. This is not the lens shown by John.: прямое разделение. Один и тот же тип предмета (RED и линзы Proteus) есть в двух ролях.
+- Separately, Alexander holds a RED V-RAPTOR… These are props… No flares, no streaks, no anamorphic distortions appear on these objects.: реквизит — просто предметы.
+- Параметры RED вынесены в отдельный абзац. Так их проще править и проще находить, где что описано.
+БЛОК 02 / 06Копировать блок
+Laowa Proteus 2x Anamorphic lens: constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas.
+When the camera turns toward the sun, a horizontal streak of light appears across the image — a thin, blue-silver line stretching from one edge of the frame to the other. It is not a dot, not a circle, not a lens spot — it is a flat horizontal flare, the signature of an anamorphic lens. The streak pulses slightly, changes color from blue to silver as the camera moves, then retracts and disappears when the sun leaves the frame. It appears directly on the image, not on any object in the scene. This is the optical character of the shooting lens, visible only through the camera that captures the scene.
+Natural exposure shifts, brief focus hunting during fast movements, horizon tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+Ключевое решениеОбъектив и горизонтальный блик
+- constant 2x squeeze ratio, elliptical bokeh, signature horizontal flares with a silver flare option that changes color: свойства анаморфота словами.
+- Описание блика — три слоя защиты. Форма: a thin, blue-silver line stretching from one edge of the frame to the other. Отрицание: It is not a dot, not a circle, not a lens spot — it is a flat horizontal flare. Поведение: The streak pulses slightly, changes color from blue to silver as the camera moves, then retracts and disappears.
+- It appears directly on the image, not on any object in the scene: местоположение эффекта. Этот приём решает ошибку первой попытки.
+- When the camera turns toward the sun: блик привязан к движению камеры. Пожалуй, самое важное: эффект оптики появляется как реакция на свет, а не висит «по умолчанию».
+- Концовка блока стандартная: дефекты, живое поведение, русская речь без акцента.
+БЛОК 03 / 06Копировать блок
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.
+Location: exactly as in <<<image_4>>> and <<<image_5>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture in the air. Light steam rises faintly from the warming asphalt, thin and barely visible. Sunlight breaks through the clouds in soft rays, occasional lens flares. Clouds move slowly, light shifts across the scene, shadows drift. No trees, no leaves on the asphalt. A light wind blows across the embankment — it moves hair, flutters clothes, ripples puddles slightly, keeps the air alive.
+Alexander, matching <<<image_6>>>, stands near the main pickup from <<<image_3>>>. He holds the RED V-RAPTOR from <<<image_1>>> in his left hand. John, matching <<<image_7>>>, stands beside him, holding an open case with the Laowa Proteus 2x Anamorphic lenses from <<<image_2>>>. Alexander's face shows a slight redness and a small scrape on the right side only — a mark from a recent hit, no blood, no cut, just a light bruise forming under the skin, like a fresh impact. He holds a bag of ice in his right hand, pressing it to the right side of his face. He turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.» He speaks directly to the camera, calm, confident. The wind moves his damp hair and clothes.
+Разбор абзацаПравило, локация, герои и лицо
+- Локация: <<<image_4>>> и <<<image_5>>>. Такая же формула «берём только пространство».
+- He holds the RED V-RAPTOR from <<<image_1>>> in his left hand… He holds a bag of ice in his right hand, pressing it to the right side of his face. Теперь физика рук правдоподобна: камера в левой, лёд в правой, и лёд прижат к стороне, где синяк.
+- a slight redness and a small scrape on the right side only — a mark from a recent hit, no blood, no cut, just a light bruise forming under the skin, like a fresh impact: сторона, сила и отсутствие крови. Это ответ на то, что модель изобразила разбитое лицо.
+- Урок непрерывности: последний удар в Кадре 2 — это исходная точка для травмы в Кадре 3. Пишем не «травма», а конкретное состояние, которое вытекает из предыдущей сцены.
+- Реплика: «Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.»
+БЛОК 04 / 06Копировать блок
+As soon as he finishes the line, Alexander sets the camera down on the wet asphalt. John sets the open lens case down on the ground next to it. The camera moves in close, showing the RED V-RAPTOR on the ground, the lens case beside it, the lenses inside resting in foam cutouts. The operator approaches — the frame moves closer to the lenses in the case, then a close-up of a single lens as John lifts it briefly to show it, turning it slowly in the light. The lens is shown as a physical object — just glass, metal, and the reflection of the sky. No flares, no streaks, no anamorphic effects on the lens itself. The frame holds on the lens for a beat, then pulls back.
+Then, without warning, John drops into a fighting stance — a classic Bruce Lee pose. He raises his leg high in a precise roundhouse kick, moving with the speed and control of Bruce Lee. Alexander shifts into a mixed martial arts stance. They explode into a fight — real, gritty, high-impact. John moves like Bruce Lee: fast, precise, controlled, with high kicks and sharp strikes. Alexander moves like an MMA fighter: grounded, heavy, powerful, with clinches, throws, and heavy punches. They exchange kicks and punches on the wet asphalt, slipping slightly, catching balance. Water splashes under their feet. Full contact — the sound of impact is audible through their breath and reactions. Alexander grabs John by the collar and drives him back, slamming him against the pickup. He pins him, starts punching. John headbutts him from below — Alexander staggers back. John kicks him in the chest. The fight is brutal, fast, and cinematic.
+The operator is not afraid — the camera moves in extremely close during the clinch, a tight close-up of Alexander's face as he is pinned, then John's face as he is hit. The camera runs around them, circling, ducking, dropping low and shooting upward from waist level, tilting the horizon violently. The frame breathes with every move. When a punch flies too close, the camera jerks back, the frame drops, the focus slips, then recovers. The camera stumbles on a curb, the horizon tilts badly, then corrects. The operator's reflection briefly appears in a puddle — a dark silhouette, gone in a split second. The camera bumps into a fighter's back during a throw, the frame jolts, then recovers. Focus hunts constantly, losing and catching the action.
+Ключевое решениеЛинза как предмет, драка, поведение камеры
+- The lens is shown as a physical object — just glass, metal, and the reflection of the sky. No flares, no streaks, no anamorphic effects on the lens itself. Это исправление ошибки первой попытки: линза-реквизит защищена явным запретом.
+- the lenses inside resting in foam cutouts: линзы лежат на месте, а не «блестят на свету».
+- Драка почти дословно та же, что в первой попытке: Брюс Ли против ММА, клинчи, броски, удары. Единственные изменения: убраны опечатки.
+- The operator is not afraid — the camera moves in extremely close during the clinch: камера на крупных планах лиц.
+- The operator's reflection briefly appears in a puddle: короткое отражение как осознанное исключение из правила «оператор не виден».
+БЛОК 05 / 06Копировать блок
+At one point, John grabs a car door and swings it, trying to hit Alexander like Jackie Chan — the door slams, misses, the frame shakes. The sun breaks through the clouds again — the shooting lens catches the light, and a horizontal silver flare streaks across the frame from the edge, changing color as it moves, creating a cinematic, controlled anamorphic effect on the image itself. A cloud passes, the light shifts for two seconds, then returns. Steam rises faintly from the wet asphalt. The shadow of the truck moves. A glare flashes off the wet ground and briefly blinds the shooting lens.
+Alexander tries to keep talking through the fight, explaining, but his words break up between breaths and dodges. He says in clear, native Russian, perfect pronunciation, natural intonation: «Обрати внимание. Качество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.» He blocks a punch mid-sentence. He says in clear, native Russian, perfect pronunciation, natural intonation: «Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.» He dodges a kick, stumbles, recovers. He says in clear, native Russian, perfect pronunciation, natural intonation: «Покрытие держит контраст. Не перекрывает кадр.»
+The fight slows for a second. Alexander blocks a punch, laughs shortly, nods at John — good one. He wipes sweat from his forehead with the back of his hand. He steps toward the camera, breathing hard, wiping his mouth, and says in clear, native Russian, perfect pronunciation, natural intonation: «Отлично, вот так снимает RED. Сейчас — другая камера. У каждой камеры свой характер.»
+Ключевое решениеДверь, блик на изображении, реплики
+- the shooting lens catches the light, and a horizontal silver flare streaks across the frame from the edge… creating a cinematic, controlled anamorphic effect on the image itself: слова «shooting lens» и «on the image itself» переписывают описание блика в духе новой концепции.
+- A glare flashes off the wet ground and briefly blinds the shooting lens: тот же приём: «shooting lens» вместо просто «lens».
+- Реплики (3 штуки + мостик к следующему кадру «Сейчас — другая камера. У каждой камеры свой характер») пересказывают то, что зритель видит: чистые тени, мягкие цвета, глобальный затвор, горизонтальные блики.
+- В репликах остались странные слова (например, «Великий горизонт»). Русский текст в «ёлочках» озвучивается буквально; в гайде мы оставляем оригинал как есть.
+БЛОК 06 / 06Копировать блок
+He finishes the line. Behind him, John runs up, preparing to strike. Alexander, without turning around, anticipates the movement — throws his leg back in a kick to the chest. John blocks, pushes off, but manages to catch Alexander's leg. He sharply goes for a grapple, locks the leg. Alexander, in pain, taps the ground three times. John releases. Alexander falls, laughs, holds his leg. John stands over him, breathing hard, smiling. The scene ends.
+Разбор абзацаФинал
+- Приём «рифмы» с Кадром 2: John нападает сзади после реплики про «другую камеру». Alexander реагирует ногой, John ловит и берёт на болевой, Alexander хлопает по земле.
+- Финал описан коротко: The scene ends. В видео кадр заканчивается тем, что Alexander лежит на асфальте, а John стоит над ним. Здесь конец короче, чем в Кадре 2: если нужна пауза с тишиной и звуком за кадром, её стоит прописать так же подробно.
+- Это последний из трёх кадров: третья камера показана, тема закрыта.
+#### Бонус-модуль · тот же кадр под сферический объектив Laowa Argus 35mm f/0.95
+Учебная адаптация текста: не генерировалась
+В промте объектив живёт не в одном месте, а как минимум в шести: в стиль-блоке, в описании оптики, в реквизите (кейс у John), в реплике 1, в сцене показа линзы, в световых событиях и в реплике про блики. Чтобы переделать Кадр 3 под другой объектив, нужно поменять его везде. Ниже — те же места Кадра 3 в версии под сферический Laowa Argus 35 mm f/0.95. Эта версия не генерировалась: это учебная адаптация текста. Видео выше сделано по тексту с Proteus.
+Где в промте
+Proteus 2x (как в Кадре 3)
+Под Argus 35mm f/0.95
+Камера и объектив в стиль-блоке
+with Laowa Proteus 2x Anamorphic lenses
+with a Laowa Argus 35mm f/0.95 FF spherical prime lens
+Абзац про оптику (заменяется целиком)
+The anamorphic lens delivers a constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, and signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas.
+The Laowa Argus 35mm f/0.95 spherical lens delivers an extremely shallow depth of field, a soft creamy falloff, and smooth round bokeh with round highlights in out-of-focus areas from its 15-blade aperture. Flares are soft and round, controlled by the coating, never washing out the image. Low focus breathing and modern sharpness wide open.
+Кейс в руках John
+an open case with the Laowa Proteus 2x Anamorphic lenses
+an open case with the Laowa Argus f/0.95 lenses
+Реплика 1
+«Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.»
+«Снимаем на RED V-RAPTOR. Объектив Laowa Argus.»
+Демонстрация линзы
+the anamorphic flare appears — a horizontal streak of silver light, changing color as it moves
+a soft round glint slides across the front element
+Свет во время драки
+the anamorphic lens catches the light, and a horizontal silver flare streaks across the frame, changing color as it moves, creating a cinematic, controlled effect.
+the lens catches the light, and a soft round flare drifts across the frame, shifting in tint as it moves, cinematic and controlled, never washing out the image.
+Реплика про объектив
+«Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.»
+«Но здесь и другой объектив. Laowa Argus, светосила ноль девяносто пять. Очень малая глубина резкости. Круглое, мягкое боке.»
+Не забудь заменить и референс объектива в панели: картинка Proteus противоречила бы тексту.
+Фразу «который идеально подходит для камеры RED» мы убрали: у Argus 35 mm крепления Sony E, Nikon Z и Canon RF, поэтому про совместимость с конкретной кинокамерой лучше не заявлять в озвучке.
+Свойства объектива взяты из открытых источников производителя и обзоров: светосила f/0.95, 15 лепестков диафрагмы, круглое боке, полнокадровое покрытие.
+Библиотека
+## 12 приёмов, которые можно копировать
+Приёмы, выжатые из шести генераций. Каждый можно вставить в свой промт почти дословно.
+ПРИЁМ 01
+### Якорь техники
+Пиши реальную модель камеры и объективов, а не «cinematic camera».
+shot on Sony VENICE 2 with ZEISS Supreme Prime lenses
+Когда: Всегда в первом блоке. Рядом опиши характер картинки этой техники.
+ПРИЁМ 02
+### Стек несовершенств
+Набор дефектов оператора и камеры в одном абзаце.
+brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up
+Когда: Всегда. Это самый дешёвый способ убрать «дрон».
+ПРИЁМ 03
+### Невидимый оператор
+Правило, которое превращает глаголы оператора в поведение камеры.
+The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera.
+Когда: Когда в сцене нужны дыхание, споткнулся, отдёрнулся, но оператор не должен появиться.
+ПРИЁМ 04
+### Точка съёмки вне тела
+Дай камере физическое место, где оператор не нужен.
+The camera is inside the front seat of a second car driving parallel… No camera, no hands, no operator visible in frame
+Когда: Если камера в кадре появляется снова и снова.
+ПРИЁМ 05
+### Референс + роль
+Каждой ссылке пиши, что из неё брать и что игнорировать.
+Take only the location itself from these references: no people, no figures, no poses… Ignore any people present in <<<image_1>>>
+Когда: Всегда, особенно если на референсе есть люди.
+ПРИЁМ 06
+### Разделение ролей
+Разведи предмет и «снимающий объект», когда они одинаковы.
+This is not the camera held by Alexander. This is not the lens shown by John… These are props — physical objects in the scene.
+Когда: Когда камера или объектив есть и в кадре, и «за кадром».
+ПРИЁМ 07
+### Свет как событие
+Пропиши изменение света по времени.
+A cloud passes, the light shifts for two seconds, then returns.
+Когда: В каждом кадре, где нужна «живая» атмосфера.
+ПРИЁМ 08
+### Приправа-фон
+Несколько микро-событий вне фокуса.
+A dog pulls on its leash… A guard yawns… No one in the foreground reacts.
+Когда: Не больше 3–4 значимых: остальное модель исполнит частично.
+ПРИЁМ 09
+### Речь с живыми ошибками
+Реплика в кавычках + запинка/пауза/дыхание.
+He says in clear, native Russian, perfect pronunciation, natural intonation: «…» He stumbles on a word, repeats it, keeps going.
+Когда: Всегда. Реплики перед вставкой вычитывай.
+ПРИЁМ 10
+### Финальная пауза
+Дай дублю конец: покой, тишина, звук.
+A second of silence, just the wind and the water. Someone laughs quietly off-screen. The camera slowly lowers…
+Когда: В любом 30-секундном дубле.
+ПРИЁМ 11
+### Память между кадрами
+Последствия событий предыдущего кадра.
+a slight redness and a small scrape on the right side only… no blood, no cut, just a light bruise forming
+Когда: Всегда, если кадры идут подряд.
+ПРИЁМ 12
+### Мостики между кадрами
+Финальная реплика и жест ведут в следующий кадр.
+«Отлично, вот так снимает камера Sony. Сейчас покажу вам, как снимает другая камера.»
+Когда: Когда несколько кадров собираются в один ролик.
+Ошибки
+## Что ломалось и как это чинили
+Все ошибки из этого разбора собраны в таблицу. Открывай её перед каждой генерацией.
+СимптомПричинаЧто сделалиГде
+Пикап в кадре не тот, придуман модельюЗабыли добавить референс пикапа. Машину описали только словами.Добавили референс машины в панель и сослались на него по номеру.Кадр 1 · попытка 1
+Случайный мужчина занял полкадра и остался до финалаОтдельный референс и подробный абзац сделали его главным героем.Убрали персонажа и его референс, оставили безликого «random man».Кадр 1 · попытка 1
+У героя не та одеждаНа портрете-референсе Alexander был в другой одежде.Заменили портрет: одежда и комплекция как задумано.Кадр 1 · попытка 1
+В кадре видны камера и руки оператораОператор описан как действующее лицо: перекладывает камеру, поправляет ремень, снимает из кузова.Сменили точку съёмки на салон машины, добавили запрет и правило «упоминания оператора = поведение камеры».Кадр 1 · попытка 2
+Багажник открылся не по физикеМеханика открытия борта: слабое место видеомодели.Перекрыли этот момент толстым шрифтом в монтаже, чтобы зритель не заметил.Кадр 1 · попытка 3
+Три кейса с линзами слиплись в один с тремя отсекамиОднотипные объекты с одним состоянием объединяются.Оставили: зритель воспринимает как один большой кейс.Кадр 1 · попытка 3
+Синяк не с той стороны и слишком сильныйНе привязали травму к предыдущему кадру, слишком сильное описание.Написали сторону («right side only»), силу («light bruise, no blood, no cut») и руку со льдом с той же стороны.Кадр 3 · попытка 1
+Анаморфный блик нарисован на линзе в руках герояСам промт просил блик на показанной линзе.Разделили роли: снимающий объектив даёт блик на изображение, а линза-реквизит — просто стекло и металл.Кадр 3 · попытка 1
+Опечатки и странные слова попали в текст и озвучкуВ тексте остались опечатки и оговорки; реплики в кавычках идут в озвучку буквально.Вычитывать перед генерацией; реплики проверять отдельно.Кадр 3 · попытки 1–2
+После «from» пусто: «shot on RED V-RAPTOR 8K VV from with…»При копировании пропали теги ссылок на референсы.Проверять текст в самом Higgsfield: ссылки <<<image_N>>> должны быть на месте.Кадр 3 · попытка 1
+Применяй
+## Шаблон, конструктор и чек-лист
+Возьми скелет рабочих промтов, подставь свои камеру, объективы, референсы и сцену. Конструктор собирает текст сам, а чек-лист напомнит, ничего ли ты не забыл.
+Шаблон промта
+Копировать шаблонHyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on [КАМЕРА] with [ОБЪЕКТИВЫ], [ХАРАКТЕР КАРТИНКИ: зерно / цвет / боке / блики / динамический диапазон]. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, horizon slightly tilted, camera hand repositioning, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.
+The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.
+Location: exactly as in <<<image_N>>> and <<<image_N>>> — [ЛОКАЦИЯ]. Take only the location itself: no people, no poses from the references. Ignore any people present. Use only the space, architecture, ground, water, sky, and weather. [ПОГОДА: что даёт физику — мокрый асфальт, отражения, пар, ветер]. [СВЕТ: как он приходит и уходит]. No [ЛИШНИЕ ОБЪЕКТЫ].
+[ГЕРОЙ 1], matching <<<image_N>>>, stands near [ПРЕДМЕТ] from <<<image_N>>>. [ГЕРОЙ 2], matching <<<image_N>>>, [ЧТО ДЕЛАЕТ]. [Что видно на предметах: вмятина, потёртости, следы предыдущего кадра]. [ГЕРОЙ 1] turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «[РЕПЛИКА]». He speaks directly to the camera, calm, confident.
+[ГЛАВНОЕ ДЕЙСТВИЕ: 1–2 понятных события по времени]. [Как камера реагирует: отдёргивается, теряет фокус, спотыкается].
+[ФОН: 3–4 детали]. No one in the foreground reacts.
+[ФИНАЛ: пауза, взгляд, звук за кадром]. A second of silence, just the wind. Someone laughs off-screen. The camera slowly lowers, as if the arms holding it are finally tired.
+Конструктор: заполни поля и получи каркас своего промта
+Камера
+Объективы
+Характер картинкиПлёнка, тёплый (ARRI + Cooke)Чистая цифра, холодный (Sony + ZEISS)Анаморфот (RED + Laowa Proteus)Свой вариант
+Свой характер картинки
+ Правило «оператор не виден»
+Локация (словами)
+№ реф. локации 1
+№ реф. локации 2
+Погода и физика
+Свет как событие
+Герой 1
+№ реф. героя 1
+Герой 2
+№ реф. героя 2
+Предмет (машина и т. п.)
+№ реф. предмета
+Следы и последствия (сторона и степень!)
+Реплика героя 1 (по-русски, вычитай!)
+Главное действие и реакция камеры
+Фон (3–4 детали)
+Финал
+Скопировать
+Чек-лист перед генерацией
+- В первом блоке названы реальная камера и объективы, а рядом описан характер картинки.
+- Есть «ручная камера без стабилизации» и список дефектов оператора.
+- Оператора в кадре не видно: правило написано, а точка съёмки не требует оператора.
+- Каждый референс вызван по номеру и у него есть роль (что брать, что игнорировать).
+- Номера в тексте совпадают с порядком картинок в панели Higgsfield.
+- Все нужные предметы (машина, техника, кейсы) есть среди референсов, а не только в тексте.
+- Нет лишних референсов, которые превратятся в героев.
+- Погода даёт физику: отражения, пар, ветер.
+- Свет описан как событие по времени, а не как постоянное состояние.
+- Реплики вычитаны, языковая фраза на месте, есть запинка или пауза.
+- Фон: 3–4 значимые детали, остальное «приправа», никто не играет на камеру.
+- У дубля есть финал: покой, тишина, звук за кадром.
+- Последствия предыдущего кадра (травма, вмятина, предметы) прописаны с нужной стороны.
+- Сложную механику (двери, борты, кейсы) мы готовы спрятать в монтаже.
+## Теперь ты знаешь, как это устроено.
+Собери свой кадр.
+Возьми шаблон, подставь свои референсы и пройди чек-лист перед генерацией. Другие уроки школы ждут на главном экране.
+Посмотреть другие обучающие материалыГлавный экран
+Cinema Ai Tech • school

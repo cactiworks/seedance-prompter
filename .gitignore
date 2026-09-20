@@ -1,0 +1,10 @@
+node_modules/
+dist/
+data/
+!data/.gitkeep
+.DS_Store
+*.log
+.vite/
+coverage/
+# сырой ответ Figma REST может быть большим; кэш локальный
+design/lab-ui/raw/
