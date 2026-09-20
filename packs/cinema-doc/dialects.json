@@ -1,0 +1,22 @@
+{
+  "refSyntax": {
+    "higgsfield-chip": { "template": "<<<image_{N}>>>", "noteRu": "Синтаксис гайда Cinema Ai Tech; в документации не подтверждён — проверяется вставкой в Higgsfield (M0-c)." },
+    "at-image": { "template": "@Image {N}", "noteRu": "Официальный синтаксис ByteDance / Higgsfield / fal." }
+  },
+  "dialogueWrap": {
+    "guillemets": {
+      "template": "says in clear, native {LANG}, perfect pronunciation, natural intonation: «{TEXT}»",
+      "noteRu": "Формула гайда (приём 09). Реплика в «ёлочках» озвучивается буква в букву."
+    },
+    "braces": {
+      "template": "says naturally in {LANG}: {{TEXT}}",
+      "noteRu": "Официальная разметка ByteDance: реплика в фигурных скобках, язык словами перед ней."
+    }
+  },
+  "intro": {
+    "character": "{NAME}, matching {REF}",
+    "object": "{NAME} from {REF}",
+    "studioBackdropClause": " — take only the person's appearance and clothing from {REF}, do not take the background"
+  },
+  "languageNames": { "ru": "Russian", "en": "English" }
+}
