@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const app = createApp();
+  const app = createApp({ rootDir: ROOT, dataDir: path.join(ROOT, 'data') });
   const apiListener = getRequestListener(app.fetch);
 
   const httpServer = createHttpServer();

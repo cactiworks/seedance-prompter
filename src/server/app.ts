@@ -1,5 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
+import { newProject } from '../core/model/project.ts';
+import type { PackBundle } from '../core/pipeline.ts';
+import { createStore, StoreError } from './storage/fsStore.ts';
 
 export const HOST = '127.0.0.1';
 export const PORT = 4317;
@@ -10,8 +15,32 @@ export const CLIENT_HEADER = 'x-sp-client';
 const ALLOWED_HOSTS = new Set([`${HOST}:${PORT}`, `localhost:${PORT}`]);
 const ALLOWED_ORIGINS = new Set([`http://${HOST}:${PORT}`, `http://localhost:${PORT}`]);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const MAX_REF_BYTES = 30 * 1024 * 1024;
 
-export function createApp() {
+export interface AppOptions {
+  /** Корень репозитория: отсюда читается packs/. */
+  rootDir: string;
+  /** Каталог пользовательских данных (в .gitignore). */
+  dataDir: string;
+}
+
+function loadPack(rootDir: string, id: string): PackBundle {
+  const dir = path.join(rootDir, 'packs', id);
+  const read = <T>(file: string): T => JSON.parse(readFileSync(path.join(dir, file), 'utf8')) as T;
+  const kits: PackBundle['kits'] = {};
+  for (const file of readdirSync(path.join(dir, 'kits'))) {
+    if (!file.endsWith('.json')) continue;
+    const kit = read<PackBundle['kits'][string]>(path.join('kits', file));
+    kits[kit.id] = kit;
+  }
+  return { id, verbatim: read('verbatim.json'), kits, dialects: read('dialects.json'), lexicon: read('lexicon.json'), lintParams: read('lint.json') };
+}
+
+const STATUS: Record<StoreError['code'], 400 | 404 | 409 | 422> = { BAD_SLUG: 400, BAD_FILE: 400, NOT_FOUND: 404, CONFLICT: 409, INVALID: 422 };
+
+export function createApp(options: AppOptions) {
+  const store = createStore(options.dataDir);
   const app = new Hono();
 
   // Сервер локальный, но любая веб-страница в браузере владельца может стучаться в localhost.
@@ -30,9 +59,38 @@ export function createApp() {
     await next();
   });
 
-  const routes = app.get('/api/health', (c) =>
-    c.json({ ok: true, name: APP_NAME, version: APP_VERSION }),
-  );
+  app.onError((error, c) => {
+    if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
+    console.error(error);
+    return c.json({ error: 'INTERNAL', messageRu: 'Внутренняя ошибка сервера.' }, 500);
+  });
+
+  const routes = app
+    .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION }))
+    .get('/api/packs/:id', (c) => c.json(loadPack(options.rootDir, c.req.param('id'))))
+    .get('/api/projects', async (c) => c.json(await store.list()))
+    .post('/api/projects', async (c) => {
+      const body = (await c.req.json()) as { slug?: string; title?: string };
+      const project = await store.write(body.slug ?? '', newProject(body.slug ?? '', body.title ?? 'Без названия'), null);
+      return c.json(project, 201);
+    })
+    .get('/api/projects/:slug', async (c) => c.json(await store.read(c.req.param('slug'))))
+    .put('/api/projects/:slug', async (c) => {
+      const ifMatch = c.req.header('if-match');
+      const saved = await store.write(c.req.param('slug'), await c.req.json(), ifMatch === undefined ? null : Number(ifMatch));
+      return c.json(saved);
+    })
+    .put('/api/projects/:slug/refs/:file', async (c) => {
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      if (bytes.byteLength > MAX_REF_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Картинка больше 30 МБ — Seedance такую не примет.' }, 413);
+      await store.writeRef(c.req.param('slug'), c.req.param('file'), bytes);
+      return c.json({ ok: true });
+    })
+    .get('/api/projects/:slug/refs/:file', async (c) => {
+      const file = c.req.param('file');
+      const bytes = await store.readRef(c.req.param('slug'), file);
+      return c.body(bytes as Uint8Array<ArrayBuffer>, 200, { 'content-type': MIME[file.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+    });
 
   return routes;
 }
