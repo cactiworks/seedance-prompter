@@ -80,7 +80,6 @@ exports[`снимок: дрейф правил виден в diff > k2 1`] = `
 [
   "warning SPEECH_BUDGET p- ",
   "info SHOT_SIZE_KEY_MOMENTS p- ",
-  "info OP_ACTOR_VERB p2 the operator moves, the frame moves; when the op",
   "info OP_BAN_CONTRADICTED p8 operator's faint reflection briefly appears in t",
 ]
 `;

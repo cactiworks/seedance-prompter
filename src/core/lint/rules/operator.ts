@@ -30,7 +30,11 @@ export const OP_ACTOR_VERB: TextRule = {
     const verbs = anyOf(ctx.lexicon.operatorBodyVerbs ?? []).source;
     const re = new RegExp(`\\bthe operator(?:\\s+in\\s+[^,.]{0,40})?\\s+(?:${verbs})[^.]{0,70}`, 'giu');
     const withRule = hasOperatorRule(ctx);
-    return ctx.paragraphs.flatMap((p) =>
+    // Абзац с самим правилом чтения («when the operator moves, the frame moves») — не нарушение.
+    const ruleMarkers = ctx.lexicon.operatorRuleMarkers ?? [];
+    return ctx.paragraphs
+      .filter((p) => !includesAny(p.masked, ruleMarkers))
+      .flatMap((p) =>
       matches(p, re).map((m) =>
         at(
           'OP_ACTOR_VERB',
