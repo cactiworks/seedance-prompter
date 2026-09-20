@@ -1,0 +1,44 @@
+{
+ "$source": "Нарезано scripts/build-pack.ts из удачных промптов гайда (К1·3, К2, К3·2). Руками не править: sha256 в verbatim.lock.json.",
+ "format": "Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits",
+ "handheld": "unstabilized handheld camera, no stabilization whatsoever",
+ "shotOn": "shot on {ANCHOR}",
+ "exposureLead": "Natural exposure shifts",
+ "defects": {
+  "ae-jumps": "auto-exposure jumps when the camera turns from bright sky to darker ground",
+  "focus-hunting": "brief focus hunting during fast movements",
+  "af-breathes": "manual autofocus that breathes and occasionally misses, then catches up",
+  "zoom-jerks": "mechanical zoom that jerks slightly when used",
+  "horizon-slight": "horizon slightly tilted",
+  "horizon-strong": "horizon tilted",
+  "hand-repositioning": "camera hand repositioning",
+  "dips-listening": "camera dips when the operator listens",
+  "breathing": "breathing audible and visible in the frame rhythm"
+ },
+ "behavior": {
+  "real-human": "Real human behavior",
+  "no-staged": "no staged acting",
+  "no-theatrical": "no theatrical gestures",
+  "micro-expressions": "natural micro-expressions",
+  "subtle-movement": "constant subtle movement"
+ },
+ "languageTail": "All dialogue in clear, native {LANG}, perfect pronunciation, natural intonation, as spoken by native {LANG} speakers. No accent, no foreign inflection, no robotic delivery.",
+ "operatorRule": {
+  "long": "The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera: when the operator moves, the frame moves; when the operator breathes, the camera shakes slightly; when the operator ducks or steps back, the camera drops or pulls back. The audience only sees what the camera sees.",
+  "short": "The camera is handheld, unstabilized. The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees."
+ },
+ "location": {
+  "lead": "Location: exactly as in {REF1} and {REF2} — {PLACE}.",
+  "rule": {
+   "long": "Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in {REF1} and {REF2}",
+   "short": "Take only the location itself: no people, no poses from the references. Ignore any people present"
+  },
+  "useOnly": "Use only {LIST}."
+ },
+ "roleSplit": {
+  "shooting": "The entire scene is shot on a {CAMERA} from {REF1} with a {LENS} from {REF2}. This is the camera and lens through which the audience sees everything — the camera that is filming the scene. Every visual effect described below — {EFFECTS} — comes from this shooting lens. This is not the camera held by {CAMERA_HOLDER}. This is not the lens shown by {LENS_HOLDER}. This is the optical system through which the entire scene is captured.",
+  "props": "Separately, {PROPS}. These are props — physical objects in the scene. They have no optical effects on them. No flares, no streaks, no anamorphic distortions appear on these objects. They are just cameras and lenses as things."
+ },
+ "finaleTail": "A second of silence, just the wind and the water. Someone laughs quietly off-screen. The camera slowly lowers, as if the arms holding it are finally tired.",
+ "foregroundNoReact": "No one in the foreground reacts."
+}

@@ -1,0 +1,26 @@
+{
+ "id": "red-vraptor-laowa-proteus",
+ "titleRu": "RED V-RAPTOR 8K VV + Laowa Proteus 2x — анаморфот: овальное боке, горизонтальный блик",
+ "anchor": "RED V-RAPTOR 8K VV with Laowa Proteus 2x Anamorphic lenses",
+ "cameraName": "RED V-RAPTOR 8K VV",
+ "cameraSpecs": "8K full-frame global shutter sensor, 17+ stops of dynamic range, Extended Highlights for up to 20+ stops, large format global shutter with no rolling shutter artifacts or jelly effects during fast motion, REDCODE RAW, natural skin tones, precise color reproduction, clean shadows, uncompromising low-light performance, smooth highlight roll-off, extended highlight retention even in extreme light.",
+ "lensName": "Laowa Proteus 2x Anamorphic lens",
+ "lensSpecs": "constant 2x squeeze ratio for cinematic ultra-widescreen results, elliptical bokeh, signature horizontal flares with a silver flare option that changes color according to the light source. The flare appears as horizontal streaks of light when the sun hits the glass, creating a controlled, cinematic lens flare rather than a washed-out image. The lens creates a subtle distortion at the edges, a vintage anamorphic character with modern sharpness, low focus breathing, and pleasant oval highlights in out-of-focus areas.",
+ "flareParagraph": "When the camera turns toward the sun, a horizontal streak of light appears across the image — a thin, blue-silver line stretching from one edge of the frame to the other. It is not a dot, not a circle, not a lens spot — it is a flat horizontal flare, the signature of an anamorphic lens. The streak pulses slightly, changes color from blue to silver as the camera moves, then retracts and disappears when the sun leaves the frame. It appears directly on the image, not on any object in the scene. This is the optical character of the shooting lens, visible only through the camera that captures the scene.",
+ "effectsList": "the anamorphic flares, the horizontal streaks of light, the oval bokeh, the edge distortion",
+ "layout": "split",
+ "defaultDefects": [
+  "focus-hunting",
+  "horizon-strong",
+  "hand-repositioning",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "RED",
+  "V-RAPTOR",
+  "Laowa",
+  "Proteus",
+  "anamorphic",
+  "global shutter"
+ ]
+}

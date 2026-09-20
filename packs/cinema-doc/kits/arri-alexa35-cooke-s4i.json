@@ -1,0 +1,25 @@
+{
+ "id": "arri-alexa35-cooke-s4i",
+ "titleRu": "ARRI Alexa 35 + Cooke S4/i — плёнка, тёплый цвет, круглое боке",
+ "anchor": "ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0",
+ "look": "shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones",
+ "lensNote": null,
+ "layout": "compact",
+ "defaultDefects": [
+  "ae-jumps",
+  "focus-hunting",
+  "af-breathes",
+  "zoom-jerks",
+  "horizon-slight",
+  "hand-repositioning",
+  "dips-listening",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "ARRI",
+  "Alexa 35",
+  "Cooke",
+  "Kodak",
+  "teal-and-orange"
+ ]
+}

@@ -1,0 +1,23 @@
+{
+ "id": "sony-venice2-zeiss-supreme",
+ "titleRu": "Sony VENICE 2 + ZEISS Supreme Prime — чистая холодная цифра, сдержанные блики",
+ "anchor": "Sony VENICE 2 with ZEISS Supreme Prime lenses",
+ "look": "8.6K full-frame sensor, 16 stops of dynamic range, dual native ISO 800/3200, wide color gamut exceeding BT.2020, precise color reproduction, natural skin tones, cool neutral tones, clean sharp image, high detail, modern digital look, minimal fine film-like grain instead of electronic noise, smooth creamy bokeh with natural fall-off, round highlights in out-of-focus areas, no busy background rendering, slight chromatic aberration at the edges, natural vignetting, soft highlight roll-off",
+ "lensNote": "The lens coating controls light — when sunlight hits the glass, the flare is soft and restrained, never washing out the image. Contrast stays high even in backlight. Light refracts gently across the lens surface, creating a subtle, controlled glow, not a harsh flare",
+ "layout": "compact",
+ "defaultDefects": [
+  "ae-jumps",
+  "focus-hunting",
+  "af-breathes",
+  "horizon-slight",
+  "hand-repositioning",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "Sony",
+  "VENICE",
+  "ZEISS",
+  "Supreme Prime",
+  "lens coating"
+ ]
+}
