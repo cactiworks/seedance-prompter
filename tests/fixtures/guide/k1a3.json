@@ -1,0 +1,671 @@
+{
+ "id": "k1a3",
+ "shot": 1,
+ "attempt": 3,
+ "verdict": "in-edit",
+ "kit": "arri-alexa35-cooke-s4i",
+ "panelSize": 11,
+ "noteRu": "Камера едет из салона машины, оператор не в кадре",
+ "stats": {
+  "chars": 7611,
+  "words": 1236,
+  "paragraphs": 10,
+  "blocks": 7,
+  "dialogueWords": 65
+ },
+ "refs": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11
+ ],
+ "lines": [
+  "Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.",
+  "Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.",
+  "Сейчас мы покажем вам, какая камера какое качество изображения даёт."
+ ],
+ "raw": "Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, camera hand repositioning, camera dips when the operator listens, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.\n\nLocation: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.\n\nThe scene starts dynamic. The camera is inside the front seat of a second car driving parallel to the main pickup from <<<image_11>>>. The camera looks sideways through the window at the main pickup — the main pickup is fully in frame, both vehicles moving side by side at speed. No camera, no hands, no operator visible in frame — only the main pickup and the road. Inside the main pickup, Alexander and John are visible through the windows. Ahead on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both vehicles brake hard at the same moment. The camera lurches forward with the braking, the frame swings, tilts, then steadies. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.\n\nAs soon as the cars stop, the operator throws open the door of the second car, jumps out through the open door, and sprints toward the main pickup, already rolling, the frame shaking violently with each step. The camera quickly closes the distance and settles into a medium shot of Alexander just as he gets out of the pickup. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.\n\nJohn opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.\n\nAlexander reaches into the tailgate, lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles as he speaks. He lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»\n\nThe sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.\n\nAlexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The camera moves in closer, the focus briefly slips, then catches again. A quiet laugh shakes the frame slightly.\n\nThe camera continues to follow them, handheld, shaking with each step, never cutting. Breathing is steady, sometimes through the nose, sometimes through the mouth when moving. The camera shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel. It almost trips on a curb while stepping back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — a slight wince shakes the frame. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down.\n\nThe shot ends on the three cameras in the open tailgate. The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The camera lowers slightly, the shot settling into stillness, the frame tilting just a little as if the arms holding it are tired.",
+ "blocks": [
+  {
+   "index": 1,
+   "paragraphs": [
+    {
+     "text": "Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One continuous 30-second take, one uninterrupted shot, no cuts, no edits, unstabilized handheld camera, no stabilization whatsoever, shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0, shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting. Film grain, subtle Kodak texture, high dynamic range, soft highlight roll-off, gentle teal-and-orange color grade, slightly desaturated, natural skin tones. Natural exposure shifts, auto-exposure jumps when the camera turns from bright sky to darker ground, brief focus hunting during fast movements, manual autofocus that breathes and occasionally misses, then catches up, mechanical zoom that jerks slightly when used, horizon slightly tilted, camera hand repositioning, camera dips when the operator listens, breathing audible and visible in the frame rhythm. Real human behavior, no staged acting, no theatrical gestures, natural micro-expressions, constant subtle movement. All dialogue in clear, native Russian, perfect pronunciation, natural intonation, as spoken by native Russian speakers. No accent, no foreign inflection, no robotic delivery.",
+     "spans": [
+      {
+       "category": "neg",
+       "text": "no cuts",
+       "start": 158,
+       "end": 165
+      },
+      {
+       "category": "neg",
+       "text": "no edits",
+       "start": 167,
+       "end": 175
+      },
+      {
+       "category": "imp",
+       "text": "unstabilized handheld camera",
+       "start": 177,
+       "end": 205
+      },
+      {
+       "category": "imp",
+       "text": "no stabilization whatsoever",
+       "start": 207,
+       "end": 234
+      },
+      {
+       "category": "cam",
+       "text": "ARRI Alexa 35",
+       "start": 244,
+       "end": 257
+      },
+      {
+       "category": "cam",
+       "text": "Cooke S4/i Prime lenses at T2.0",
+       "start": 263,
+       "end": 294
+      },
+      {
+       "category": "look",
+       "text": "shallow depth of field",
+       "start": 296,
+       "end": 318
+      },
+      {
+       "category": "look",
+       "text": "soft circular bokeh",
+       "start": 320,
+       "end": 339
+      },
+      {
+       "category": "look",
+       "text": "slight chromatic aberration at the edges",
+       "start": 341,
+       "end": 381
+      },
+      {
+       "category": "look",
+       "text": "natural vignetting",
+       "start": 383,
+       "end": 401
+      },
+      {
+       "category": "look",
+       "text": "Film grain, subtle Kodak texture",
+       "start": 403,
+       "end": 435
+      },
+      {
+       "category": "look",
+       "text": "high dynamic range",
+       "start": 437,
+       "end": 455
+      },
+      {
+       "category": "look",
+       "text": "soft highlight roll-off",
+       "start": 457,
+       "end": 480
+      },
+      {
+       "category": "look",
+       "text": "gentle teal-and-orange color grade",
+       "start": 482,
+       "end": 516
+      },
+      {
+       "category": "look",
+       "text": "slightly desaturated",
+       "start": 518,
+       "end": 538
+      },
+      {
+       "category": "look",
+       "text": "natural skin tones",
+       "start": 540,
+       "end": 558
+      },
+      {
+       "category": "imp",
+       "text": "auto-exposure jumps when the camera turns from bright sky to darker ground",
+       "start": 585,
+       "end": 659
+      },
+      {
+       "category": "imp",
+       "text": "brief focus hunting during fast movements",
+       "start": 661,
+       "end": 702
+      },
+      {
+       "category": "imp",
+       "text": "manual autofocus that breathes and occasionally misses, then catches up",
+       "start": 704,
+       "end": 775
+      },
+      {
+       "category": "imp",
+       "text": "mechanical zoom that jerks slightly when used",
+       "start": 777,
+       "end": 822
+      },
+      {
+       "category": "imp",
+       "text": "horizon slightly tilted",
+       "start": 824,
+       "end": 847
+      },
+      {
+       "category": "imp",
+       "text": "camera hand repositioning",
+       "start": 849,
+       "end": 874
+      },
+      {
+       "category": "imp",
+       "text": "camera dips when the operator listens",
+       "start": 876,
+       "end": 913
+      },
+      {
+       "category": "imp",
+       "text": "breathing audible and visible in the frame rhythm",
+       "start": 915,
+       "end": 964
+      },
+      {
+       "category": "neg",
+       "text": "no staged acting",
+       "start": 987,
+       "end": 1003
+      },
+      {
+       "category": "neg",
+       "text": "no theatrical gestures",
+       "start": 1005,
+       "end": 1027
+      },
+      {
+       "category": "neg",
+       "text": "No accent",
+       "start": 1202,
+       "end": 1211
+      },
+      {
+       "category": "neg",
+       "text": "no foreign inflection",
+       "start": 1213,
+       "end": 1234
+      },
+      {
+       "category": "neg",
+       "text": "no robotic delivery",
+       "start": 1236,
+       "end": 1255
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Стиль-блок: жанр, формат, камера, картинка, дефекты, язык",
+    "bullets": [
+     "Hyperrealistic cinematic documentary, indistinguishable from real footage: жанр и прямая цель. Мы просто говорим модели, что зритель не должен отличить это от реальной съёмки.",
+     "Vertical 9:16 и One continuous 30-second take, no cuts, no edits: формат под Reels и один дубль. Без склеек модель не «перескакивает» на красивые планы, и остаётся ощущение живой съёмки.",
+     "unstabilized handheld camera, no stabilization whatsoever: главный переключатель документальности. Гладкая камера — первый признак ИИ-слопа.",
+     "shot on ARRI Alexa 35 with Cooke S4/i Prime lenses at T2.0: реальные названия техники и светосила. T2.0 подсказывает малую глубину резкости.",
+     "shallow depth of field, soft circular bokeh, slight chromatic aberration at the edges, natural vignetting: отпечатки стекла. Они говорят мозгу «это оптика», а не «это рендер».",
+     "Film grain, subtle Kodak texture, … teal-and-orange color grade, slightly desaturated, natural skin tones: характер картинки: зерно, цветокор, живые тона кожи.",
+     "auto-exposure jumps…, brief focus hunting…, manual autofocus that breathes and occasionally misses…, horizon slightly tilted, camera hand repositioning, breathing audible…: ошибки техники и человека. Здесь уже camera, а не operator.",
+     "Real human behavior, no staged acting… и All dialogue in clear, native Russian…: люди без театральности и русская речь без акцента и «роботизации»."
+    ]
+   }
+  },
+  {
+   "index": 2,
+   "paragraphs": [
+    {
+     "text": "Location: exactly as in <<<image_1>>> and <<<image_2>>> — the embankment of the Moskva River near the parking area, with a distant view of Moscow State University. Take only the location itself from these references: no people, no figures, no poses from the reference images. Ignore any people present in <<<image_1>>> and <<<image_2>>>. Use only the space, architecture, ground, parapet, water, sky, and weather. The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air — light refracts and scatters through it, softening the scene. Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed into the lens. No trees, no leaves on the asphalt. The auto-exposure reacts naturally: darkens when the camera turns to the bright sky, brightens when tilting down to the wet ground, brief jumps when the sun hits the lens.",
+     "spans": [
+      {
+       "category": "ref",
+       "text": "<<<image_1>>>",
+       "start": 24,
+       "end": 37
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_2>>>",
+       "start": 42,
+       "end": 55
+      },
+      {
+       "category": "neg",
+       "text": "no people",
+       "start": 217,
+       "end": 226
+      },
+      {
+       "category": "neg",
+       "text": "no figures",
+       "start": 228,
+       "end": 238
+      },
+      {
+       "category": "neg",
+       "text": "no poses from the",
+       "start": 240,
+       "end": 257
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_1>>>",
+       "start": 305,
+       "end": 318
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_2>>>",
+       "start": 323,
+       "end": 336
+      },
+      {
+       "category": "world",
+       "text": "The rain has just stopped",
+       "start": 414,
+       "end": 439
+      },
+      {
+       "category": "world",
+       "text": "Wet asphalt",
+       "start": 464,
+       "end": 475
+      },
+      {
+       "category": "world",
+       "text": "puddles reflecting the sky and the building",
+       "start": 477,
+       "end": 520
+      },
+      {
+       "category": "world",
+       "text": "Moisture hangs in the air",
+       "start": 544,
+       "end": 569
+      },
+      {
+       "category": "world",
+       "text": "Sunlight breaks through the clouds in soft rays",
+       "start": 633,
+       "end": 680
+      },
+      {
+       "category": "world",
+       "text": "lens flares",
+       "start": 693,
+       "end": 704
+      },
+      {
+       "category": "neg",
+       "text": "No trees",
+       "start": 740,
+       "end": 748
+      },
+      {
+       "category": "neg",
+       "text": "no leaves on the",
+       "start": 750,
+       "end": 766
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Локация",
+    "bullets": [
+     "Location: exactly as in <<<image_1>>> and <<<image_2>>>: ссылки на референсы места по номерам панели.",
+     "Take only the location itself… Ignore any people present in <<<image_1>>> and <<<image_2>>>: на референсе стоит человек в очках. Без этого запрета он бы «утёк» в кадр. Повтор с номерами усиливает эффект.",
+     "The rain has just stopped… Wet asphalt, puddles reflecting the sky and the building. The parapet glistens. Moisture hangs in the air: мокрая поверхность даёт отражения и блики, то есть физику, которую мозг проверяет автоматически. Плюс мягкий рассеянный свет.",
+     "Sunlight breaks through the clouds in soft rays, occasional lens flares and backlight bleed: солнечные лучи и контровой свет добавляют кинематографичности.",
+     "No trees, no leaves on the asphalt: короткий запрет убирает случайные элементы, которые модель любит добавлять.",
+     "The auto-exposure reacts naturally: darkens when the camera turns to the bright sky…: эффект камеры привязан к событиям сцены, а не висит отдельно."
+    ]
+   }
+  },
+  {
+   "index": 3,
+   "paragraphs": [
+    {
+     "text": "The scene starts dynamic. The camera is inside the front seat of a second car driving parallel to the main pickup from <<<image_11>>>. The camera looks sideways through the window at the main pickup — the main pickup is fully in frame, both vehicles moving side by side at speed. No camera, no hands, no operator visible in frame — only the main pickup and the road. Inside the main pickup, Alexander and John are visible through the windows. Ahead on the road, a random man stands, not looking at the camera. He sees the main pickup coming at him fast. He bolts to the side. Both vehicles brake hard at the same moment. The camera lurches forward with the braking, the frame swings, tilts, then steadies. In the distance, the main pickup skids with a slight rotation, water spraying from under the wheels, a faint wisp of steam rising where hot rubber meets the wet road. The random man stumbles to the side, brushes splashes off his pants, slightly annoyed.",
+     "spans": [
+      {
+       "category": "ref",
+       "text": "<<<image_11>>>",
+       "start": 119,
+       "end": 133
+      },
+      {
+       "category": "neg",
+       "text": "No camera",
+       "start": 280,
+       "end": 289
+      },
+      {
+       "category": "neg",
+       "text": "no hands",
+       "start": 291,
+       "end": 299
+      },
+      {
+       "category": "neg",
+       "text": "no operator visible in",
+       "start": 301,
+       "end": 323
+      },
+      {
+       "category": "world",
+       "text": "steam",
+       "start": 823,
+       "end": 828
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Ключевое решение",
+    "title": "Стартовая сцена: камера в салоне машины",
+    "bullets": [
+     "The camera is inside the front seat of a second car driving parallel to the main pickup: точка съёмки теперь физическое место в мире, где оператору не нужно быть в кадре.",
+     "No camera, no hands, no operator visible in frame — only the main pickup and the road: прямой запрет, который теперь никто в тексте не оспаривает.",
+     "Inside the main pickup, Alexander and John are visible through the windows: герои показаны заранее, поэтому выход из машины воспринимается как продолжение.",
+     "Причинно-следственная цепочка: человек стоит на дороге → видит машину → отскакивает → обе машины тормозят → занос, вода, пар → человек отряхивает штаны. Каждое событие вытекает из предыдущего.",
+     "The camera lurches forward with the braking, the frame swings, tilts, then steadies: камера реагирует на физику мира. Так появляется ощущение массы и инерции.",
+     "Машина из референса <<<image_11>>>: пикап теперь тот, что нужен."
+    ]
+   }
+  },
+  {
+   "index": 4,
+   "paragraphs": [
+    {
+     "text": "As soon as the cars stop, the operator throws open the door of the second car, jumps out through the open door, and sprints toward the main pickup, already rolling, the frame shaking violently with each step. The camera quickly closes the distance and settles into a medium shot of Alexander just as he gets out of the pickup. At the same moment, Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>, get out of the main pickup. Alexander starts talking immediately, moving fast — he walks quickly to the back of the pickup, turns to the camera, energetic, no pause. He says in clear, native Russian, perfect pronunciation, natural intonation: «Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.» He stumbles on a word, repeats it, keeps going, hands moving.",
+     "spans": [
+      {
+       "category": "ref",
+       "text": "<<<image_9>>>",
+       "start": 367,
+       "end": 380
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_10>>>",
+       "start": 401,
+       "end": 415
+      },
+      {
+       "category": "neg",
+       "text": "no pause",
+       "start": 573,
+       "end": 581
+      },
+      {
+       "category": "say",
+       "text": "«Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.»",
+       "start": 660,
+       "end": 868
+      },
+      {
+       "category": "imp",
+       "text": "stumbles on a word, repeats it, keeps going",
+       "start": 872,
+       "end": 915
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Выход из машины и реплика 1",
+    "bullets": [
+     "the operator throws open the door… sprints toward the main pickup, already rolling, the frame shaking violently with each step: переход от статичной точки к бегу описан как движение кадра.",
+     "settles into a medium shot of Alexander: явный размер плана. В попытке 2 его не было, и модель показывала общий план.",
+     "Alexander, matching <<<image_9>>>, and John, matching <<<image_10>>>: персонажи привязаны к character sheet, внешность и одежда берутся оттуда.",
+     "Реплика в «ёлочках» произносится дословно. Вокруг неё: язык, произношение, интонация и He stumbles on a word, repeats it, keeps going, hands moving. Живая запинка убирает «дикторский» эффект.",
+     "walks quickly to the back of the pickup, turns to the camera, energetic, no pause: речь сочетается с движением, актёр не стоит столбом."
+    ]
+   }
+  },
+  {
+   "index": 5,
+   "paragraphs": [
+    {
+     "text": "John opens the tailgate with effort — it is heavy. The latch clicks loudly. Inside, three cameras lie in their assembled rigs: the ARRI Alexa 35 from <<<image_3>>>, the Sony VENICE 2 from <<<image_4>>>, and the RED V-RAPTOR from <<<image_5>>>. Each camera shows signs of use — small scratches, dust in the crevices, worn straps hanging loose. Next to each camera stands an open hard case with foam cutouts: the Cooke S4/i T2.0 lenses from <<<image_6>>> for the ARRI, the ZEISS Supreme Prime lenses from <<<image_7>>> for the Sony, and the Laowa Proteus 2x Anamorphic lenses from <<<image_8>>> for the RED. Cables, batteries, and memory cards lie nearby in slight disarray.",
+     "spans": [
+      {
+       "category": "cam",
+       "text": "ARRI Alexa 35",
+       "start": 131,
+       "end": 144
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_3>>>",
+       "start": 150,
+       "end": 163
+      },
+      {
+       "category": "cam",
+       "text": "Sony VENICE 2",
+       "start": 169,
+       "end": 182
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_4>>>",
+       "start": 188,
+       "end": 201
+      },
+      {
+       "category": "cam",
+       "text": "RED V-RAPTOR",
+       "start": 211,
+       "end": 223
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_5>>>",
+       "start": 229,
+       "end": 242
+      },
+      {
+       "category": "cam",
+       "text": "Cooke S4/i T2.0 lenses",
+       "start": 411,
+       "end": 433
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_6>>>",
+       "start": 439,
+       "end": 452
+      },
+      {
+       "category": "cam",
+       "text": "ZEISS Supreme Prime lenses",
+       "start": 471,
+       "end": 497
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_7>>>",
+       "start": 503,
+       "end": 516
+      },
+      {
+       "category": "cam",
+       "text": "Laowa Proteus 2x Anamorphic lenses",
+       "start": 539,
+       "end": 573
+      },
+      {
+       "category": "ref",
+       "text": "<<<image_8>>>",
+       "start": 579,
+       "end": 592
+      }
+     ]
+    },
+    {
+     "text": "Alexander reaches into the tailgate, lifts one camera — the Sony VENICE 2 — holds it in his hands, turns it slowly in front of the lens, showing it from different angles as he speaks. He lifts a lens case, opens it, shows the lenses inside, gestures toward them, then sets it back down. He says in clear, native Russian, perfect pronunciation, natural intonation: «Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»",
+     "spans": [
+      {
+       "category": "cam",
+       "text": "Sony VENICE 2",
+       "start": 60,
+       "end": 73
+      },
+      {
+       "category": "say",
+       "text": "«Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»",
+       "start": 364,
+       "end": 578
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Борт, техника, реплика 2",
+    "bullets": [
+     "Три камеры со ссылками на референсы (<<<image_3>>>, <<<image_4>>>, <<<image_5>>>) и три кейса (<<<image_6>>>, <<<image_7>>>, <<<image_8>>>) с оптикой для каждой. Так модель понимает, какая линза какой камере соответствует.",
+     "signs of use — small scratches, dust in the crevices, worn straps hanging loose и Cables, batteries, and memory cards lie nearby in slight disarray: износ и беспорядок. Идеально чистая техника выглядит как рендер.",
+     "Все действия делает один человек: поднимает Sony, показывает, открывает кейс, показывает линзы, ставит обратно.",
+     "Реплика 2 называет предмет разговора. Зритель слышит то, что видит: три камеры и комплекты объективов.",
+     "Слабое место: именно здесь борт открылся неестественно, а три кейса слились в один. Механика открывающихся частей остаётся проблемой моделей, поэтому такие места мы закрываем в монтаже."
+    ]
+   }
+  },
+  {
+   "index": 6,
+   "paragraphs": [
+    {
+     "text": "The sun breaks through the clouds — soft rays scatter through the moisture in the air, a lens flare passes across the glass. The puddle reflects the cameras. A cloud passes, the light shifts for two seconds, then returns. Backlight glows softly around Alexander's hair.",
+     "spans": [
+      {
+       "category": "world",
+       "text": "lens flare",
+       "start": 89,
+       "end": 99
+      },
+      {
+       "category": "world",
+       "text": "A cloud passes, the light shifts for two seconds, then returns",
+       "start": 158,
+       "end": 220
+      },
+      {
+       "category": "world",
+       "text": "Backlight glows softly around Alexander's hair",
+       "start": 222,
+       "end": 268
+      }
+     ]
+    },
+    {
+     "text": "Alexander pauses, places his hand on the Sony VENICE 2, and says in clear, native Russian, perfect pronunciation, natural intonation: «Сейчас мы покажем вам, какая камера какое качество изображения даёт.» The camera moves in closer, the focus briefly slips, then catches again. A quiet laugh shakes the frame slightly.",
+     "spans": [
+      {
+       "category": "cam",
+       "text": "Sony VENICE 2",
+       "start": 41,
+       "end": 54
+      },
+      {
+       "category": "say",
+       "text": "«Сейчас мы покажем вам, какая камера какое качество изображения даёт.»",
+       "start": 134,
+       "end": 204
+      },
+      {
+       "category": "imp",
+       "text": "the focus briefly slips",
+       "start": 233,
+       "end": 256
+      }
+     ]
+    },
+    {
+     "text": "The camera continues to follow them, handheld, shaking with each step, never cutting. Breathing is steady, sometimes through the nose, sometimes through the mouth when moving. The camera shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel. It almost trips on a curb while stepping back to frame the cameras. Focus hunts, then locks. A car passes behind them, its reflection sliding across the puddle. A dog pulls on its leash, the owner tugs it back. A guard yawns. A student drops his phone, picks it up, walks on. In the background, a child runs past with a balloon. The balloon slips from his hand and floats up. The child starts crying. His mother crouches down, comforts him, picks him up, and walks away. No one in the foreground reacts. Someone in the distance calls out, waving. A bird lands on the parapet, then takes off again. A car horn sounds somewhere. A door of the MSU building slams, a student walks out. The wind hits the microphone — a slight wince shakes the frame. Someone off-screen sneezes, a few people glance over. The case thuds against the tailgate as it is set down.",
+     "spans": [
+      {
+       "category": "neg",
+       "text": "never cutting",
+       "start": 71,
+       "end": 84
+      },
+      {
+       "category": "imp",
+       "text": "almost trips on a curb",
+       "start": 289,
+       "end": 311
+      },
+      {
+       "category": "imp",
+       "text": "Focus hunts, then locks",
+       "start": 354,
+       "end": 377
+      },
+      {
+       "category": "neg",
+       "text": "No one in the",
+       "start": 757,
+       "end": 770
+      }
+     ]
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Свет, реплика 3, поведение камеры, фон",
+    "bullets": [
+     "A cloud passes, the light shifts for two seconds, then returns: время в свете. Постоянный свет выглядит мёртвым, а «облако на две секунды» задаёт ритм.",
+     "Backlight glows softly around Alexander's hair: контровой свет отделяет героя от фона и добавляет объём.",
+     "The camera continues to follow them, handheld, shaking with each step… shifts from one hand to the other, adjusts the strap, checks focus with a hand on the lens barrel: описано поведение камеры, а не человека. Это работает благодаря правилам выше.",
+     "almost trips on a curb, Focus hunts, then locks: микро-ошибки.",
+     "Фон: около 15 событий (машина, собака, охранник, студент, ребёнок с шариком, птица, гудок, хлопок двери, чихание). Модель исполняет часть, но даже частично исполненный фон делает мир живым. При этом No one in the foreground reacts не даёт массовке играть на камеру.",
+     "The wind hits the microphone, Someone off-screen sneezes, The case thuds against the tailgate: звуковой слой. Звук даёт половину реализма."
+    ]
+   }
+  },
+  {
+   "index": 7,
+   "paragraphs": [
+    {
+     "text": "The shot ends on the three cameras in the open tailgate. The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building. A sun glare passes across the glass. Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera. A second of silence, just the wind and seagulls. Someone laughs off-screen. The camera lowers slightly, the shot settling into stillness, the frame tilting just a little as if the arms holding it are tired.",
+     "spans": []
+    }
+   ],
+   "note": {
+    "kind": "Разбор абзаца",
+    "title": "Финал",
+    "bullets": [
+     "The camera slowly pulls back, still tracking, showing the whole scene — three cameras, two men, the puddle, the building: кадр заканчивается композицией, где есть всё, что важно.",
+     "Alexander keeps his hand on the Sony. He looks at the cameras, then at John, then back at the camera: взгляд в объектив создаёт контакт со зрителем, рука на Sony подводит к следующему кадру.",
+     "A second of silence, just the wind and seagulls. Someone laughs off-screen.: тишина и живой звук в конце.",
+     "The camera lowers slightly… as if the arms holding it are finally tired: усталость камеры как конец дубля. Без прописанного финала модель обычно обрывает движение на середине."
+    ]
+   }
+  }
+ ]
+}

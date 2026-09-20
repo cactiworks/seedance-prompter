@@ -1,0 +1,122 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`снимок: дрейф правил виден в diff > k1a1 1`] = `
+[
+  "warning OP_RULE_MISSING p- ",
+  "warning OP_BODY_NOUN p1 operator hand repositioning",
+  "warning OP_BODY_NOUN p1 operator breathing audible and visible in the fr",
+  "warning OP_ACTOR_VERB p1 The operator moves continuously — steps closer, ",
+  "warning OP_PORTRAIT_IN_STYLE p1 The operator moves continuously — steps closer, ",
+  "warning REF_ON_EXTRA p3 actor from <<<image_5>>>",
+  "warning OP_ACTOR_VERB p3 The operator flinches at the sound of the brakes",
+  "warning MICRO_ACTION_OVERLOAD p5 ",
+  "warning OP_ACTOR_VERB p5 The operator steps closer, then back, the focus ",
+  "warning OP_ACTOR_VERB p5 the operator glances at the actor",
+  "warning MICRO_ACTION_OVERLOAD p6 ",
+  "warning OP_ACTOR_VERB p6 The operator circles around them, still tracking",
+  "warning OP_BODY_NOUN p6 his breath audible",
+  "warning OP_ACTOR_VERB p8 The operator moves in closer, the focus briefly ",
+  "warning OP_ACTOR_VERB p8 The operator laughs quietly — the camera shakes ",
+  "warning OP_ACTOR_VERB p9 The operator breathes steadily, sometimes throug",
+  "warning OP_BODY_NOUN p9 his hand on the lens barrel",
+  "warning OP_ACTOR_VERB p9 the operator winces slightly",
+  "warning OP_ACTOR_VERB p10 The operator lowers the camera slightly, the sho",
+  "warning OP_BODY_NOUN p10 his arms are tired",
+  "info REF_PANEL_LIMIT p- ",
+  "info SPEECH_BUDGET p- ",
+  "info SHOT_SIZE_KEY_MOMENTS p- ",
+  "info STYLE_HANDHELD_SWITCH p1 ",
+  "info UNSHOWABLE_SILENT_SPEECH p3 no sound",
+  "info UNSHOWABLE_SENSE p3 smell of",
+  "info UNSHOWABLE_SILENT_SPEECH p6 without sound",
+  "info MECH_RISK p6 opens the tailgate",
+  "info SAME_OBJECTS_MERGE p6 three cameras",
+  "info UNSHOWABLE_SENSE p6 as if remembering",
+  "info MECH_RISK p9 door of the MSU building slams",
+]
+`;
+
+exports[`снимок: дрейф правил виден в diff > k1a2 1`] = `
+[
+  "error OP_VANTAGE_VIA_PERSON p3 The operator rides in the cargo bed of a second ",
+  "warning OP_RULE_MISSING p- ",
+  "warning OP_BODY_NOUN p1 operator hand repositioning",
+  "warning OP_BODY_NOUN p1 operator breathing audible and visible in the fr",
+  "warning OP_ACTOR_VERB p1 The operator moves continuously — steps closer, ",
+  "warning OP_PORTRAIT_IN_STYLE p1 The operator moves continuously — steps closer, ",
+  "warning OP_ACTOR_VERB p3 The operator rides in the cargo bed of a second ",
+  "warning OP_ACTOR_VERB p3 The operator in the second truck is thrown forwa",
+  "warning OP_ACTOR_VERB p4 the operator jumps out of the cargo bed and runs",
+  "warning OP_ACTOR_VERB p8 The operator moves in closer, the focus briefly ",
+  "warning OP_ACTOR_VERB p8 The operator laughs quietly — the camera shakes ",
+  "warning OP_ACTOR_VERB p9 The operator breathes steadily, sometimes throug",
+  "warning OP_BODY_NOUN p9 his hand on the lens barrel",
+  "warning OP_ACTOR_VERB p9 the operator winces slightly",
+  "warning HYG_PUNCT p9 s against the tailgate as it is set down",
+  "warning OP_ACTOR_VERB p10 The operator lowers the camera slightly, the sho",
+  "warning OP_BODY_NOUN p10 his arms are tired",
+  "info REF_PANEL_LIMIT p- ",
+  "info SPEECH_BUDGET p- ",
+  "info SHOT_SIZE_KEY_MOMENTS p- ",
+  "info MECH_RISK p5 opens the tailgate",
+  "info SAME_OBJECTS_MERGE p5 three cameras",
+  "info MECH_RISK p9 door of the MSU building slams",
+]
+`;
+
+exports[`снимок: дрейф правил виден в diff > k1a3 1`] = `
+[
+  "warning OP_RULE_MISSING p- ",
+  "warning OP_ACTOR_VERB p4 the operator throws open the door of the second ",
+  "info REF_PANEL_LIMIT p- ",
+  "info SPEECH_BUDGET p- ",
+  "info MECH_RISK p4 open the door",
+  "info MECH_RISK p5 opens the tailgate",
+  "info SAME_OBJECTS_MERGE p5 three cameras",
+]
+`;
+
+exports[`снимок: дрейф правил виден в diff > k2 1`] = `
+[
+  "warning SPEECH_BUDGET p- ",
+  "info SHOT_SIZE_KEY_MOMENTS p- ",
+  "info OP_ACTOR_VERB p2 the operator moves, the frame moves; when the op",
+  "info OP_BAN_CONTRADICTED p8 operator's faint reflection briefly appears in t",
+]
+`;
+
+exports[`снимок: дрейф правил виден в diff > k3a1 1`] = `
+[
+  "error REF_DANGLING_PREP p1 from with",
+  "error REF_DANGLING_PREP p1 lenses from ,",
+  "error REF_DANGLING_PREP p3 as in and",
+  "error REF_DANGLING_PREP p4 matching ,",
+  "error REF_DANGLING_PREP p4 from .",
+  "error REF_DANGLING_PREP p4 from in",
+  "error REF_SYNTAX_FOREIGN p4 @image7",
+  "error REF_DANGLING_PREP p4 from .",
+  "error ROLE_FX_ON_PROP p5 The sun catches the glass, and the anamorphic fl",
+  "error HYG_CYRILLIC_OUTSIDE_QUOTES p7 внимание",
+  "error HYG_CYRILLIC_OUTSIDE_QUOTES p8 Ка",
+  "warning HYG_PUNCT p1  ,",
+  "warning HYG_PUNCT p4  ,",
+  "warning HYG_PUNCT p7 ,.",
+  "warning FINALE_PRESENT p11 ",
+  "warning FINALE_COMMAND p11 The scene ends.",
+  "info SPEECH_BUDGET p- ",
+  "info OP_ACTOR_VERB p5 The operator approaches — the frame moves closer",
+  "info OP_BAN_CONTRADICTED p7 operator's reflection briefly appears in внимани",
+  "info MECH_RISK p8 door and swings",
+]
+`;
+
+exports[`снимок: дрейф правил виден в diff > k3a2 1`] = `
+[
+  "warning FINALE_PRESENT p17 ",
+  "warning FINALE_COMMAND p17 The scene ends.",
+  "info SPEECH_BUDGET p- ",
+  "info OP_ACTOR_VERB p11 The operator approaches — the frame moves closer",
+  "info OP_BAN_CONTRADICTED p13 operator's reflection briefly appears in a puddl",
+  "info MECH_RISK p14 door and swings",
+]
+`;

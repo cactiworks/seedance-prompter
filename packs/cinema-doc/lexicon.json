@@ -1,0 +1,259 @@
+{
+  "operatorRuleMarkers": [
+    "refers only to the behavior of the camera",
+    "The operator is never visible in frame"
+  ],
+  "operatorBanMarkers": [
+    "no operator visible in frame",
+    "The operator is never visible in frame"
+  ],
+  "operatorBodyVerbs": [
+    "rides",
+    "sits",
+    "stands",
+    "jumps",
+    "runs",
+    "sprints",
+    "throws",
+    "catches",
+    "slams",
+    "steps",
+    "circles",
+    "moves",
+    "flinches",
+    "laughs",
+    "winces",
+    "shifts",
+    "adjusts",
+    "checks",
+    "trips",
+    "lowers",
+    "glances",
+    "approaches",
+    "breathes",
+    "pulls",
+    "is thrown",
+    "steadies"
+  ],
+  "operatorVantageVerbs": [
+    "rides",
+    "sits",
+    "stands",
+    "is riding",
+    "is sitting",
+    "is standing",
+    "is filming"
+  ],
+  "defects": [
+    "auto-exposure jumps",
+    "focus hunting",
+    "autofocus that breathes",
+    "mechanical zoom that jerks",
+    "horizon slightly tilted",
+    "horizon tilted",
+    "hand repositioning",
+    "breathing audible",
+    "exposure shifts",
+    "camera dips"
+  ],
+  "handheldSwitch": [
+    "unstabilized handheld"
+  ],
+  "noStabilization": [
+    "no stabilization whatsoever"
+  ],
+  "gearAnchor": [
+    "shot on "
+  ],
+  "genericGear": [
+    "cinematic camera",
+    "professional camera",
+    "cinema camera"
+  ],
+  "languageTail": [
+    "All dialogue in clear, native"
+  ],
+  "languagePhrase": [
+    "native Russian"
+  ],
+  "unshowableSense": [
+    "smell of",
+    "scent of",
+    "as if remembering",
+    "thinks about",
+    "feels that",
+    "remembers how"
+  ],
+  "silentSpeech": [
+    "no sound",
+    "without sound",
+    "inaudibly",
+    "silently says"
+  ],
+  "mechanicsNouns": [
+    "tailgate",
+    "door",
+    "lid",
+    "hatch",
+    "trunk",
+    "zipper",
+    "latch"
+  ],
+  "mechanicsVerbs": [
+    "open",
+    "opens",
+    "opened",
+    "swings",
+    "slams",
+    "unlocks",
+    "lifts"
+  ],
+  "opticalFx": [
+    "flare",
+    "flares",
+    "streak",
+    "streaks",
+    "bokeh",
+    "glint"
+  ],
+  "fxOnImageMarkers": [
+    "on the image",
+    "across the frame",
+    "across the image",
+    "shooting lens",
+    "through the camera"
+  ],
+  "propHandling": [
+    "lifts",
+    "holds",
+    "shows",
+    "turning it",
+    "turns it",
+    "picks up"
+  ],
+  "propLensNouns": [
+    "lens",
+    "lenses",
+    "camera"
+  ],
+  "extraNouns": [
+    "actor",
+    "passerby",
+    "random man",
+    "stranger",
+    "bystander",
+    "guard",
+    "pedestrian"
+  ],
+  "shotSizes": [
+    "close-up",
+    "close up",
+    "medium shot",
+    "wide shot",
+    "tight shot",
+    "extreme close",
+    "full shot",
+    "two-shot"
+  ],
+  "lightEventMarkers": [
+    "for two seconds",
+    "for a second",
+    "for a few seconds",
+    "then returns",
+    "a cloud passes",
+    "light shifts"
+  ],
+  "weatherPhysics": [
+    "wet",
+    "puddle",
+    "puddles",
+    "reflect",
+    "reflecting",
+    "reflection",
+    "steam",
+    "wind",
+    "glisten",
+    "glistens",
+    "moisture",
+    "mist",
+    "fog",
+    "snow",
+    "dust",
+    "rain"
+  ],
+  "finaleRest": [
+    "settling into stillness",
+    "holds on",
+    "stands",
+    "catches his breath",
+    "stillness"
+  ],
+  "finaleSilence": [
+    "second of silence",
+    "silence",
+    "sound fades"
+  ],
+  "finaleOffscreen": [
+    "off-screen",
+    "offscreen"
+  ],
+  "finaleCameraSettle": [
+    "camera lowers",
+    "camera slowly lowers",
+    "lowers slightly",
+    "lowers the camera"
+  ],
+  "foregroundNoReact": [
+    "No one in the foreground reacts",
+    "No one reacts"
+  ],
+  "cutWords": [
+    "cut to",
+    "cuts to",
+    "smash cut",
+    "montage",
+    "later that day",
+    "fade to",
+    "fades out",
+    "dissolve to"
+  ],
+  "countWords": [
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven"
+  ],
+  "microGestures": [
+    "rubs",
+    "squints",
+    "glances",
+    "nods",
+    "smirk",
+    "smirks",
+    "wipes",
+    "puts it away",
+    "picks up",
+    "smiles faintly",
+    "checks it",
+    "sets it down",
+    "feels its weight",
+    "looks around",
+    "mutters",
+    "brushes",
+    "yawns",
+    "scratches",
+    "shrugs",
+    "fidgets"
+  ],
+  "countNounStop": [
+    "times",
+    "seconds",
+    "minutes",
+    "steps",
+    "degrees",
+    "meters",
+    "feet",
+    "stops"
+  ]
+}

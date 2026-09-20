@@ -1,0 +1,30 @@
+{
+  "speech": {
+    "wordsPerSecond": 2.8,
+    "speakingShare": 0.8,
+    "infoAt": 0.85,
+    "warnAt": 1.0,
+    "maxLineWords": 30
+  },
+  "microActions": {
+    "maxGesturesPerParagraph": 4
+  },
+  "length": {
+    "infoAboveChars": 10000
+  },
+  "refs": {
+    "softLimit": 8,
+    "hardLimit": 30
+  },
+  "duration": {
+    "min": 4,
+    "max": 30,
+    "defaultSec": 30
+  },
+  "defectStack": {
+    "minItems": 3
+  },
+  "finale": {
+    "minSignals": 2
+  }
+}

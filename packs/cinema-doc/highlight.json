@@ -1,0 +1,572 @@
+{
+ "source": "docs/source/guide.html (hl-спаны)",
+ "categories": {
+  "ref": "Референс",
+  "cam": "Камера и оптика",
+  "imp": "Дефекты оператора",
+  "look": "Характер картинки",
+  "world": "Мир, погода, свет",
+  "say": "Реплики",
+  "neg": "Запреты"
+ },
+ "phrases": {
+  "ref": [
+   {
+    "text": "<<<image_2>>>",
+    "count": 9
+   },
+   {
+    "text": "<<<image_1>>>",
+    "count": 8
+   },
+   {
+    "text": "<<<image_5>>>",
+    "count": 7
+   },
+   {
+    "text": "<<<image_3>>>",
+    "count": 6
+   },
+   {
+    "text": "<<<image_4>>>",
+    "count": 5
+   },
+   {
+    "text": "<<<image_6>>>",
+    "count": 5
+   },
+   {
+    "text": "<<<image_7>>>",
+    "count": 5
+   },
+   {
+    "text": "<<<image_10>>>",
+    "count": 3
+   },
+   {
+    "text": "<<<image_11>>>",
+    "count": 3
+   },
+   {
+    "text": "<<<image_8>>>",
+    "count": 3
+   },
+   {
+    "text": "<<<image_9>>>",
+    "count": 3
+   },
+   {
+    "text": "@image7",
+    "count": 1
+   }
+  ],
+  "cam": [
+   {
+    "text": "Sony VENICE 2",
+    "count": 9
+   },
+   {
+    "text": "RED V-RAPTOR",
+    "count": 8
+   },
+   {
+    "text": "ARRI Alexa 35",
+    "count": 6
+   },
+   {
+    "text": "Laowa Proteus 2x Anamorphic lenses",
+    "count": 6
+   },
+   {
+    "text": "ZEISS Supreme Prime lenses",
+    "count": 5
+   },
+   {
+    "text": "shooting lens",
+    "count": 4
+   },
+   {
+    "text": "anamorphic lens",
+    "count": 3
+   },
+   {
+    "text": "Cooke S4/i Prime lenses at T2.0",
+    "count": 3
+   },
+   {
+    "text": "Cooke S4/i T2.0 lenses",
+    "count": 3
+   },
+   {
+    "text": "RED V-RAPTOR 8K VV",
+    "count": 3
+   },
+   {
+    "text": "17+ stops of dynamic range",
+    "count": 2
+   },
+   {
+    "text": "8K full-frame global shutter sensor",
+    "count": 2
+   },
+   {
+    "text": "constant 2x squeeze ratio",
+    "count": 2
+   },
+   {
+    "text": "elliptical bokeh",
+    "count": 2
+   },
+   {
+    "text": "global shutter",
+    "count": 2
+   },
+   {
+    "text": "horizontal flares",
+    "count": 2
+   },
+   {
+    "text": "horizontal silver flare",
+    "count": 2
+   },
+   {
+    "text": "Laowa Proteus 2x Anamorphic lens",
+    "count": 2
+   },
+   {
+    "text": "REDCODE RAW",
+    "count": 2
+   },
+   {
+    "text": "16 stops of dynamic range",
+    "count": 1
+   },
+   {
+    "text": "8.6K full-frame sensor",
+    "count": 1
+   },
+   {
+    "text": "anamorphic effect",
+    "count": 1
+   },
+   {
+    "text": "dual native ISO 800/3200",
+    "count": 1
+   },
+   {
+    "text": "horizontal flare",
+    "count": 1
+   }
+  ],
+  "imp": [
+   {
+    "text": "brief focus hunting during fast movements",
+    "count": 6
+   },
+   {
+    "text": "unstabilized handheld camera",
+    "count": 6
+   },
+   {
+    "text": "no stabilization whatsoever",
+    "count": 5
+   },
+   {
+    "text": "auto-exposure jumps when the camera turns from bright sky to darker ground",
+    "count": 4
+   },
+   {
+    "text": "breathing audible and visible in the frame rhythm",
+    "count": 4
+   },
+   {
+    "text": "camera hand repositioning",
+    "count": 4
+   },
+   {
+    "text": "horizon slightly tilted",
+    "count": 4
+   },
+   {
+    "text": "manual autofocus that breathes and occasionally misses, then catches up",
+    "count": 4
+   },
+   {
+    "text": "almost trips on a curb",
+    "count": 3
+   },
+   {
+    "text": "Focus hunts, then locks",
+    "count": 3
+   },
+   {
+    "text": "mechanical zoom that jerks slightly when used",
+    "count": 3
+   },
+   {
+    "text": "stumbles on a word, repeats it, keeps going",
+    "count": 3
+   },
+   {
+    "text": "the focus briefly slips",
+    "count": 3
+   },
+   {
+    "text": "the focus slips",
+    "count": 3
+   },
+   {
+    "text": "camera dips when operator listens",
+    "count": 2
+   },
+   {
+    "text": "Focus hunts constantly",
+    "count": 2
+   },
+   {
+    "text": "horizon tilted",
+    "count": 2
+   },
+   {
+    "text": "operator breathing audible and visible in the frame rhythm",
+    "count": 2
+   },
+   {
+    "text": "operator hand repositioning",
+    "count": 2
+   },
+   {
+    "text": "camera dips when the operator listens",
+    "count": 1
+   }
+  ],
+  "look": [
+   {
+    "text": "natural skin tones",
+    "count": 6
+   },
+   {
+    "text": "natural vignetting",
+    "count": 4
+   },
+   {
+    "text": "slight chromatic aberration at the edges",
+    "count": 4
+   },
+   {
+    "text": "soft highlight roll-off",
+    "count": 4
+   },
+   {
+    "text": "Film grain, subtle Kodak texture",
+    "count": 3
+   },
+   {
+    "text": "gentle teal-and-orange color grade",
+    "count": 3
+   },
+   {
+    "text": "high dynamic range",
+    "count": 3
+   },
+   {
+    "text": "shallow depth of field",
+    "count": 3
+   },
+   {
+    "text": "slightly desaturated",
+    "count": 3
+   },
+   {
+    "text": "soft circular bokeh",
+    "count": 3
+   },
+   {
+    "text": "clean sharp image",
+    "count": 1
+   },
+   {
+    "text": "cool neutral tones",
+    "count": 1
+   },
+   {
+    "text": "minimal fine film-like grain instead of electronic noise",
+    "count": 1
+   },
+   {
+    "text": "modern digital look",
+    "count": 1
+   },
+   {
+    "text": "round highlights in out-of-focus areas",
+    "count": 1
+   },
+   {
+    "text": "smooth creamy bokeh with natural fall-off",
+    "count": 1
+   },
+   {
+    "text": "wide color gamut exceeding BT.2020",
+    "count": 1
+   }
+  ],
+  "world": [
+   {
+    "text": "A cloud passes, the light shifts for two seconds, then returns",
+    "count": 6
+   },
+   {
+    "text": "lens flare",
+    "count": 5
+   },
+   {
+    "text": "lens flares",
+    "count": 5
+   },
+   {
+    "text": "puddles reflecting the sky and the building",
+    "count": 5
+   },
+   {
+    "text": "steam",
+    "count": 5
+   },
+   {
+    "text": "Sunlight breaks through the clouds in soft rays",
+    "count": 5
+   },
+   {
+    "text": "The rain has just stopped",
+    "count": 5
+   },
+   {
+    "text": "Wet asphalt",
+    "count": 5
+   },
+   {
+    "text": "A light wind blows across the embankment",
+    "count": 3
+   },
+   {
+    "text": "Moisture in the air",
+    "count": 3
+   },
+   {
+    "text": "Steam",
+    "count": 3
+   },
+   {
+    "text": "Backlight glows softly around Alexander's hair",
+    "count": 2
+   },
+   {
+    "text": "Moisture hangs in the air",
+    "count": 2
+   }
+  ],
+  "say": [
+   {
+    "text": "«Перед вами три разных камеры. Все камеры высокого уровня кинематографичности. Это профессиональные кинокамеры, на которые снимают голливудские фильмы, фестивальное кино, фантастику. И разные комплекты объективов.»",
+    "count": 3
+   },
+   {
+    "text": "«Почему у одних видео в Seedance получаются неотличимые от реальности, а у других — классический стандартный ИИ-слоп? Потому что многие не учитывают один очень важный нюанс. Точнее, несколько важных нюансов.»",
+    "count": 3
+   },
+   {
+    "text": "«Сейчас мы покажем вам, какая камера какое качество изображения даёт.»",
+    "count": 3
+   },
+   {
+    "text": "«Но здесь и другой объектив. Который идеально подходит для камеры RED. Блики горизонтальные. Полосы света. Анаморфот.»",
+    "count": 2
+   },
+   {
+    "text": "«Отлично, вот так снимает RED. Сейчас — другая камера. У каждой камеры свой характер.»",
+    "count": 2
+   },
+   {
+    "text": "«Покрытие держит контраст. Не перекрывает кадр.»",
+    "count": 2
+   },
+   {
+    "text": "«Снимаем на RED V-RAPTOR. Анаморфот Laowa Proteus.»",
+    "count": 2
+   },
+   {
+    "text": "«Sony даёт холодные, нейтральные и точные тона. Современная, чистая картинка — без плёночной мягкости.»",
+    "count": 1
+   },
+   {
+    "text": "«Касательно объектива. Вы можете заметить, что здесь блики ведут себя по-другому. Специальное покрытие объективов не позволяет бликам перекрывать всё изображение и терять контрастность.»",
+    "count": 1
+   },
+   {
+    "text": "«Обрати внимание. Качество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.»",
+    "count": 1
+   },
+   {
+    "text": "«Обратите внимание — качество изображения отличается от прошлого, потому что прошлое было снято на ARRI Alexa 35.»",
+    "count": 1
+   },
+   {
+    "text": "«Обратичество другое. Чистые тени. Мягкие цвета. Глобальный затвор — никаких искажений при быстром движении. Великий горизонт.»",
+    "count": 1
+   },
+   {
+    "text": "«Отлично, вот так снимает камера Sony. Сейчас покажу вам, как снимает другая камера.»",
+    "count": 1
+   },
+   {
+    "text": "«Сейчас мы снимаем на Sony VENICE 2 с объективами ZEISS Supreme Prime.»",
+    "count": 1
+   }
+  ],
+  "neg": [
+   {
+    "text": "no cuts",
+    "count": 6
+   },
+   {
+    "text": "no edits",
+    "count": 6
+   },
+   {
+    "text": "no leaves on the",
+    "count": 6
+   },
+   {
+    "text": "no people",
+    "count": 6
+   },
+   {
+    "text": "no poses from the",
+    "count": 6
+   },
+   {
+    "text": "no staged acting",
+    "count": 6
+   },
+   {
+    "text": "No trees",
+    "count": 6
+   },
+   {
+    "text": "never cutting",
+    "count": 5
+   },
+   {
+    "text": "No accent",
+    "count": 5
+   },
+   {
+    "text": "no foreign inflection",
+    "count": 5
+   },
+   {
+    "text": "no robotic delivery",
+    "count": 5
+   },
+   {
+    "text": "no hands",
+    "count": 4
+   },
+   {
+    "text": "never visible in frame",
+    "count": 3
+   },
+   {
+    "text": "no body",
+    "count": 3
+   },
+   {
+    "text": "no face",
+    "count": 3
+   },
+   {
+    "text": "no figures",
+    "count": 3
+   },
+   {
+    "text": "No one in the",
+    "count": 3
+   },
+   {
+    "text": "no theatrical gestures",
+    "count": 3
+   },
+   {
+    "text": "No flares",
+    "count": 2
+   },
+   {
+    "text": "no pause",
+    "count": 2
+   },
+   {
+    "text": "no rolling shutter artifacts",
+    "count": 2
+   },
+   {
+    "text": "no streaks",
+    "count": 2
+   },
+   {
+    "text": "never washing out the",
+    "count": 1
+   },
+   {
+    "text": "no anamorphic distortions appear",
+    "count": 1
+   },
+   {
+    "text": "no anamorphic effects on",
+    "count": 1
+   },
+   {
+    "text": "no blood",
+    "count": 1
+   },
+   {
+    "text": "no busy background rendering",
+    "count": 1
+   },
+   {
+    "text": "No camera",
+    "count": 1
+   },
+   {
+    "text": "no cut",
+    "count": 1
+   },
+   {
+    "text": "No one reacts",
+    "count": 1
+   },
+   {
+    "text": "no operator visible in",
+    "count": 1
+   },
+   {
+    "text": "no optical effects on",
+    "count": 1
+   },
+   {
+    "text": "no sound",
+    "count": 1
+   },
+   {
+    "text": "not a circle",
+    "count": 1
+   },
+   {
+    "text": "not a dot",
+    "count": 1
+   },
+   {
+    "text": "not a lens spot",
+    "count": 1
+   }
+  ]
+ }
+}
