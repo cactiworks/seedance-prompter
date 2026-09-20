@@ -1,0 +1,52 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-2);
+  border-radius: var(--lab-radius-pill);
+  background: var(--lab-fill-2);
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-3);
+  border: 0;
+  border-radius: var(--lab-radius-pill);
+  background: transparent;
+  color: var(--lab-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--lab-duration-base) var(--lab-ease-standard),
+    color var(--lab-duration-base) var(--lab-ease-standard),
+    box-shadow var(--lab-duration-base) var(--lab-ease-standard);
+}
+
+.m .item {
+  height: 2rem;
+  padding: 0 var(--lab-space-8);
+  font-size: var(--lab-type-body-size);
+}
+
+.s .item {
+  height: 1.625rem;
+  padding: 0 var(--lab-space-6);
+  font-size: var(--lab-type-label-size);
+}
+
+.item:hover {
+  color: var(--lab-text-primary);
+}
+
+/* Бегунок — маленький кусок стекла: светлая подложка, блик по верхней кромке, малая тень. */
+.item[data-state="on"] {
+  background: var(--lab-thumb);
+  color: var(--lab-text-primary);
+  box-shadow: var(--lab-shadow-xs);
+}
+
+.item:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}

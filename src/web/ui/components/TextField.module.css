@@ -1,0 +1,104 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+  min-width: 0;
+}
+
+/* Подпись на рамке — фирменный приём Lab UI. fieldset + legend дают вырез в рамке на любом фоне. */
+.field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--lab-space-6);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-surface);
+  transition:
+    border-color var(--lab-duration-fast) var(--lab-ease-standard),
+    box-shadow var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.field:hover {
+  border-color: var(--lab-border-strong);
+}
+
+.field:focus-within {
+  border-color: var(--lab-accent);
+  box-shadow: 0 0 0 3px var(--lab-accent-soft);
+}
+
+.invalid,
+.invalid:hover {
+  border-color: var(--lab-danger);
+}
+
+.invalid:focus-within {
+  box-shadow: 0 0 0 3px var(--lab-danger-soft);
+}
+
+.legend {
+  margin-left: calc(var(--lab-space-2) * -1);
+  padding: 0 var(--lab-space-2);
+  font-size: var(--lab-type-caption-size);
+  line-height: 0.0625rem;
+  color: var(--lab-text-secondary);
+}
+
+.field:focus-within .legend {
+  color: var(--lab-accent);
+}
+
+.invalid .legend,
+.invalid:focus-within .legend {
+  color: var(--lab-danger);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: var(--lab-type-body-size);
+}
+
+.textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 5.5rem;
+  padding: var(--lab-space-6) 0;
+  border: 0;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  font-size: var(--lab-type-body-size);
+  line-height: var(--lab-type-body-line);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--lab-text-tertiary);
+}
+
+.adornment {
+  display: inline-flex;
+  flex: none;
+  color: var(--lab-text-tertiary);
+}
+
+.helper {
+  padding: 0 var(--lab-space-6);
+  font-size: var(--lab-type-caption-size);
+  line-height: var(--lab-type-caption-line);
+  color: var(--lab-text-secondary);
+}
+
+.helperError {
+  color: var(--lab-danger);
+}

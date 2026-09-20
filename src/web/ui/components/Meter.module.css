@@ -1,0 +1,55 @@
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  min-width: 6.5rem;
+}
+
+.caption {
+  font-size: var(--lab-type-caption-size);
+  line-height: var(--lab-type-caption-line);
+  color: var(--lab-text-secondary);
+}
+
+.value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lab-space-2);
+  font-size: var(--lab-type-title-s-size);
+  line-height: var(--lab-type-title-s-line);
+  letter-spacing: var(--lab-type-title-s-tracking);
+  font-variant-numeric: tabular-nums;
+}
+
+.of {
+  font-size: var(--lab-type-label-size);
+  color: var(--lab-text-tertiary);
+}
+
+.track {
+  height: 0.25rem;
+  border-radius: var(--lab-radius-pill);
+  background: var(--lab-fill-2);
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  border-radius: var(--lab-radius-pill);
+  background: var(--lab-accent);
+  transition:
+    width var(--lab-duration-slow) var(--lab-ease-standard),
+    background-color var(--lab-duration-base) var(--lab-ease-standard);
+}
+
+.warning .bar {
+  background: var(--lab-warning);
+}
+
+.danger .bar {
+  background: var(--lab-danger);
+}
+
+.success .bar {
+  background: var(--lab-success);
+}

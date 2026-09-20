@@ -1,0 +1,67 @@
+@import url("@fontsource-variable/geist/index.css");
+@import url("@fontsource-variable/geist-mono/index.css");
+@import url("../tokens/tokens.css");
+@import url("./materials.css");
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  text-size-adjust: 100%;
+  text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--lab-bg-page);
+  color: var(--lab-text-primary);
+  font-family: var(--lab-font-sans);
+  font-size: var(--lab-type-body-size);
+  font-weight: var(--lab-weight-regular);
+  line-height: var(--lab-type-body-line);
+  letter-spacing: var(--lab-type-body-tracking);
+  font-feature-settings: "ss01", "cv11";
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+  font-weight: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* Единое фокус-кольцо системы: акцент на 32 %, снаружи формы, только с клавиатуры. */
+:focus-visible {
+  outline: 2px solid var(--lab-accent-ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--lab-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

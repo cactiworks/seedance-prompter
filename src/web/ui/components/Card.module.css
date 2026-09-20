@@ -1,0 +1,22 @@
+.card {
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  border: 1px solid var(--lab-border-subtle);
+}
+
+.raised {
+  box-shadow: var(--lab-shadow-s);
+}
+
+.floating {
+  border-radius: var(--lab-radius-xl);
+  box-shadow: var(--lab-shadow-l);
+}
+
+.padM {
+  padding: var(--lab-space-8);
+}
+
+.padL {
+  padding: var(--lab-space-12);
+}

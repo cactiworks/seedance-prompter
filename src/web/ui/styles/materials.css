@@ -1,0 +1,52 @@
+/*
+ * Материалы Lab UI. Стекло — только для плавающего хрома: то, что парит над контентом и имеет,
+ * что размывать. На ровном фоне стекла нет (REFERENCE.md, принцип 9).
+ */
+
+.lab-glass {
+  background: var(--lab-glass-bg);
+  border: 1px solid var(--lab-glass-edge);
+  box-shadow: var(--lab-shadow-glass), var(--lab-shadow-l);
+  backdrop-filter: blur(var(--lab-blur-l)) saturate(1.6);
+}
+
+.lab-glass-thin {
+  background: var(--lab-glass-bg-strong);
+  border: 1px solid var(--lab-glass-edge);
+  box-shadow: var(--lab-shadow-glass), var(--lab-shadow-s);
+  backdrop-filter: blur(var(--lab-blur-s)) saturate(1.4);
+}
+
+.lab-solid {
+  background: var(--lab-bg-surface);
+  border: 1px solid var(--lab-border-subtle);
+}
+
+/* Штриховка — язык пустоты: незаполненный слот, пустой референс, сегмент без текста. */
+.lab-hatch {
+  background-color: var(--lab-fill-1);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0,
+    transparent 5px,
+    var(--lab-fill-2) 5px,
+    var(--lab-fill-2) 6px
+  );
+  border: 1px solid var(--lab-border-subtle);
+}
+
+/* Solid-вариация вместо стекла: нет backdrop-filter или пользователь просит меньше прозрачности. */
+@supports not (backdrop-filter: blur(1px)) {
+  .lab-glass,
+  .lab-glass-thin {
+    background: var(--lab-bg-surface);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .lab-glass,
+  .lab-glass-thin {
+    background: var(--lab-bg-surface);
+    backdrop-filter: none;
+  }
+}

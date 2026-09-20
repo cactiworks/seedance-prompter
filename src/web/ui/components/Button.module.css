@@ -1,0 +1,122 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-4);
+  border: 0;
+  border-radius: var(--lab-radius-pill);
+  font-weight: var(--lab-weight-regular);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--lab-duration-fast) var(--lab-ease-standard),
+    color var(--lab-duration-fast) var(--lab-ease-standard),
+    transform var(--lab-duration-fast) var(--lab-ease-standard),
+    opacity var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* размеры */
+.m {
+  height: 2.5rem;
+  padding: 0 var(--lab-space-8);
+  font-size: var(--lab-type-body-size);
+  letter-spacing: var(--lab-type-body-tracking);
+}
+
+.s {
+  height: 2rem;
+  padding: 0 var(--lab-space-6);
+  font-size: var(--lab-type-label-size);
+  letter-spacing: var(--lab-type-label-tracking);
+}
+
+.iconOnly.m {
+  width: 2.5rem;
+  padding: 0;
+}
+
+.iconOnly.s {
+  width: 2rem;
+  padding: 0;
+}
+
+/* варианты */
+.primary {
+  background: var(--lab-accent);
+  color: var(--lab-text-on-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lab-accent) 88%, var(--lab-color-ink));
+}
+
+.dark {
+  background: var(--lab-bg-inverse);
+  color: var(--lab-text-inverse);
+}
+
+.dark:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lab-bg-inverse) 84%, var(--lab-color-gray));
+}
+
+.secondary {
+  background: var(--lab-fill-2);
+  color: var(--lab-text-primary);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--lab-fill-4);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--lab-text-secondary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--lab-fill-1);
+  color: var(--lab-text-primary);
+}
+
+.soft {
+  background: var(--lab-accent-soft);
+  color: var(--lab-accent);
+}
+
+.soft:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lab-accent) 18%, transparent);
+}
+
+.danger {
+  background: var(--lab-danger-soft);
+  color: var(--lab-danger);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lab-danger) 18%, transparent);
+}
+
+.spinner {
+  width: 1em;
+  height: 1em;
+  border-radius: var(--lab-radius-pill);
+  border: 1.5px solid currentcolor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -8,6 +8,9 @@ export default {
   rules: {
     'selector-class-pattern': null,
     'custom-property-pattern': null,
+    // Порядок состояний (hover → active → disabled) читается лучше, чем сортировка по специфичности.
+    'no-descending-specificity': null,
+    'property-no-vendor-prefix': [true, { ignoreProperties: ['text-size-adjust', 'font-smoothing'] }],
     'declaration-property-value-disallowed-list': [
       {
         '/^(color|background|background-color|border|border-color|outline|outline-color|fill|stroke|caret-color|box-shadow|text-shadow)$/':
