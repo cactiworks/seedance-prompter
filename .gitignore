@@ -8,3 +8,4 @@ data/
 coverage/
 # сырой ответ Figma REST может быть большим; кэш локальный
 design/lab-ui/raw/
+.gstack/

@@ -1,0 +1,451 @@
+{
+ "generator": "Framer 874d64d",
+ "docH": 15045,
+ "rootVars": {
+  "--token-f8e2092b-40ff-4873-ae89-4d582ef7ac0f": "#007aff",
+  "--token-84d5b3c4-5354-4c23-a141-70c765dc002c": "#007affb8",
+  "--token-e52676b9-1e60-42fe-86e7-42e6fe3a4671": "#007aff85",
+  "--token-24b80644-9bba-4bf9-be52-48a50c42019e": "#007aff52",
+  "--token-621f458e-f6d9-41eb-bdb4-b11dc395ef2c": "#ff362e",
+  "--token-2c966980-eb14-4212-8529-63b800a16ab3": "#ff362eb8",
+  "--token-458166e9-9b3c-4d40-8b85-60c0732820cf": "#ff362e85",
+  "--token-b87fc1e4-adf0-44d9-8a1f-abb70445a499": "#ff362e52",
+  "--token-76cd01f0-67b6-4398-8085-bf2191da8141": "#ffa300",
+  "--token-82c1c076-1a04-4a46-93c6-f95dc081f449": "#ffa300b8",
+  "--token-9c25fabd-583b-4269-aa29-252b0ce988ed": "#ffa30085",
+  "--token-6ff6352b-0866-49dd-a5e9-c84972f7fb67": "#ffa30052",
+  "--token-633295cc-1293-4857-8f4c-8c5515be3dec": "#1acf57",
+  "--token-e1e19638-5268-486c-a22f-5e96132d151f": "#1acf57b8",
+  "--token-e1cd64c4-c8c5-4e5e-a1c7-5a219f7f5ff5": "#1acf5785",
+  "--token-be17da5a-bac1-43d5-9602-9f50cb4a45c1": "#1acf5752",
+  "--token-5fcfceb0-3103-4cde-a17c-c7aba45b6adf": "#3d87ff",
+  "--token-c4fa77ea-f7b0-443e-91e5-b69cc13a0cab": "#3d87ffb8",
+  "--token-9d24bb6c-2483-468f-bf24-f09929c4f9a2": "#3d87ff85",
+  "--token-505dcf6c-f3a7-4dd1-a0d4-d82493062c84": "#3d87ff52",
+  "--token-03a9cbe9-228e-44ed-b014-a7d6e3ebc289": "#3d3d4252",
+  "--token-9d89e37b-1a51-4756-9e5d-66ab692e170b": "#0f0f12",
+  "--token-54f7c079-7101-4087-a6ca-b030b798094b": "#3d3d42b8",
+  "--token-a9b0e35c-900c-43d0-9e1b-ad328d27f2da": "#3d3d4285",
+  "--token-5dd2ebce-aee5-41e9-8d5c-2c40472b23a1": "#0f0f12",
+  "--token-73ec7597-de79-402f-bf8c-3d38a8c5c34d": "#78788029",
+  "--token-fb5e3ebf-7f88-4daf-82c5-43a569c5ea16": "#78788014",
+  "--token-924290ce-46a9-4681-b576-852e48031156": "#fff",
+  "--token-a461e1d8-8744-40ed-9408-593c65a5fe50": "#007aff",
+  "--token-2a8bd0f2-5916-4af6-a544-d6ed9de0899f": "#007aff33",
+  "--token-2ca9c537-064b-4621-a469-85836fb22203": "#ff362e",
+  "--token-0287138c-c7f1-4684-8186-227f027eddf9": "#ff362e33",
+  "--token-1ae14255-f1ff-4daa-9171-7908feea26db": "#ff362e1f",
+  "--token-97c8c14f-4297-44ae-a0f1-781b777cf2aa": "#ffa300",
+  "--token-1719e6de-633d-4848-a90c-8414b48dbdb9": "#ffa30033",
+  "--token-13fd67a5-b93d-4685-9af1-e159ac6b4131": "#ffa3001f",
+  "--token-29197fcb-6735-43b1-ac07-c8e805df8e6e": "#1acf57",
+  "--token-934bff5e-873d-4758-9afd-752d3e5cd76f": "#1acf5733",
+  "--token-fca01dcb-94d3-4c21-8555-b8a803122aca": "#1acf571f",
+  "--token-b5d284cc-73b1-4bd0-b9d8-d429e7071729": "#3d87ff",
+  "--token-dad00111-d06d-4f06-a7c1-7bc2a36186f2": "#3d87ff33",
+  "--token-79c0e8c0-a3f9-493b-9052-7dcf6d228d27": "#3d87ff1f",
+  "--token-3cdfc8be-32dd-4888-978c-fe84600cd167": "#78788033",
+  "--token-7d9cb283-a173-4033-bda7-0ee4279bf291": "#78788029",
+  "--token-dda9476b-3134-4bab-b74a-645caea6f1d0": "#7878801f",
+  "--token-6a83c3cf-ad26-4dad-acf1-cf2271d8c231": "#78788014",
+  "--token-2f56dfbe-b2f3-4461-b7fc-8cb9b6514b81": "#007aff1f",
+  "--token-6adf463d-324a-47b2-9697-06de307b1001": "#007aff14",
+  "--token-8717a264-c315-4337-8cba-fa49a1359b88": "#007aff0a",
+  "--token-b28b3e6b-d34b-4be3-8d4c-537bb7052bb8": "#007aff05",
+  "--token-70ed57d3-7cbb-4a3b-9fff-1ebb5d3aa2d2": "#ff362e1f",
+  "--token-220da283-1d71-455a-8f33-f43044fe88e5": "#ff362e14",
+  "--token-082ef242-1fa9-4020-b764-611b2d1a8660": "#ff362e0a",
+  "--token-0192dfdc-d1ce-4fa4-8a32-da044222fd6d": "#ff362e05",
+  "--token-e38fc3b4-b79e-4b18-9f9a-93b6431fbe9f": "#ffa3001f",
+  "--token-f3e387c2-2857-4c43-aca4-2f46dab54bab": "#ffa30014",
+  "--token-8fddbeaf-923a-4be1-ada5-5c3350f72f5d": "#ffa3000a",
+  "--token-4af518c3-f034-4e46-96ce-1686e1564bf5": "#ffa30005",
+  "--token-653908d1-fde8-4819-82f2-06d47ae01ab3": "#1acf571f",
+  "--token-4e27cd83-ba55-45b9-83cb-9686cb6181ac": "#1acf5714",
+  "--token-84c1946a-dc4e-4b90-bdea-6088ab08c9e7": "#1acf570a",
+  "--token-3435984c-09ab-44b1-8a8f-b10edbe3b78c": "#1acf5705",
+  "--token-0d52c77d-adbd-4020-a850-1d9dd2781b08": "#3d87ff1f",
+  "--token-408f3be7-babd-44e5-92a5-78a26af7a9d9": "#3d87ff14",
+  "--token-51534881-e748-4dbc-8bab-f445a265b139": "#3d87ff0a",
+  "--token-dda2c46d-3ebe-451f-a02c-567b4467ffa8": "#3d87ff05",
+  "--token-11d94d83-eefe-417e-87ce-31ab0d23fc39": "#fff",
+  "--token-1d91cfb6-e15e-4eb3-8f0e-0d67806defec": "#f7f7fa",
+  "--token-0a4146ee-49fd-4781-a0b5-0e5ddd876c3f": "#fff",
+  "--token-9f0f917c-af6a-43ca-84bb-94673972d3ae": "#0f0f12",
+  "--token-0540b197-8ab2-4a3a-b372-84bad03f083c": "#f7f7fa",
+  "--token-2102f92a-e7ba-492a-8d21-f6ce49680415": "#fff",
+  "--token-126fb10c-00f7-42be-b537-f051c07f2454": "#f7f7fa",
+  "--token-3089dafc-9731-47d2-b0c6-57967e0a0216": "#fffc",
+  "--token-19fabca0-1f22-449d-bebc-ed74dbc01087": "#ffffff7a",
+  "--token-2cb270ac-18a7-490b-9ecc-e4b1167c40e8": "#fff3",
+  "--token-43ca03eb-d2fc-4146-ab51-577a32591325": "#ffffff52",
+  "--token-0e27e5cf-8c0c-4ed0-a515-ad843f379ee1": "#ffffff7a",
+  "--token-83d6c745-5a9a-40de-970b-788fb26abee2": "#ffffffa3",
+  "--token-8d81d057-a625-4581-a64c-615a9ec33faf": "#ffffffe6"
+ },
+ "font": [
+  [
+   "Geist Variable",
+   508
+  ],
+  [
+   "Geist",
+   130
+  ],
+  [
+   "Geist Mono",
+   32
+  ],
+  [
+   "sans-serif",
+   16
+  ],
+  [
+   "Inter",
+   1
+  ]
+ ],
+ "size": [
+  [
+   "16px",
+   477
+  ],
+  [
+   "20px",
+   85
+  ],
+  [
+   "14px",
+   51
+  ],
+  [
+   "12px",
+   47
+  ],
+  [
+   "48px",
+   8
+  ],
+  [
+   "32px",
+   6
+  ],
+  [
+   "24px",
+   5
+  ],
+  [
+   "14.08px",
+   5
+  ],
+  [
+   "112px",
+   1
+  ],
+  [
+   "22px",
+   1
+  ],
+  [
+   "15px",
+   1
+  ]
+ ],
+ "weight": [
+  [
+   "400",
+   608
+  ],
+  [
+   "500",
+   77
+  ],
+  [
+   "600",
+   1
+  ],
+  [
+   "700",
+   1
+  ]
+ ],
+ "color": [
+  [
+   "color(display-p3 0.0588 0.0588 0.0660223)",
+   411
+  ],
+  [
+   "color(display-p3 0.2353 0.2353 0.260383 / 0.72)",
+   112
+  ],
+  [
+   "rgba(176, 176, 185, 0.72)",
+   52
+  ],
+  [
+   "rgb(16, 16, 18)",
+   30
+  ],
+  [
+   "color(display-p3 1 0.5 0)",
+   17
+  ],
+  [
+   "rgb(0, 0, 0)",
+   16
+  ],
+  [
+   "color(display-p3 1 1 1)",
+   13
+  ],
+  [
+   "rgba(60, 60, 67, 0.32)",
+   12
+  ],
+  [
+   "rgba(60, 60, 67, 0.72)",
+   7
+  ],
+  [
+   "color(display-p3 0.2353 0.2353 0.260383 / 0.52)",
+   6
+  ],
+  [
+   "color(display-p3 0.204572 0.47095 1)",
+   3
+  ],
+  [
+   "rgb(255, 255, 255)",
+   2
+  ]
+ ],
+ "bg": [
+  [
+   "color(display-p3 1 1 1)",
+   12
+  ],
+  [
+   "color(display-p3 0.204572 0.47095 1)",
+   11
+  ],
+  [
+   "rgb(255, 255, 255)",
+   8
+  ],
+  [
+   "rgb(16, 16, 18)",
+   8
+  ],
+  [
+   "color(display-p3 0.969294 0.972371 0.979631)",
+   8
+  ],
+  [
+   "color(display-p3 1 1 1 / 0.85)",
+   4
+  ],
+  [
+   "color(display-p3 0.0588 0.0588 0.0660223)",
+   3
+  ],
+  [
+   "color(display-p3 0.4706 0.4706 0.499291 / 0)",
+   3
+  ],
+  [
+   "color(display-p3 0.4706 0.4706 0.499291 / 0.16)",
+   3
+  ],
+  [
+   "rgb(247, 248, 250)",
+   3
+  ],
+  [
+   "color(display-p3 0.4706 0.4706 0.499291 / 0.08)",
+   2
+  ],
+  [
+   "color(display-p3 0.2353 0.2353 0.260383 / 0.72)",
+   2
+  ],
+  [
+   "color(display-p3 0.0627 0.0627 0.0699214)",
+   2
+  ],
+  [
+   "color(display-p3 1 1 1 / 0.92)",
+   1
+  ],
+  [
+   "rgba(255, 255, 255, 0)",
+   1
+  ],
+  [
+   "rgba(120, 120, 128, 0.08)",
+   1
+  ]
+ ],
+ "radius": [
+  [
+   "8px",
+   46
+  ],
+  [
+   "999px",
+   12
+  ],
+  [
+   "24px",
+   9
+  ],
+  [
+   "1px",
+   8
+  ],
+  [
+   "9999px",
+   6
+  ],
+  [
+   "16px",
+   5
+  ],
+  [
+   "32px",
+   4
+  ],
+  [
+   "4px",
+   4
+  ],
+  [
+   "12px",
+   2
+  ],
+  [
+   "99px",
+   1
+  ],
+  [
+   "50%",
+   1
+  ]
+ ],
+ "shadow": [
+  [
+   "rgba(16, 16, 18, 0.12) 0px -1px 1px 0px inset",
+   3
+  ],
+  [
+   "rgba(109, 114, 131, 0) 0px 176px 49px 0px, rgba(109, 114, 131, 0) 0px 113px 45px 0px, rgba(109, 114, 131, 0.02) 0px 63px 38px 0px, rgba(109, 114, 131, 0.03) 0px 28px 28px 0px, rgba(109, 114, 131, 0.03) 0px 7px 16px 0px",
+   1
+  ],
+  [
+   "rgba(0, 0, 0, 0.06) 0px 1px 2px 0px, rgba(0, 0, 0, 0.08) 0px 2px 4px 0px",
+   1
+  ],
+  [
+   "rgba(59, 59, 71, 0.19) 0px 0.722625px 0.722625px -1.33333px, rgba(59, 59, 71, 0.17) 0px 2.74624px 2.74624px -2.66667px, rgba(59, 59, 71, 0.05) 0px 12px 12px -4px",
+   1
+  ]
+ ],
+ "blur": [
+  [
+   "blur(48px)",
+   2
+  ],
+  [
+   "blur(128px)",
+   1
+  ],
+  [
+   "blur(12px)",
+   1
+  ]
+ ],
+ "letterSpacing": [
+  [
+   "-0.16px",
+   424
+  ],
+  [
+   "-0.4px",
+   85
+  ],
+  [
+   "-0.25px",
+   52
+  ],
+  [
+   "-0.14px",
+   49
+  ],
+  [
+   "-0.12px",
+   32
+  ],
+  [
+   "normal",
+   24
+  ],
+  [
+   "-1.92px",
+   8
+  ],
+  [
+   "-0.96px",
+   6
+  ]
+ ],
+ "lineHeight": [
+  [
+   "24px @16px",
+   477
+  ],
+  [
+   "20px @20px",
+   85
+  ],
+  [
+   "14px @14px",
+   49
+  ],
+  [
+   "18px @12px",
+   32
+  ],
+  [
+   "normal @12px",
+   15
+  ],
+  [
+   "48px @48px",
+   8
+  ],
+  [
+   "32px @32px",
+   6
+  ],
+  [
+   "11.968px @14.08px",
+   5
+  ],
+  [
+   "24px @24px",
+   4
+  ],
+  [
+   "12px @14px",
+   2
+  ],
+  [
+   "normal @24px",
+   1
+  ],
+  [
+   "96px @112px",
+   1
+  ]
+ ],
+ "bodyBg": "color(display-p3 1 1 1)"
+}
