@@ -1,0 +1,1883 @@
+{
+ "file": "Lab UI: Components, Icons & Guides — Lab UI (v2.1) (Community)",
+ "lastModified": "2026-09-20T12:51:43Z",
+ "pages": [
+  {
+   "id": "6902:3826",
+   "name": "🧭 Info",
+   "frames": [
+    {
+     "id": "7669:11337",
+     "name": "About",
+     "type": "FRAME",
+     "w": 1000,
+     "h": 12118
+    }
+   ]
+  },
+  {
+   "id": "6902:3827",
+   "name": "--",
+   "frames": []
+  },
+  {
+   "id": "2001:5988",
+   "name": "🟢 Typography",
+   "frames": [
+    {
+     "id": "6069:1145",
+     "name": "Typography Guides",
+     "type": "FRAME",
+     "w": 2086,
+     "h": 3168
+    }
+   ]
+  },
+  {
+   "id": "2007:3",
+   "name": "🔵 Colors",
+   "frames": [
+    {
+     "id": "2059:1734",
+     "name": "Color Guides",
+     "type": "FRAME",
+     "w": 3200,
+     "h": 13040
+    }
+   ]
+  },
+  {
+   "id": "2007:9",
+   "name": "🟠 Dimentions",
+   "frames": [
+    {
+     "id": "7665:50981",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 484
+    },
+    {
+     "id": "6072:1400",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 484
+    },
+    {
+     "id": "7665:49765",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 484
+    },
+    {
+     "id": "6072:1418",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 484
+    },
+    {
+     "id": "7665:51389",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 484
+    },
+    {
+     "id": "6236:17149",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 472
+    },
+    {
+     "id": "7665:50921",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 704
+    },
+    {
+     "id": "7665:51218",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 572
+    },
+    {
+     "id": "6236:41036",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 580
+    },
+    {
+     "id": "7665:49779",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1200,
+     "h": 820
+    }
+   ]
+  },
+  {
+   "id": "2007:11",
+   "name": "🟡 Effects",
+   "frames": [
+    {
+     "id": "6072:1675",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 484
+    },
+    {
+     "id": "6072:1695",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 484
+    },
+    {
+     "id": "6072:1771",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 484
+    },
+    {
+     "id": "7094:3287",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 484
+    },
+    {
+     "id": "6236:41316",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 520
+    },
+    {
+     "id": "6236:41494",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 520
+    },
+    {
+     "id": "6236:41524",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 520
+    },
+    {
+     "id": "7094:3307",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1552,
+     "h": 520
+    },
+    {
+     "id": "6236:41584",
+     "name": "Pattern assets",
+     "type": "FRAME",
+     "w": 3321,
+     "h": 235
+    }
+   ]
+  },
+  {
+   "id": "2048:170",
+   "name": "⚪️ Layers",
+   "frames": [
+    {
+     "id": "6072:2098",
+     "name": "Frame",
+     "type": "FRAME",
+     "w": 1120,
+     "h": 2108
+    }
+   ]
+  },
+  {
+   "id": "4045:632",
+   "name": "🟣 Icons",
+   "frames": [
+    {
+     "id": "6431:3712",
+     "name": "Lab icons",
+     "type": "FRAME",
+     "w": 2496,
+     "h": 2548
+    },
+    {
+     "id": "6398:8435",
+     "name": "Grids",
+     "type": "FRAME",
+     "w": 2496,
+     "h": 216
+    },
+    {
+     "id": "8423:835",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 2496,
+     "h": 484
+    },
+    {
+     "id": "9064:17779",
+     "name": "re",
+     "type": "TEXT",
+     "w": 12,
+     "h": 15
+    },
+    {
+     "id": "9064:17780",
+     "name": "gr",
+     "type": "TEXT",
+     "w": 12,
+     "h": 15
+    }
+   ]
+  },
+  {
+   "id": "6468:159531",
+   "name": "🟤 Flags",
+   "frames": [
+    {
+     "id": "6468:159546",
+     "name": "Flags",
+     "type": "FRAME",
+     "w": 2496,
+     "h": 1428
+    }
+   ]
+  },
+  {
+   "id": "2007:12",
+   "name": "--",
+   "frames": []
+  },
+  {
+   "id": "6088:3946",
+   "name": "Accordion",
+   "frames": [
+    {
+     "id": "6088:3947",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 743,
+     "h": 464
+    },
+    {
+     "id": "7544:43363",
+     "name": "Accordion",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 640
+    },
+    {
+     "id": "7721:1855",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1948
+    }
+   ]
+  },
+  {
+   "id": "6109:6798",
+   "name": "Alert",
+   "frames": [
+    {
+     "id": "6109:6826",
+     "name": "Alert",
+     "type": "FRAME",
+     "w": 1428,
+     "h": 1288
+    },
+    {
+     "id": "7720:5522",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2116
+    }
+   ]
+  },
+  {
+   "id": "6107:9534",
+   "name": "Alert Dialog",
+   "frames": [
+    {
+     "id": "6107:9535",
+     "name": "Alert Dialog",
+     "type": "FRAME",
+     "w": 1560,
+     "h": 928
+    },
+    {
+     "id": "7719:62807",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2460
+    }
+   ]
+  },
+  {
+   "id": "6088:4990",
+   "name": "Avatar",
+   "frames": [
+    {
+     "id": "6088:5007",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 768,
+     "h": 336
+    },
+    {
+     "id": "7544:43398",
+     "name": "Avatar",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 640
+    },
+    {
+     "id": "7719:56343",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2076
+    }
+   ]
+  },
+  {
+   "id": "4122:2879",
+   "name": "Badge",
+   "frames": [
+    {
+     "id": "4116:6803",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 2766,
+     "h": 304
+    },
+    {
+     "id": "7544:43696",
+     "name": "Badge",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 640
+    },
+    {
+     "id": "7719:55557",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2076
+    }
+   ]
+  },
+  {
+   "id": "7533:990",
+   "name": "Bottom Sheet",
+   "frames": [
+    {
+     "id": "7533:991",
+     "name": "Bottom Sheet",
+     "type": "FRAME",
+     "w": 2391,
+     "h": 2393
+    },
+    {
+     "id": "7719:53965",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2312
+    },
+    {
+     "id": "8431:7225",
+     "name": "Bottom sheet",
+     "type": "INSTANCE",
+     "w": 375,
+     "h": 812
+    }
+   ]
+  },
+  {
+   "id": "6109:7275",
+   "name": "Breadcrump",
+   "frames": [
+    {
+     "id": "6109:7276",
+     "name": "Breadcrumb",
+     "type": "FRAME",
+     "w": 1108,
+     "h": 464
+    },
+    {
+     "id": "7719:3294",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1872
+    }
+   ]
+  },
+  {
+   "id": "4033:515",
+   "name": "Button",
+   "frames": [
+    {
+     "id": "6227:8036",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 4844,
+     "h": 2446
+    },
+    {
+     "id": "7543:18383",
+     "name": "Button",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 640
+    },
+    {
+     "id": "7543:19874",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2228
+    }
+   ]
+  },
+  {
+   "id": "6091:4097",
+   "name": "Calendar",
+   "frames": [
+    {
+     "id": "6095:6417",
+     "name": "Calendar",
+     "type": "FRAME",
+     "w": 1152,
+     "h": 2183
+    },
+    {
+     "id": "7543:14370",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2356
+    }
+   ]
+  },
+  {
+   "id": "6225:40340",
+   "name": "Card",
+   "frames": [
+    {
+     "id": "6225:41475",
+     "name": "Card",
+     "type": "FRAME",
+     "w": 2000,
+     "h": 1125
+    },
+    {
+     "id": "7710:5535",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2932
+    }
+   ]
+  },
+  {
+   "id": "7533:4843",
+   "name": "Charts",
+   "frames": [
+    {
+     "id": "7538:11048",
+     "name": "Assets",
+     "type": "GROUP",
+     "w": 4991,
+     "h": 4260
+    },
+    {
+     "id": "7533:4844",
+     "name": "Charts",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 4888
+    },
+    {
+     "id": "7538:13382",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2812
+    }
+   ]
+  },
+  {
+   "id": "4087:821",
+   "name": "Chats",
+   "frames": [
+    {
+     "id": "6223:39741",
+     "name": "Assets",
+     "type": "GROUP",
+     "w": 9299,
+     "h": 8753
+    },
+    {
+     "id": "6164:1386",
+     "name": "Chat bubble",
+     "type": "FRAME",
+     "w": 2216,
+     "h": 2682
+    },
+    {
+     "id": "7543:4181",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 3408
+    }
+   ]
+  },
+  {
+   "id": "6200:34628",
+   "name": "Check & Radio",
+   "frames": [
+    {
+     "id": "7543:20645",
+     "name": "Assets",
+     "type": "GROUP",
+     "w": 4000,
+     "h": 2447
+    },
+    {
+     "id": "7543:7607",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2576
+    },
+    {
+     "id": "7543:20646",
+     "name": "Check & Radio",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 1112
+    }
+   ]
+  },
+  {
+   "id": "6220:195",
+   "name": "Chips",
+   "frames": [
+    {
+     "id": "6220:196",
+     "name": "Chips",
+     "type": "FRAME",
+     "w": 916,
+     "h": 1338
+    },
+    {
+     "id": "7700:22387",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2036
+    }
+   ]
+  },
+  {
+   "id": "6386:40390",
+   "name": "Choicebox",
+   "frames": [
+    {
+     "id": "6386:40631",
+     "name": "Choicebox",
+     "type": "FRAME",
+     "w": 1446,
+     "h": 1242
+    },
+    {
+     "id": "7699:17016",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2148
+    }
+   ]
+  },
+  {
+   "id": "6387:6015",
+   "name": "Color Picker",
+   "frames": [
+    {
+     "id": "6387:44870",
+     "name": "Color Picker",
+     "type": "FRAME",
+     "w": 2400,
+     "h": 4700
+    },
+    {
+     "id": "7698:6500",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2384
+    }
+   ]
+  },
+  {
+   "id": "6110:13771",
+   "name": "Context menu",
+   "frames": [
+    {
+     "id": "6110:13831",
+     "name": "Context Menu",
+     "type": "FRAME",
+     "w": 1432,
+     "h": 1772
+    },
+    {
+     "id": "7677:57008",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2720
+    }
+   ]
+  },
+  {
+   "id": "6178:4340",
+   "name": "Data Table",
+   "frames": [
+    {
+     "id": "6178:4945",
+     "name": "Data Table",
+     "type": "FRAME",
+     "w": 2400,
+     "h": 860
+    },
+    {
+     "id": "7677:42729",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 2136,
+     "h": 1672
+    },
+    {
+     "id": "7677:44087",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2260
+    }
+   ]
+  },
+  {
+   "id": "7530:6817",
+   "name": "Drag Button",
+   "frames": [
+    {
+     "id": "7530:6818",
+     "name": "Drag Button",
+     "type": "FRAME",
+     "w": 1432,
+     "h": 1432
+    },
+    {
+     "id": "7676:2264",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2408
+    }
+   ]
+  },
+  {
+   "id": "6178:9316",
+   "name": "Drag'n'drop",
+   "frames": [
+    {
+     "id": "6178:9321",
+     "name": "Drag'n'drop",
+     "type": "FRAME",
+     "w": 1432,
+     "h": 860
+    },
+    {
+     "id": "6202:5929",
+     "name": "Drag'n'drop input",
+     "type": "FRAME",
+     "w": 1432,
+     "h": 860
+    },
+    {
+     "id": "7544:4581",
+     "name": "Assets",
+     "type": "GROUP",
+     "w": 1240,
+     "h": 3542
+    },
+    {
+     "id": "7675:51143",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1960
+    }
+   ]
+  },
+  {
+   "id": "6212:438",
+   "name": "Dropdown",
+   "frames": [
+    {
+     "id": "6212:439",
+     "name": "Dropdown Menu",
+     "type": "FRAME",
+     "w": 916,
+     "h": 1325
+    },
+    {
+     "id": "7675:50192",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1784
+    }
+   ]
+  },
+  {
+   "id": "6107:3621",
+   "name": "Dropdown Menu",
+   "frames": [
+    {
+     "id": "6107:9095",
+     "name": "Dropdown Menu",
+     "type": "FRAME",
+     "w": 1044,
+     "h": 1600
+    },
+    {
+     "id": "7673:13471",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2336
+    }
+   ]
+  },
+  {
+   "id": "7531:1665",
+   "name": "Floating Dock",
+   "frames": [
+    {
+     "id": "7531:1666",
+     "name": "Floating dock",
+     "type": "FRAME",
+     "w": 1600,
+     "h": 2568
+    },
+    {
+     "id": "7671:9048",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2028
+    }
+   ]
+  },
+  {
+   "id": "6012:3290",
+   "name": "Input & Textarea",
+   "frames": [
+    {
+     "id": "6107:10284",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 4312,
+     "h": 2881
+    },
+    {
+     "id": "7691:1203",
+     "name": "Input",
+     "type": "INSTANCE",
+     "w": 291,
+     "h": 56
+    },
+    {
+     "id": "7544:7074",
+     "name": "Input",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 640
+    },
+    {
+     "id": "7671:2382",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 3020
+    }
+   ]
+  },
+  {
+   "id": "6202:7285",
+   "name": "Input Pin",
+   "frames": [
+    {
+     "id": "6202:7349",
+     "name": "Input Pin",
+     "type": "FRAME",
+     "w": 1432,
+     "h": 768
+    },
+    {
+     "id": "7669:14419",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2040
+    }
+   ]
+  },
+  {
+   "id": "6107:7667",
+   "name": "Kbd",
+   "frames": [
+    {
+     "id": "6107:8476",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 400,
+     "h": 300
+    },
+    {
+     "id": "7544:41588",
+     "name": "Kbd",
+     "type": "FRAME",
+     "w": 600,
+     "h": 408
+    },
+    {
+     "id": "7664:48930",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1816
+    }
+   ]
+  },
+  {
+   "id": "6009:3978",
+   "name": "Loader",
+   "frames": [
+    {
+     "id": "6064:5898",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 656,
+     "h": 656
+    },
+    {
+     "id": "7544:41645",
+     "name": "Loader",
+     "type": "FRAME",
+     "w": 600,
+     "h": 408
+    },
+    {
+     "id": "7631:4372",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2464
+    }
+   ]
+  },
+  {
+   "id": "6110:21541",
+   "name": "Menubar",
+   "frames": [
+    {
+     "id": "6110:22170",
+     "name": "Menubar",
+     "type": "FRAME",
+     "w": 1160,
+     "h": 1250
+    },
+    {
+     "id": "7623:11687",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2184
+    }
+   ]
+  },
+  {
+   "id": "6214:653",
+   "name": "Multiselect",
+   "frames": [
+    {
+     "id": "6214:1088",
+     "name": "Multiselect",
+     "type": "FRAME",
+     "w": 1000,
+     "h": 1522
+    },
+    {
+     "id": "7561:44318",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2360
+    }
+   ]
+  },
+  {
+   "id": "6220:13397",
+   "name": "Pagination",
+   "frames": [
+    {
+     "id": "6220:14510",
+     "name": "Compact Pagination",
+     "type": "FRAME",
+     "w": 1484,
+     "h": 1103
+    },
+    {
+     "id": "6220:16519",
+     "name": "Pagination",
+     "type": "FRAME",
+     "w": 1484,
+     "h": 1472
+    },
+    {
+     "id": "7559:10516",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2548
+    }
+   ]
+  },
+  {
+   "id": "6387:5560",
+   "name": "Progress",
+   "frames": [
+    {
+     "id": "6467:113847",
+     "name": "Circular progress",
+     "type": "FRAME",
+     "w": 916,
+     "h": 902
+    },
+    {
+     "id": "6387:5561",
+     "name": "Linear progress",
+     "type": "FRAME",
+     "w": 916,
+     "h": 762
+    },
+    {
+     "id": "7556:9355",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2044
+    }
+   ]
+  },
+  {
+   "id": "6021:329",
+   "name": "Segmented Control",
+   "frames": [
+    {
+     "id": "6064:5897",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 786,
+     "h": 2833
+    },
+    {
+     "id": "7544:42749",
+     "name": "Segmented Control",
+     "type": "FRAME",
+     "w": 916,
+     "h": 526
+    },
+    {
+     "id": "7555:13935",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2356
+    }
+   ]
+  },
+  {
+   "id": "6467:113820",
+   "name": "Slider",
+   "frames": [
+    {
+     "id": "6467:117301",
+     "name": "Linear slider",
+     "type": "FRAME",
+     "w": 916,
+     "h": 762
+    },
+    {
+     "id": "6467:117323",
+     "name": "Circular slider",
+     "type": "FRAME",
+     "w": 916,
+     "h": 742
+    },
+    {
+     "id": "7530:6454",
+     "name": "Large slider",
+     "type": "FRAME",
+     "w": 916,
+     "h": 1022
+    },
+    {
+     "id": "7554:13051",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2120
+    }
+   ]
+  },
+  {
+   "id": "6109:5096",
+   "name": "Snackbar",
+   "frames": [
+    {
+     "id": "6109:5547",
+     "name": "Snackbar",
+     "type": "FRAME",
+     "w": 1231,
+     "h": 564
+    },
+    {
+     "id": "7556:3646",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 1856
+    }
+   ]
+  },
+  {
+   "id": "4083:407",
+   "name": "Switch",
+   "frames": [
+    {
+     "id": "4126:2416",
+     "name": "Assets",
+     "type": "FRAME",
+     "w": 3067,
+     "h": 1384
+    },
+    {
+     "id": "7550:11358",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2108
+    },
+    {
+     "id": "7544:42855",
+     "name": "Switch",
+     "type": "FRAME",
+     "w": 916,
+     "h": 526
+    }
+   ]
+  },
+  {
+   "id": "7209:3062",
+   "name": "Tab",
+   "frames": [
+    {
+     "id": "7544:43011",
+     "name": "Assets",
+     "type": "GROUP",
+     "w": 2426,
+     "h": 9695
+    },
+    {
+     "id": "7544:42932",
+     "name": "Tab",
+     "type": "FRAME",
+     "w": 916,
+     "h": 884
+    },
+    {
+     "id": "7550:10881",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2480
+    }
+   ]
+  },
+  {
+   "id": "6315:6720",
+   "name": "Timeline",
+   "frames": [
+    {
+     "id": "6315:7113",
+     "name": "Timeline Vertical",
+     "type": "FRAME",
+     "w": 916,
+     "h": 1372
+    },
+    {
+     "id": "6315:8029",
+     "name": "Timeline Horizontal",
+     "type": "FRAME",
+     "w": 916,
+     "h": 988
+    },
+    {
+     "id": "7550:9217",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2280
+    }
+   ]
+  },
+  {
+   "id": "6203:2889",
+   "name": "Tooltip",
+   "frames": [
+    {
+     "id": "6203:2958",
+     "name": "Tooltip",
+     "type": "FRAME",
+     "w": 894,
+     "h": 1341
+    },
+    {
+     "id": "7550:1428",
+     "name": "About",
+     "type": "FRAME",
+     "w": 600,
+     "h": 2160
+    }
+   ]
+  },
+  {
+   "id": "2007:8",
+   "name": "--",
+   "frames": []
+  },
+  {
+   "id": "2007:7",
+   "name": "Thumbnail",
+   "frames": [
+    {
+     "id": "6103:38",
+     "name": "Thumbnail",
+     "type": "FRAME",
+     "w": 2322,
+     "h": 1306
+    },
+    {
+     "id": "6468:126375",
+     "name": "  ",
+     "type": "FRAME",
+     "w": 1400,
+     "h": 1306
+    }
+   ]
+  }
+ ],
+ "componentSets": [
+  {
+   "id": "6088:4234",
+   "name": "Accordion",
+   "variants": 2
+  },
+  {
+   "id": "6169:3914",
+   "name": "Additional",
+   "variants": 21
+  },
+  {
+   "id": "7720:6056",
+   "name": "Alert",
+   "variants": 6
+  },
+  {
+   "id": "6107:10719",
+   "name": "Avatar",
+   "variants": 10
+  },
+  {
+   "id": "4116:6815",
+   "name": "Badge",
+   "variants": 32
+  },
+  {
+   "id": "7538:855",
+   "name": "Bar chart",
+   "variants": 4
+  },
+  {
+   "id": "8864:117831",
+   "name": "Base",
+   "variants": 3
+  },
+  {
+   "id": "7533:4698",
+   "name": "Bottom sheet",
+   "variants": 5
+  },
+  {
+   "id": "6227:8248",
+   "name": "Button",
+   "variants": 432
+  },
+  {
+   "id": "6094:1293",
+   "name": "Calendar/Mini",
+   "variants": 2
+  },
+  {
+   "id": "7538:9405",
+   "name": "Candlestick chart",
+   "variants": 2
+  },
+  {
+   "id": "7538:996",
+   "name": "Candlesticks",
+   "variants": 4
+  },
+  {
+   "id": "7677:39756",
+   "name": "Cell",
+   "variants": 6
+  },
+  {
+   "id": "7676:39445",
+   "name": "Cell / Content",
+   "variants": 3
+  },
+  {
+   "id": "6045:8120",
+   "name": "Center-content",
+   "variants": 28
+  },
+  {
+   "id": "6156:2768",
+   "name": "Chat-bubble",
+   "variants": 12
+  },
+  {
+   "id": "6156:4034",
+   "name": "Chat-icon-button",
+   "variants": 6
+  },
+  {
+   "id": "6200:34630",
+   "name": "Check",
+   "variants": 96
+  },
+  {
+   "id": "6092:641",
+   "name": "Chevron-button",
+   "variants": 16
+  },
+  {
+   "id": "6220:4785",
+   "name": "Chip",
+   "variants": 56
+  },
+  {
+   "id": "6386:41389",
+   "name": "Choicebox",
+   "variants": 20
+  },
+  {
+   "id": "6467:113853",
+   "name": "Circular progress",
+   "variants": 10
+  },
+  {
+   "id": "6467:117329",
+   "name": "Circular slider",
+   "variants": 5
+  },
+  {
+   "id": "7623:18354",
+   "name": "Color indicator",
+   "variants": 18
+  },
+  {
+   "id": "6387:45035",
+   "name": "Color Picker",
+   "variants": 15
+  },
+  {
+   "id": "7534:1382",
+   "name": "Column",
+   "variants": 4
+  },
+  {
+   "id": "7538:9219",
+   "name": "Column chart",
+   "variants": 2
+  },
+  {
+   "id": "6220:15608",
+   "name": "Compact Pagination",
+   "variants": 76
+  },
+  {
+   "id": "6154:200",
+   "name": "Content/Quantity",
+   "variants": 4
+  },
+  {
+   "id": "6110:13837",
+   "name": "Context Menu Item",
+   "variants": 14
+  },
+  {
+   "id": "7555:14411",
+   "name": "control",
+   "variants": 24
+  },
+  {
+   "id": "6156:2776",
+   "name": "Direction arrow",
+   "variants": 2
+  },
+  {
+   "id": "7532:39010",
+   "name": "Dock",
+   "variants": 10
+  },
+  {
+   "id": "7538:2246",
+   "name": "Donut & Pie chart",
+   "variants": 12
+  },
+  {
+   "id": "7530:7995",
+   "name": "Drag button",
+   "variants": 5
+  },
+  {
+   "id": "6178:10656",
+   "name": "Drag'n'drop",
+   "variants": 5
+  },
+  {
+   "id": "6202:7210",
+   "name": "Drag'n'drop input",
+   "variants": 15
+  },
+  {
+   "id": "6212:445",
+   "name": "Dropdown",
+   "variants": 12
+  },
+  {
+   "id": "6107:7423",
+   "name": "Dropdown Menu Item",
+   "variants": 7
+  },
+  {
+   "id": "8864:118012",
+   "name": "Elevated",
+   "variants": 3
+  },
+  {
+   "id": "7534:1337",
+   "name": "Grid pattern",
+   "variants": 3
+  },
+  {
+   "id": "6091:5575",
+   "name": "Gridcell",
+   "variants": 14
+  },
+  {
+   "id": "6034:3458",
+   "name": "Input",
+   "variants": 39
+  },
+  {
+   "id": "6203:2866",
+   "name": "Input Pin",
+   "variants": 2
+  },
+  {
+   "id": "6202:7355",
+   "name": "Input Pin / Cell",
+   "variants": 6
+  },
+  {
+   "id": "7532:34552",
+   "name": "Item",
+   "variants": 3
+  },
+  {
+   "id": "6107:8553",
+   "name": "Kbd",
+   "variants": 8
+  },
+  {
+   "id": "7530:6558",
+   "name": "Large slider",
+   "variants": 5
+  },
+  {
+   "id": "6045:8082",
+   "name": "Left-content",
+   "variants": 42
+  },
+  {
+   "id": "7623:19005",
+   "name": "Legend item",
+   "variants": 2
+  },
+  {
+   "id": "7533:5718",
+   "name": "Line",
+   "variants": 2
+  },
+  {
+   "id": "7538:1767",
+   "name": "Line chart",
+   "variants": 4
+  },
+  {
+   "id": "6387:5567",
+   "name": "Linear progress",
+   "variants": 5
+  },
+  {
+   "id": "6467:117307",
+   "name": "Linear slider",
+   "variants": 5
+  },
+  {
+   "id": "6048:1615",
+   "name": "Loader",
+   "variants": 4
+  },
+  {
+   "id": "7622:5346",
+   "name": "Menu Item",
+   "variants": 4
+  },
+  {
+   "id": "6214:4162",
+   "name": "Multiselect",
+   "variants": 14
+  },
+  {
+   "id": "8864:117818",
+   "name": "Muted",
+   "variants": 3
+  },
+  {
+   "id": "7534:519",
+   "name": "Oval",
+   "variants": 2
+  },
+  {
+   "id": "6222:851",
+   "name": "Page-button",
+   "variants": 4
+  },
+  {
+   "id": "6154:184",
+   "name": "Placeholder",
+   "variants": 8
+  },
+  {
+   "id": "6154:6171",
+   "name": "Play-button",
+   "variants": 3
+  },
+  {
+   "id": "6154:10984",
+   "name": "Progress-indicator-compact",
+   "variants": 10
+  },
+  {
+   "id": "7543:2445",
+   "name": "Radar",
+   "variants": 2
+  },
+  {
+   "id": "6201:1384",
+   "name": "Radio",
+   "variants": 64
+  },
+  {
+   "id": "6045:8162",
+   "name": "Right-content",
+   "variants": 42
+  },
+  {
+   "id": "7543:2262",
+   "name": "Ring chart",
+   "variants": 2
+  },
+  {
+   "id": "7538:10608",
+   "name": "Scatter chart",
+   "variants": 2
+  },
+  {
+   "id": "6021:342",
+   "name": "Segmented Control",
+   "variants": 42
+  },
+  {
+   "id": "6109:6708",
+   "name": "Snackbar timer",
+   "variants": 5
+  },
+  {
+   "id": "8864:117619",
+   "name": "Soft",
+   "variants": 3
+  },
+  {
+   "id": "6156:2873",
+   "name": "Status",
+   "variants": 6
+  },
+  {
+   "id": "6091:5057",
+   "name": "Status Dots",
+   "variants": 16
+  },
+  {
+   "id": "7719:56717",
+   "name": "Status indicator",
+   "variants": 4
+  },
+  {
+   "id": "8864:117606",
+   "name": "Subtle",
+   "variants": 3
+  },
+  {
+   "id": "4111:884",
+   "name": "Switch",
+   "variants": 108
+  },
+  {
+   "id": "7209:3064",
+   "name": "Tab / Tinted",
+   "variants": 28
+  },
+  {
+   "id": "7529:1532",
+   "name": "Tab / Underlined",
+   "variants": 72
+  },
+  {
+   "id": "7558:2223",
+   "name": "tab-control",
+   "variants": 40
+  },
+  {
+   "id": "7209:1646",
+   "name": "Tail",
+   "variants": 6
+  },
+  {
+   "id": "6222:3750",
+   "name": "Textarea",
+   "variants": 13
+  },
+  {
+   "id": "6315:8259",
+   "name": "Timeline Column",
+   "variants": 4
+  },
+  {
+   "id": "6315:7564",
+   "name": "Timeline Row",
+   "variants": 4
+  },
+  {
+   "id": "6203:3031",
+   "name": "Tooltip Direction",
+   "variants": 24
+  },
+  {
+   "id": "6154:6195",
+   "name": "Video-indicator",
+   "variants": 4
+  }
+ ],
+ "looseComponents": 742,
+ "styles": [
+  {
+   "id": "4083:5531",
+   "name": "BG-blur/Base",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5530",
+   "name": "BG-blur/Muted",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5529",
+   "name": "BG-blur/Soft",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5532",
+   "name": "BG-blur/Strong",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4082:408",
+   "name": "Interactive/Default",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4082:410",
+   "name": "Interactive/Pressed/Glow",
+   "type": "EFFECT"
+  },
+  {
+   "id": "6009:2453",
+   "name": "Interactive/Pressed/Shadow",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5528",
+   "name": "Progressive-blur/Ghost",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5525",
+   "name": "Progressive-blur/Soft",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:5522",
+   "name": "Progressive-blur/Strong",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:4441",
+   "name": "Shadow/L",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:4440",
+   "name": "Shadow/M",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:4439",
+   "name": "Shadow/S",
+   "type": "EFFECT"
+  },
+  {
+   "id": "7101:54384",
+   "name": "Shadow/XL",
+   "type": "EFFECT"
+  },
+  {
+   "id": "4083:4438",
+   "name": "Shadow/XS",
+   "type": "EFFECT"
+  },
+  {
+   "id": "6009:2811",
+   "name": "Interactive/Accent/Default",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:2812",
+   "name": "Interactive/Accent/Hover",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:2813",
+   "name": "Interactive/Accent/Pressed",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:2808",
+   "name": "Interactive/Danger/Default",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:2809",
+   "name": "Interactive/Danger/Hover",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:2810",
+   "name": "Interactive/Danger/Pressed",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:3888",
+   "name": "Interactive/Neutral/Default",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:3889",
+   "name": "Interactive/Neutral/Hover",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:3890",
+   "name": "Interactive/Neutral/Pressed",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:39",
+   "name": "Materials/Dark-theme/Base",
+   "type": "FILL"
+  },
+  {
+   "id": "6225:47653",
+   "name": "Materials/Dark-theme/Elevated",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:41",
+   "name": "Materials/Dark-theme/Muted",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:43",
+   "name": "Materials/Dark-theme/Soft",
+   "type": "FILL"
+  },
+  {
+   "id": "6009:45",
+   "name": "Materials/Dark-theme/Subtle",
+   "type": "FILL"
+  },
+  {
+   "id": "6206:40692",
+   "name": "Materials/Light-theme/Base",
+   "type": "FILL"
+  },
+  {
+   "id": "6225:47458",
+   "name": "Materials/Light-theme/Elevated",
+   "type": "FILL"
+  },
+  {
+   "id": "6206:40693",
+   "name": "Materials/Light-theme/Muted",
+   "type": "FILL"
+  },
+  {
+   "id": "6206:40694",
+   "name": "Materials/Light-theme/Soft",
+   "type": "FILL"
+  },
+  {
+   "id": "6206:40695",
+   "name": "Materials/Light-theme/Subtle",
+   "type": "FILL"
+  },
+  {
+   "id": "6178:9032",
+   "name": "Caption/S",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12581",
+   "name": "Caption/XS",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12582",
+   "name": "Caption/XXS",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12591",
+   "name": "Display/5XL",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12573",
+   "name": "Display/6XL",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12579",
+   "name": "Headline/L-Common",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12593",
+   "name": "Headline/L-Emphasized",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12580",
+   "name": "Text/M-Common",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12592",
+   "name": "Text/M-Emphasized",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12598",
+   "name": "Text/M-Mono",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12577",
+   "name": "Title/2XL",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12576",
+   "name": "Title/3XL",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12575",
+   "name": "Title/4XL",
+   "type": "TEXT"
+  },
+  {
+   "id": "2008:12578",
+   "name": "Title/XL",
+   "type": "TEXT"
+  }
+ ]
+}

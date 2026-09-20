@@ -1,10 +1,10 @@
 .root {
   display: inline-flex;
   align-items: center;
-  gap: var(--lab-space-1);
-  padding: var(--lab-space-2);
-  border-radius: var(--lab-radius-pill);
-  background: var(--lab-fill-2);
+  gap: 0;
+  padding: var(--lab-space-1);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-fill-1);
 }
 
 .item {
@@ -13,7 +13,7 @@
   justify-content: center;
   gap: var(--lab-space-3);
   border: 0;
-  border-radius: var(--lab-radius-pill);
+  border-radius: var(--lab-radius-full);
   background: transparent;
   color: var(--lab-text-secondary);
   cursor: pointer;
@@ -24,13 +24,13 @@
 }
 
 .m .item {
-  height: 2rem;
+  height: 2.25rem;
   padding: 0 var(--lab-space-8);
   font-size: var(--lab-type-body-size);
 }
 
 .s .item {
-  height: 1.625rem;
+  height: 1.75rem;
   padding: 0 var(--lab-space-6);
   font-size: var(--lab-type-label-size);
 }
@@ -43,7 +43,7 @@
 .item[data-state="on"] {
   background: var(--lab-thumb);
   color: var(--lab-text-primary);
-  box-shadow: var(--lab-shadow-xs);
+  box-shadow: var(--lab-shadow-s);
 }
 
 .item:disabled {

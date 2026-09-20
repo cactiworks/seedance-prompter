@@ -4,8 +4,7 @@
   justify-content: center;
   gap: var(--lab-space-4);
   border: 0;
-  border-radius: var(--lab-radius-pill);
-  font-weight: var(--lab-weight-regular);
+  font-weight: var(--lab-weight-medium);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
@@ -25,48 +24,89 @@
   opacity: 0.4;
 }
 
-/* размеры */
-.m {
-  height: 2.5rem;
-  padding: 0 var(--lab-space-8);
+/* размеры — из набора Button файла Lab UI: small 36 / pill, medium 48 / r16, large 56 / r16 */
+.s {
+  height: 2.25rem;
+  padding: 0 var(--lab-space-6);
+  border-radius: var(--lab-radius-full);
   font-size: var(--lab-type-body-size);
   letter-spacing: var(--lab-type-body-tracking);
 }
 
-.s {
-  height: 2rem;
+.m {
+  height: 3rem;
+  padding: 0 var(--lab-space-8);
+  border-radius: var(--lab-radius-xl);
+  font-size: var(--lab-type-body-size);
+  letter-spacing: var(--lab-type-body-tracking);
+}
+
+/* производный размер для плотных панелей инструмента (в Lab UI его нет) */
+.xs {
+  height: 1.75rem;
   padding: 0 var(--lab-space-6);
+  border-radius: var(--lab-radius-full);
   font-size: var(--lab-type-label-size);
   letter-spacing: var(--lab-type-label-tracking);
 }
 
-.iconOnly.m {
-  width: 2.5rem;
-  padding: 0;
-}
-
 .iconOnly.s {
-  width: 2rem;
+  width: 2.25rem;
   padding: 0;
 }
 
-/* варианты */
+.iconOnly.m {
+  width: 3rem;
+  padding: 0;
+}
+
+.iconOnly.xs {
+  width: 1.75rem;
+  padding: 0;
+}
+
+/*
+ * Kind=fill: цвет + глянец (белый 20 % → 0 сверху вниз) + кромка Interactive/Default.
+ * Kind=tinted: тот же цвет на 12 %. Kind=border / ghost — без заливки.
+ */
+.primary,
+.dark,
+.dangerFill {
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--lab-static-white) 20%, transparent), transparent);
+  box-shadow: var(--lab-shadow-edge);
+}
+
+.primary:active:not(:disabled),
+.dark:active:not(:disabled),
+.dangerFill:active:not(:disabled) {
+  box-shadow: var(--lab-shadow-edge-pressed);
+}
+
 .primary {
-  background: var(--lab-accent);
+  background-color: var(--lab-accent);
   color: var(--lab-text-on-accent);
 }
 
 .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--lab-accent) 88%, var(--lab-color-ink));
+  background-color: color-mix(in srgb, var(--lab-accent) 90%, var(--lab-static-dark));
 }
 
 .dark {
-  background: var(--lab-bg-inverse);
+  background-color: var(--lab-bg-inverse);
   color: var(--lab-text-inverse);
 }
 
 .dark:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--lab-bg-inverse) 84%, var(--lab-color-gray));
+  background-color: color-mix(in srgb, var(--lab-bg-inverse) 86%, var(--lab-neutral-6));
+}
+
+.dangerFill {
+  background-color: var(--lab-danger);
+  color: var(--lab-text-on-accent);
+}
+
+.dangerFill:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--lab-danger) 90%, var(--lab-static-dark));
 }
 
 .secondary {
@@ -76,6 +116,17 @@
 
 .secondary:hover:not(:disabled) {
   background: var(--lab-fill-4);
+}
+
+.border {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--lab-border);
+  color: var(--lab-text-primary);
+}
+
+.border:hover:not(:disabled) {
+  background: var(--lab-fill-1);
+  box-shadow: inset 0 0 0 1px var(--lab-border-strong);
 }
 
 .ghost {
@@ -109,7 +160,7 @@
 .spinner {
   width: 1em;
   height: 1em;
-  border-radius: var(--lab-radius-pill);
+  border-radius: var(--lab-radius-full);
   border: 1.5px solid currentcolor;
   border-right-color: transparent;
   animation: spin 0.7s linear infinite;

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Meter, SegmentedControl, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
+import { Button, Card, Icon, Meter, SegmentedControl, Switch, Tag, Text, TextField, type IconName } from '../ui/components/index.ts';
+
+const ICON_SAMPLE: IconName[] = ['sparkles', 'copy', 'pencil', 'eye', 'eye-off', 'layers', 'images', 'video', 'mic', 'translate', 'lock', 'unlock', 'pin', 'link', 'bin', 'cog', 'search', 'checkmark-circle', 'alert-circle', 'info-circle', 'arrow-undo', 'arrow-redo', 'upload', 'download'];
 import styles from './UiGallery.module.css';
 
 type Theme = 'light' | 'dark';
@@ -96,18 +98,33 @@ export function UiGallery() {
 
       <Section title="Кнопки" note="Действие — пилюля. Primary один на экран; dark — второе весомое действие без второго цвета.">
         <div className={styles.row}>
-          <Button variant="primary">Написать кадр</Button>
-          <Button variant="dark">Копировать для генерации</Button>
-          <Button variant="secondary">Сохранить попытку</Button>
-          <Button variant="soft">Предложить правки</Button>
+          <Button variant="primary" icon={<Icon name="sparkles" variant="filled" />}>Написать кадр</Button>
+          <Button variant="dark" icon={<Icon name="copy" />}>Копировать для генерации</Button>
+          <Button variant="secondary" icon={<Icon name="bookmark" />}>Сохранить попытку</Button>
+          <Button variant="soft" icon={<Icon name="bulb" />}>Предложить правки</Button>
           <Button variant="ghost">Отмена</Button>
+          <Button variant="border">Экспорт панели</Button>
           <Button variant="danger">Удалить кадр</Button>
         </div>
         <div className={styles.row}>
-          <Button variant="primary" size="s">Перегенерировать</Button>
-          <Button variant="secondary" size="s">Принять</Button>
+          <Button variant="primary" size="m">Написать кадр</Button>
+          <Button variant="primary" size="xs">Перегенерировать</Button>
+          <Button variant="secondary" size="xs">Принять</Button>
           <Button variant="primary" loading>Пишу абзацы…</Button>
           <Button variant="secondary" disabled>Недоступно</Button>
+        </div>
+      </Section>
+
+      <Section title="Иконки" note="Родные иконки Lab UI из Figma-файла: outline в интерфейсе, filled — для выбранного. Цвет наследуется от текста.">
+        <div className={styles.row}>
+          {ICON_SAMPLE.map((name) => (
+            <Icon key={name} name={name} size={1.5} label={name} />
+          ))}
+        </div>
+        <div className={styles.row} style={{ color: 'var(--lab-accent)' }}>
+          {ICON_SAMPLE.slice(0, 12).map((name) => (
+            <Icon key={name} name={name} variant="filled" size={1.5} label={`${name} filled`} />
+          ))}
         </div>
       </Section>
 
@@ -172,7 +189,7 @@ export function UiGallery() {
             ))}
             <div className={`${styles.ref} lab-hatch`} />
             <div className={styles.stripSpacer} />
-            <Button variant="secondary" size="s">+ из библиотеки</Button>
+            <Button variant="secondary" size="xs">+ из библиотеки</Button>
           </div>
         </div>
       </Section>
@@ -205,7 +222,7 @@ export function UiGallery() {
               <Text variant="label" medium>Блок 03 · Герои и первая реплика</Text>
               <Tag tone="accent">LLM</Tag>
             </div>
-            <Button variant="ghost" size="s">Копировать блок</Button>
+            <Button variant="ghost" size="xs">Копировать блок</Button>
           </div>
           <p className={styles.prompt}>
             Alexander, matching <span className={`${styles.hl} ${styles.hlRef}`}>{'<<<image_5>>>'}</span>, stands near the main pickup from{' '}

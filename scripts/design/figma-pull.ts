@@ -115,21 +115,39 @@ async function pullImages(ids: string[], format: 'png' | 'svg'): Promise<void> {
   }
   const outDir = path.join(DIR, format === 'png' ? 'renders' : 'icons');
   mkdirSync(outDir, { recursive: true });
-  const query = new URLSearchParams({ ids: ids.join(','), format, ...(format === 'png' ? { scale: '2' } : { svg_simplify_stroke: 'true' }) });
-  const res = await api(`images:${format}:${ids.length}`, `${API}/images/${FILE_KEY}?${query.toString()}`);
+  const target = (id: string): string => path.join(outDir, `${id.replace(/[:;]/g, '-')}.${format}`);
+  // Уже скачанное не запрашиваем повторно: каждый запрос к API на счету.
+  const missing = ids.filter((id) => !existsSync(target(id)));
+  if (missing.length === 0) {
+    console.log('всё уже скачано — сеть не трогаю');
+    return;
+  }
+  const query = new URLSearchParams({ ids: missing.join(','), format, ...(format === 'png' ? { scale: '2' } : { svg_simplify_stroke: 'true' }) });
+  const res = await api(`images:${format}:${missing.length}`, `${API}/images/${FILE_KEY}?${query.toString()}`);
   const body = (await res.json()) as { images: Record<string, string | null> };
   let saved = 0;
+  const failed: string[] = [];
   for (const [id, url] of Object.entries(body.images)) {
     if (url === null) {
-      console.warn(`нет рендера для ${id}`);
+      failed.push(id);
       continue;
     }
-    // Скачивание с S3 по выданной ссылке в лимит API не входит.
-    const file = await fetch(url);
-    writeFileSync(path.join(outDir, `${id.replace(/[:;]/g, '-')}.${format}`), Buffer.from(await file.arrayBuffer()));
-    saved += 1;
+    // Скачивание с S3 по выданной ссылке в лимит API не входит — его можно повторять.
+    let done = false;
+    for (let attempt = 1; attempt <= 3 && !done; attempt += 1) {
+      try {
+        const file = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+        if (!file.ok) throw new Error(`HTTP ${file.status}`);
+        writeFileSync(target(id), Buffer.from(await file.arrayBuffer()));
+        done = true;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+      }
+    }
+    if (done) saved += 1;
+    else failed.push(id);
   }
-  console.log(`сохранено ${saved} из ${ids.length} → ${path.relative(ROOT, outDir)}/`);
+  console.log(`сохранено ${saved} из ${missing.length} → ${path.relative(ROOT, outDir)}/${failed.length > 0 ? `; не удалось: ${failed.join(',')}` : ''}`);
 }
 
 function budget(): void {

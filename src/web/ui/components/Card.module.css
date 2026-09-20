@@ -1,5 +1,5 @@
 .card {
-  border-radius: var(--lab-radius-l);
+  border-radius: var(--lab-radius-xl);
   background: var(--lab-bg-surface);
   border: 1px solid var(--lab-border-subtle);
 }
@@ -9,7 +9,7 @@
 }
 
 .floating {
-  border-radius: var(--lab-radius-xl);
+  border-radius: var(--lab-radius-2xl);
   box-shadow: var(--lab-shadow-l);
 }
 

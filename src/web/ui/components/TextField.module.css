@@ -15,46 +15,42 @@
   margin: 0;
   padding: 0 var(--lab-space-6);
   border: 1px solid var(--lab-border);
-  border-radius: var(--lab-radius-m);
+  border-radius: var(--lab-radius-l);
   background: var(--lab-bg-surface);
   transition:
     border-color var(--lab-duration-fast) var(--lab-ease-standard),
-    box-shadow var(--lab-duration-fast) var(--lab-ease-standard);
+    background-color var(--lab-duration-fast) var(--lab-ease-standard);
 }
 
 .field:hover {
   border-color: var(--lab-border-strong);
 }
 
+/* State=Active в файле Lab UI: рамка акцентом в 2px, подпись остаётся основным цветом, фон — акцент на 4 %. */
 .field:focus-within {
-  border-color: var(--lab-accent);
-  box-shadow: 0 0 0 3px var(--lab-accent-soft);
+  margin: -1px;
+  border: 2px solid var(--lab-accent);
+  background: color-mix(in srgb, var(--lab-accent) 4%, var(--lab-bg-surface));
 }
 
 .invalid,
 .invalid:hover {
-  border-color: var(--lab-danger);
+  margin: -1px;
+  border: 2px solid var(--lab-danger);
 }
 
 .invalid:focus-within {
-  box-shadow: 0 0 0 3px var(--lab-danger-soft);
+  border-color: var(--lab-danger);
+  background: color-mix(in srgb, var(--lab-danger) 4%, var(--lab-bg-surface));
 }
 
 .legend {
   margin-left: calc(var(--lab-space-2) * -1);
-  padding: 0 var(--lab-space-2);
+  padding: 0 var(--lab-space-3);
   font-size: var(--lab-type-caption-size);
+  font-weight: var(--lab-weight-medium);
   line-height: 0.0625rem;
-  color: var(--lab-text-secondary);
-}
-
-.field:focus-within .legend {
-  color: var(--lab-accent);
-}
-
-.invalid .legend,
-.invalid:focus-within .legend {
-  color: var(--lab-danger);
+  color: var(--lab-text-primary);
 }
 
 .input {
@@ -93,8 +89,9 @@
 }
 
 .helper {
-  padding: 0 var(--lab-space-6);
+  padding: 0 var(--lab-space-2);
   font-size: var(--lab-type-caption-size);
+  font-weight: var(--lab-weight-medium);
   line-height: var(--lab-type-caption-line);
   color: var(--lab-text-secondary);
 }
