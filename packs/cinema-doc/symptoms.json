@@ -1,0 +1,186 @@
+{
+  "$source": "Таблица «Что ломалось и как это чинили» гайда Cinema Ai Tech (10 строк) + разборы шести генераций + находки ресёрча по Seedance 2.5. Поле fixEn — инструкция агенту-фиксеру; checkRu — что владелец делает сам, без агента.",
+  "groups": { "refs": "Референсы", "camera": "Камера и оператор", "people": "Люди и речь", "world": "Мир, свет, физика", "continuity": "Непрерывность", "structure": "Структура дубля" },
+  "symptoms": [
+    {
+      "id": "wrong-object",
+      "group": "refs",
+      "titleRu": "Предмет или машина не те — модель придумала свои",
+      "causeRu": "Предмет описан только словами, референса нет. Текст не заменяет референс.",
+      "checkRu": "Добавь референс предмета в панель и привяжи к нему сущность в секции «Герои и предметы».",
+      "fixEn": "The object was generated wrong because it had no reference. Once the owner attaches one, mention it through its {{intro:key}} at first appearance; keep its description short and let the reference carry the look.",
+      "guide": "Кадр 1 · попытка 1"
+    },
+    {
+      "id": "extra-became-hero",
+      "group": "refs",
+      "titleRu": "Случайный персонаж занял кадр и остался до финала",
+      "causeRu": "У прохожего был свой референс или подробный абзац — модель сделала его главным героем.",
+      "checkRu": "Убери референс статиста из панели.",
+      "fixEn": "A bystander took over the shot. Reduce him to one faceless mention ('a random man', no name, no reference, no clothing details), at most two short sentences, never looking at the camera. Remove any reaction chain that gives him screen time.",
+      "guide": "Кадр 1 · попытка 1"
+    },
+    {
+      "id": "wrong-clothes",
+      "group": "refs",
+      "titleRu": "У героя не та одежда или комплекция",
+      "causeRu": "На character sheet герой в другой одежде. Под каждый образ нужна своя карта персонажа.",
+      "checkRu": "Замени картинку референса героя на карту с нужной одеждой. Текстом одежду не чинить.",
+      "fixEn": "",
+      "guide": "Кадр 1 · попытка 1"
+    },
+    {
+      "id": "ref-leak",
+      "group": "refs",
+      "titleRu": "С референса утекло лишнее: люди, надписи, серый студийный задник",
+      "causeRu": "Референс без роли — модель берёт из картинки всё подряд.",
+      "checkRu": "Отметь у референса флаги «есть люди / есть текст / студийный задник» — клауза-исключение добавится сама. Карточку со спецификациями замени чистым фото.",
+      "fixEn": "Something leaked from a reference image. Do not describe the leaked element at all; where the entity first appears, keep the {{intro:key}} and add nothing that repeats the unwanted detail.",
+      "guide": "Панель Кадра 1; ресёрч Seedance 2.5"
+    },
+    {
+      "id": "operator-visible",
+      "group": "camera",
+      "titleRu": "В кадре видны камера, руки или тело оператора",
+      "causeRu": "Оператор описан как действующее лицо, или точка съёмки задана через человека.",
+      "checkRu": "Включи полное правило «оператор не виден» в секции «Как снято».",
+      "fixEn": "The operator or his camera appeared in frame. Apply three layers of defence: (1) give the camera a physical vantage point that needs no body ('The camera is inside the front seat of a second car…'); (2) right there state once: 'No camera, no hands, no operator visible in frame — only <what is seen>'; (3) rewrite every operator verb into a camera or frame verb ('the frame shakes with each step', 'a quiet laugh shakes the frame', 'as if the arms holding it are tired'). No hands, strap, arms or breath that belong to a person.",
+      "guide": "Кадр 1 · попытка 2 → 3"
+    },
+    {
+      "id": "drone-camera",
+      "group": "camera",
+      "titleRu": "Камера плавная, как дрон или стедикам",
+      "causeRu": "Движение камеры не привязано к событиям сцены; в абзацах нет её ошибок.",
+      "checkRu": "Проверь, что в стиль-блоке полный стек дефектов комплекта.",
+      "fixEn": "The camera came out too smooth. In every paragraph tie the camera to the physics of the scene: it lurches with braking, jerks back from a close punch, loses focus and catches it, stumbles on a curb, the horizon tilts and corrects, breathing is audible in the rhythm of the frame.",
+      "guide": "Сигнал реальности 01; приём 02"
+    },
+    {
+      "id": "wide-shot",
+      "group": "camera",
+      "titleRu": "Общий план там, где нужен средний или крупный",
+      "causeRu": "Размер плана не задан — модель выбирает общий.",
+      "checkRu": "",
+      "fixEn": "The model chose a wide shot. Name the shot size at the key moment: 'settles into a medium shot of <name> just as he gets out', 'a tight close-up of his face'. One size per key moment, tied to the action.",
+      "guide": "Кадр 1 · попытка 2 → 3"
+    },
+    {
+      "id": "too-many-actions",
+      "group": "people",
+      "titleRu": "Герои не успевают: часть действий пропала",
+      "causeRu": "Больше 4–6 крупных событий или россыпь мелких жестов подряд.",
+      "checkRu": "",
+      "fixEn": "Too much was asked of 30 seconds. Keep one main action per paragraph and one small action per character; delete idle micro-gestures (rubs hands, squints, glances at phone, nods to himself). Give all handling of objects to one character where possible — fewer subjects, fewer errors.",
+      "guide": "Кадр 1 · попытка 1; правило «бюджет внимания»"
+    },
+    {
+      "id": "speech-dropped",
+      "group": "people",
+      "titleRu": "Реплика обрезана или слова потеряны",
+      "causeRu": "Речи больше, чем помещается в дубль (≈2,8 слова в секунду), или реплика слишком длинная.",
+      "checkRu": "Сократи реплики в секции «Реплики» — агент их текст не трогает.",
+      "fixEn": "Speech was partly dropped. Give each line air: put an action or a pause between consecutive lines, let the character move while speaking, and do not stack other sounds on top of the line.",
+      "guide": "Кадр 2: 79 слов, часть реплики выпала"
+    },
+    {
+      "id": "speech-robotic",
+      "group": "people",
+      "titleRu": "Речь дикторская, с акцентом или неживая",
+      "causeRu": "Нет живых ошибок подачи; языковая фраза есть, а поведения вокруг реплики нет.",
+      "checkRu": "",
+      "fixEn": "The delivery sounded robotic. After the line placeholder add live imperfections: 'He stumbles on a word, repeats it, keeps going, hands moving.' Let words break between breaths and actions. Never write the line text itself.",
+      "guide": "Приём 09"
+    },
+    {
+      "id": "staged-acting",
+      "group": "people",
+      "titleRu": "Люди играют на камеру, позируют",
+      "causeRu": "Героям не дано занятие; фон реагирует на передний план.",
+      "checkRu": "",
+      "fixEn": "People looked staged. Characters look at each other and at what they handle, not at the lens, except one deliberate look. Background people never react: end the background with 'No one in the foreground reacts.' Add fatigue, sweat, a missed move — real, not always clean.",
+      "guide": "Сигнал реальности 06"
+    },
+    {
+      "id": "mechanics-broken",
+      "group": "world",
+      "titleRu": "Дверь, борт, крышка или кейс открылись не по физике",
+      "causeRu": "Механика открывающихся частей — слабое место видеомоделей.",
+      "checkRu": "Проще всего спрятать этот момент шрифтом в монтаже — так сделано в гайде.",
+      "fixEn": "An opening part broke physics. Take the mechanism off the key moment: let it already be open when the camera arrives, or happen at the edge of frame while the camera is on the character's face. Keep at most one sentence about it.",
+      "guide": "Кадр 1 · попытка 3"
+    },
+    {
+      "id": "objects-merged",
+      "group": "world",
+      "titleRu": "Несколько одинаковых предметов слиплись в один",
+      "causeRu": "Однотипные объекты в одном состоянии модель объединяет.",
+      "checkRu": "Можно принять как есть: зритель читает один большой кейс.",
+      "fixEn": "Identical objects merged. Differentiate them by state, colour and position ('one case open on the tailgate, one closed on the ground, one in his hands'), or reduce them to one.",
+      "guide": "Кадр 1 · попытка 3"
+    },
+    {
+      "id": "fx-on-prop",
+      "group": "world",
+      "titleRu": "Блик или эффект оптики нарисован на предмете в руках героя",
+      "causeRu": "Промпт сам просил эффект рядом с реквизитом; роли снимающей техники и реквизита не разведены.",
+      "checkRu": "Если в кадре та же камера или объектив, что и снимающие, выбери комплект с разделением ролей.",
+      "fixEn": "An optical effect landed on a prop. Optical effects belong only to the shooting lens and appear 'on the image itself', 'across the frame'. Where a lens or camera is shown as an object, state: 'shown as a physical object — just glass, metal, and the reflection of the sky. No flares, no streaks on the lens itself.' Use 'shooting lens' whenever light hits the lens.",
+      "guide": "Кадр 3 · попытка 1 → 2"
+    },
+    {
+      "id": "light-jumped",
+      "group": "world",
+      "titleRu": "Свет или место сменились посреди дубля",
+      "causeRu": "Световые события противоречат базовой погоде, или их слишком много.",
+      "checkRu": "",
+      "fixEn": "Light or place changed mid-take. Keep one base light from the weather paragraph and at most two light events, each returning to the base ('a cloud passes, the light shifts for two seconds, then returns'). Remove words that imply another time of day.",
+      "guide": "Кадр 3 · попытка 1"
+    },
+    {
+      "id": "unrequested-objects",
+      "group": "world",
+      "titleRu": "Появилось непрошеное: петличка, рассыпанные предметы",
+      "causeRu": "Состояние предметов не закреплено; модель дорисовала «как обычно бывает».",
+      "checkRu": "",
+      "fixEn": "Unrequested things appeared. Anchor the state of the objects involved with one calm sentence ('the lenses rest in their foam cutouts', 'his shirt is plain, nothing clipped to it'). Do not pile up prohibitions.",
+      "guide": "Кадр 1 · попытка 3; Кадр 3 · попытка 2"
+    },
+    {
+      "id": "injury-wrong",
+      "group": "continuity",
+      "titleRu": "Травма или след не с той стороны, слишком сильные",
+      "causeRu": "Последствие прошлого кадра описано без стороны, степени и ограничителя.",
+      "checkRu": "Исправь каноническую фразу последствия в секции «Память между кадрами»: сторона, степень, «no blood, no cut».",
+      "fixEn": "An injury came out wrong. Keep the {{state:Sn}} placeholder untouched and make the hands physically consistent with it: the hurt side and the hand that presses ice to it are the same side, the other hand holds the object. Avoid a hand crossing the face.",
+      "guide": "Кадр 3 · попытка 1 → 2"
+    },
+    {
+      "id": "face-drift",
+      "group": "continuity",
+      "titleRu": "Лицо героя поплыло, перестал быть похож",
+      "causeRu": "Рука пересекает лицо, быстрые повороты головы, слишком длинный крупный план в движении.",
+      "checkRu": "",
+      "fixEn": "The face drifted. Keep hands away from the face, avoid fast head turns in close-up, and shorten the close-up during fast motion; move the camera to a medium shot while he moves.",
+      "guide": "Ресёрч Seedance 2.5"
+    },
+    {
+      "id": "cut-mid-motion",
+      "group": "structure",
+      "titleRu": "Дубль оборвался посреди движения",
+      "causeRu": "У дубля нет прописанного финала — покоя, тишины, звука за кадром.",
+      "checkRu": "",
+      "fixEn": "The take was cut mid-motion. End the last paragraph with a picture of rest: the action stops, a look, 'A second of silence, just the wind. Someone laughs off-screen. The camera slowly lowers, as if the arms holding it are finally tired.' Never 'The scene ends.'",
+      "guide": "Приём 10; Кадр 3"
+    },
+    {
+      "id": "background-dead",
+      "group": "structure",
+      "titleRu": "Фон пустой или фоновые события не исполнились",
+      "causeRu": "Фон стоит раньше героев или растворён в тексте; значимых деталей больше 3–4.",
+      "checkRu": "",
+      "fixEn": "The background did not come alive. Put 3–4 meaningful micro-events in one paragraph after the heroes are established, each a short physical sentence (a dog pulls on its leash, a guard yawns, a car passes and its reflection slides across the puddle), and close with 'No one in the foreground reacts.'",
+      "guide": "Приём 08"
+    }
+  ]
+}

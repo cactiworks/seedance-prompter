@@ -3,6 +3,7 @@ import { buildShot, type PackBundle } from '../../core/pipeline.ts';
 import { activeStates, emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
 import { currentShot, slugify, useStore } from '../store.ts';
+import { Attempts } from './Attempts.tsx';
 import styles from './Workspace.module.css';
 
 const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', character: 'Герой', object: 'Предмет', gear: 'Техника', other: 'Другое' };
@@ -363,7 +364,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
           </Card>
 
           <Card padding="l" className={styles.previewCard}>
-            <Text variant="caption" tone="secondary">Линтер · {build.findings.length}</Text>
+            <Text variant="caption" tone="secondary" as="h3">Линтер · {build.findings.length}</Text>
             {build.findings.length === 0 && <Text variant="label" tone="tertiary">Находок нет.</Text>}
             {build.findings.map((finding, i) => (
               <button key={`${finding.fingerprint}-${i}`} type="button" className={styles.finding} onClick={() => finding.paragraph !== null && document.getElementById(`p-${finding.paragraph}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
@@ -376,6 +377,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               </button>
             ))}
           </Card>
+
+          <Attempts prompt={build.prompt} canSave={canCopy} />
         </aside>
       </div>
     </div>

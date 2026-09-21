@@ -1,0 +1,135 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-8);
+}
+
+.head,
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lab-space-6);
+}
+
+.actions {
+  display: flex;
+  gap: var(--lab-space-3);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-3);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-3);
+  padding: var(--lab-space-3) var(--lab-space-6);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  cursor: pointer;
+  transition: border-color var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.tab:hover {
+  border-color: var(--lab-border-strong);
+}
+
+.tabOn,
+.tabOn:hover {
+  border-color: var(--lab-accent);
+  background: var(--lab-accent-softer);
+}
+
+.symptoms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-6);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-3);
+}
+
+/* Lab UI Chip: нейтральная заливка, выбранный — акцент на 12 % и текст акцентом. */
+.chip {
+  padding: var(--lab-space-3) var(--lab-space-6);
+  border: 0;
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-fill-1);
+  color: var(--lab-text-secondary);
+  font-size: var(--lab-type-label-size);
+  line-height: var(--lab-type-label-line);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--lab-duration-fast) var(--lab-ease-standard),
+    color var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.chip:hover {
+  background: var(--lab-fill-3);
+  color: var(--lab-text-primary);
+}
+
+.chipOn,
+.chipOn:hover {
+  background: var(--lab-danger-soft);
+  color: var(--lab-danger);
+}
+
+.recipe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-6) var(--lab-space-8);
+  border-radius: var(--lab-radius-xl);
+  background: var(--lab-fill-1);
+}
+
+.proposals {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-8);
+  padding-top: var(--lab-space-6);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.proposal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-4);
+}
+
+.diff {
+  margin: 0;
+  font-size: var(--lab-type-label-size);
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.add {
+  border-radius: var(--lab-radius-xs);
+  background: var(--lab-success-soft);
+}
+
+.del {
+  border-radius: var(--lab-radius-xs);
+  background: var(--lab-danger-soft);
+  color: var(--lab-text-tertiary);
+  text-decoration: line-through;
+}

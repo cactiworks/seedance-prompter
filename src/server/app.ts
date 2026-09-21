@@ -116,6 +116,35 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'WRITE_FAILED', messageRu: error instanceof Error ? error.message : 'Писатель не сработал.' }, 422);
       }
     })
+    // Починка после неудачной генерации: симптомы попытки → минимальные правки абзацев (как предложение).
+    .post('/api/llm/fix', async (c) => {
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string; attemptN?: number };
+      const project = ProjectSchema.parse(body.project);
+      const attempt = project.shots.find((s) => s.id === body.shotId)?.attempts.find((a) => a.n === body.attemptN);
+      if (attempt === undefined) return c.json({ error: 'NO_ATTEMPT', messageRu: 'Попытка не найдена.' }, 404);
+      const packDir = path.join(options.rootDir, 'packs', project.packId);
+      const catalog = (JSON.parse(readFileSync(path.join(packDir, 'symptoms.json'), 'utf8')) as { symptoms: { id: string; titleRu: string; fixEn: string }[] }).symptoms;
+      const symptoms = catalog.filter((s) => attempt.symptomIds.includes(s.id) && s.fixEn.trim() !== '');
+      if (symptoms.length === 0 && attempt.failedRu.trim() === '') return c.json({ error: 'NOTHING_TO_FIX', messageRu: 'Отметь симптомы или опиши, что не получилось, — агенту нужен повод для правки.' }, 422);
+      try {
+        const result = await writeShot({
+          project,
+          shotId: body.shotId ?? '',
+          pack: loadPack(options.rootDir, project.packId),
+          rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
+          fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
+          run: options.runLlm ?? runClaude,
+          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus',
+          signal: c.req.raw.signal,
+          fix: { symptoms, workedRu: attempt.workedRu, failedRu: attempt.failedRu },
+        });
+        return c.json(result);
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        return c.json({ error: 'FIX_FAILED', messageRu: error instanceof Error ? error.message : 'Починка не сработала.' }, 422);
+      }
+    })
+    .get('/api/packs/:id/symptoms', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', c.req.param('id'), 'symptoms.json'), 'utf8')) as unknown))
     // Планировщик: русский синопсис кадра → отрезки по времени. Реплики вынуты из синопсиса заранее.
     .post('/api/llm/plan', async (c) => {
       const body = (await c.req.json()) as { project?: unknown; synopsisRu?: string };

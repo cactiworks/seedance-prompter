@@ -1,4 +1,4 @@
-import { buildValidationContext, buildWriterSystem, buildWriterUser, writableSegments, WRITER_SCHEMA, type FewShot } from '../../../core/llm/buildWriter.ts';
+import { buildValidationContext, buildWriterSystem, buildWriterUser, fixableSegments, writableSegments, WRITER_SCHEMA, type FewShot, type FixBrief } from '../../../core/llm/buildWriter.ts';
 import { validateWriterOutput, type Violation, type WriterOutput } from '../../../core/llm/validate.ts';
 import type { Project, Shot } from '../../../core/model/project.ts';
 import { buildShot, type PackBundle } from '../../../core/pipeline.ts';
@@ -15,6 +15,8 @@ export interface WriteShotInput {
   run: Runner;
   model: string;
   signal?: AbortSignal;
+  /** Режим починки после неудачной генерации: правятся все абзацы с текстом, результат — предложение. */
+  fix?: FixBrief;
 }
 
 export interface WriteShotResult {
@@ -42,11 +44,11 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   const kit = pack.kits[shot.kitId];
   if (kit === undefined) throw new Error(`Нет комплекта ${shot.kitId}`);
 
-  const writable = writableSegments(shot);
-  if (writable.length === 0) throw new Error('Нечего писать: у незаблокированных отрезков нет описания по-русски.');
+  const writable = input.fix === undefined ? writableSegments(shot) : fixableSegments(shot);
+  if (writable.length === 0) throw new Error(input.fix === undefined ? 'Нечего писать: у незаблокированных отрезков нет описания по-русски.' : 'Нечего чинить: в кадре нет ни одного абзаца с текстом.');
 
   const system = buildWriterSystem(input.rules, input.fewshot);
-  const ctx = buildValidationContext(project, shot, writable);
+  const ctx = buildValidationContext(project, shot, writable, input.fix !== undefined);
   const totals = { durationMs: 0, inputTokens: 0, outputTokens: 0, model: null as string | null };
 
   const check = (output: WriterOutput): { violations: Violation[]; lintRu: string[] } => {
@@ -69,12 +71,12 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
     return result.data;
   };
 
-  let output = await call(buildWriterUser(project, shot, kit, writable));
+  let output = await call(buildWriterUser(project, shot, kit, writable, undefined, input.fix));
   let problems = check(output);
   let rounds = 1;
 
   if (problems.violations.length > 0 || problems.lintRu.length > 0) {
-    const repaired = await call(buildWriterUser(project, shot, kit, writable, { previous: output.blocks.map((b) => ({ segmentId: b.segmentId, en: b.en })), violations: problems.violations, lintFindings: problems.lintRu }));
+    const repaired = await call(buildWriterUser(project, shot, kit, writable, { previous: output.blocks.map((b) => ({ segmentId: b.segmentId, en: b.en })), violations: problems.violations, lintFindings: problems.lintRu }, input.fix));
     const after = check(repaired);
     rounds = 2;
     // Ремонт принимается, только если стало не хуже.

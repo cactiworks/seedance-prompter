@@ -75,6 +75,23 @@ export const SegmentSchema = z.object({
 });
 export type Segment = z.infer<typeof SegmentSchema>;
 
+/** Снимок того, что ушло в генерацию, и разбор результата. Основа сравнимости попыток. */
+export const AttemptSchema = z.object({
+  n: z.number().int().positive(),
+  createdAt: z.string(),
+  /** Промпт ровно в том виде, в каком он был скопирован. */
+  prompt: z.string(),
+  panel: z.array(z.object({ index: z.number().int(), key: z.string(), label: z.string() })),
+  /** Сценарные абзацы в плейсхолдерной форме — для diff со следующей попыткой. */
+  segments: z.array(z.object({ id: z.string(), en: z.string() })),
+  kitId: z.string(),
+  verdict: z.enum(['pending', 'in-edit', 'partial', 'rejected']).default('pending'),
+  workedRu: z.string().default(''),
+  failedRu: z.string().default(''),
+  symptomIds: z.array(z.string()).default([]),
+});
+export type Attempt = z.infer<typeof AttemptSchema>;
+
 export const ShotSchema = z.object({
   id: z.string(),
   title: z.string().default('Кадр'),
@@ -93,6 +110,7 @@ export const ShotSchema = z.object({
   segments: z.array(SegmentSchema).default([]),
   /** Отпечатки подавленных находок линтера с причиной. */
   suppressed: z.array(z.object({ fingerprint: z.string(), reasonRu: z.string().min(1) })).default([]),
+  attempts: z.array(AttemptSchema).default([]),
 });
 export type Shot = z.infer<typeof ShotSchema>;
 

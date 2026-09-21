@@ -47,19 +47,33 @@ export function writableSegments(shot: Shot): string[] {
   return shot.segments.filter((s) => !s.text.locked && s.beatsRu.trim() !== '').map((s) => s.id);
 }
 
-export function buildValidationContext(project: Project, shot: Shot, writable: string[]): ValidationContext {
+export function buildValidationContext(project: Project, shot: Shot, writable: string[], fixing = false): ValidationContext {
   const lineIds = project.lines.map((l) => l.id);
   const lockedText = shot.segments.filter((s) => !writable.includes(s.id)).map((s) => s.text.en).join('\n');
+  // При починке реплики обязаны остаться там же, где стояли в текущем тексте.
+  const required = (s: Shot['segments'][number]): string[] => (fixing ? [...s.text.en.matchAll(/\{\{line:(L\d+)\}\}/g)].map((m) => m[1] ?? '') : linesInBeats(s.beatsRu, lineIds));
   return {
     writable,
-    requiredLines: Object.fromEntries(shot.segments.filter((s) => writable.includes(s.id)).map((s) => [s.id, linesInBeats(s.beatsRu, lineIds)])),
+    requiredLines: Object.fromEntries(shot.segments.filter((s) => writable.includes(s.id)).map((s) => [s.id, required(s)])),
     known: { intro: project.entities.map((e) => e.key), ref: shot.panel, line: lineIds, state: project.states.map((s) => s.id) },
     alreadyIntroduced: [...lockedText.matchAll(/\{\{intro:([^}]+)\}\}/g)].map((m) => m[1] ?? ''),
   };
 }
 
+/** Починка после неудачной генерации: симптомы из таблицы ошибок + наблюдения владельца. */
+export interface FixBrief {
+  symptoms: { titleRu: string; fixEn: string }[];
+  workedRu: string;
+  failedRu: string;
+}
+
+/** В режиме починки агент правит все абзацы с текстом — результат идёт владельцу как предложение, не применяется сам. */
+export function fixableSegments(shot: Shot): string[] {
+  return shot.segments.filter((s) => s.text.en.trim() !== '').map((s) => s.id);
+}
+
 /** Динамическая часть запроса — только в user message. */
-export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable: string[], repair?: { previous: { segmentId: string; en: string }[]; violations: Violation[]; lintFindings: string[] }): string {
+export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable: string[], repair?: { previous: { segmentId: string; en: string }[]; violations: Violation[]; lintFindings: string[] }, fix?: FixBrief): string {
   const lineIds = project.lines.map((l) => l.id);
   const input = {
     format: { durationSec: project.durationSec, aspect: '9:16', singleContinuousTake: true },
@@ -72,13 +86,24 @@ export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable
     segments: shot.segments.map((s) => ({
       id: s.id,
       beatsRu: s.beatsRu,
-      requiredLinesInOrder: linesInBeats(s.beatsRu, lineIds),
-      ...(writable.includes(s.id) ? {} : { lockedText: s.text.en }),
+      requiredLinesInOrder: fix === undefined ? linesInBeats(s.beatsRu, lineIds) : [...s.text.en.matchAll(/\{\{line:(L\d+)\}\}/g)].map((m) => m[1] ?? ''),
+      ...(writable.includes(s.id) ? (fix === undefined ? {} : { currentText: s.text.en }) : { lockedText: s.text.en }),
     })),
     write: writable,
     appendFinaleTail: false,
   };
-  const parts = [`Write the scenario paragraphs for this shot.\n\n\`\`\`json\n${JSON.stringify(input, null, 1)}\n\`\`\``];
+  const task =
+    fix === undefined
+      ? 'Write the scenario paragraphs for this shot.'
+      : [
+          'This shot was already generated in Seedance and the result had problems. Edit the existing paragraphs (`currentText`) to fix ONLY the symptoms below.',
+          'Change as little as possible: the owner compares attempts paragraph by paragraph, so every untouched sentence must stay byte-identical. Keep every placeholder that is already there. Return all requested segments, including unchanged ones.',
+          `What worked (do not break it): ${fix.workedRu.trim() || '—'}`,
+          `What failed, in the owner's words: ${fix.failedRu.trim() || '—'}`,
+          `Symptoms and how to fix them:\n${fix.symptoms.map((s) => `- ${s.titleRu}: ${s.fixEn}`).join('\n')}`,
+          'In notesRu say which symptom each change addresses; for unchanged paragraphs write «без изменений».',
+        ].join('\n\n');
+  const parts = [`${task}\n\n\`\`\`json\n${JSON.stringify(input, null, 1)}\n\`\`\``];
   if (repair !== undefined) {
     parts.push(
       `Your previous answer was rejected. Fix ONLY the problems listed and return all requested segments again. Keep notesRu about your decisions and risks for the owner — not about what you changed in this fix.\n\nPrevious answer:\n\`\`\`json\n${JSON.stringify(repair.previous, null, 1)}\n\`\`\`\n\nContract violations:\n${repair.violations.map((v) => `- [${v.segmentId}] ${v.messageEn}`).join('\n') || '- none'}\n\nLinter findings on the assembled prompt (Russian, from the guide's rules):\n${repair.lintFindings.map((f) => `- ${f}`).join('\n') || '- none'}`,

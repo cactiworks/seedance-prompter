@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Shot } from '../core/model/project.ts';
+import type { Attempt, Project, Shot } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
@@ -49,6 +49,22 @@ interface State {
   planning: boolean;
   planReport: { ok: boolean; messageRu: string } | null;
   planShot: () => Promise<void>;
+  /** Петля попыток. */
+  symptoms: SymptomCatalog | null;
+  loadSymptoms: () => Promise<void>;
+  saveAttempt: (prompt: string) => void;
+  updateAttempt: (n: number, patch: Partial<Attempt>) => void;
+  fixing: boolean;
+  /** Предложения агента-фиксера: не применяются, пока владелец не примет каждое. */
+  proposals: { attemptN: number; items: { segmentId: string; en: string; notesRu: string }[]; messageRu: string } | null;
+  proposeFix: (attemptN: number) => Promise<void>;
+  acceptProposal: (segmentId: string) => void;
+  dismissProposal: (segmentId: string) => void;
+}
+
+export interface SymptomCatalog {
+  groups: Record<string, string>;
+  symptoms: { id: string; group: string; titleRu: string; causeRu: string; checkRu: string; fixEn: string; guide: string }[];
 }
 
 interface PlanResponse {
@@ -164,6 +180,7 @@ export const useStore = create<State>((set, get) => {
             synopsisRu: '',
             segments: [{ id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: { ru: '', en: '', source: 'empty', locked: false } }],
             suppressed: [],
+            attempts: [],
           },
         ],
       }));
@@ -215,6 +232,66 @@ export const useStore = create<State>((set, get) => {
     },
 
     cancelWrite: () => writeAbort?.abort(),
+
+    symptoms: null,
+    loadSymptoms: async () => set({ symptoms: await json<SymptomCatalog>(await fetch('/api/packs/cinema-doc/symptoms')) }),
+
+    saveAttempt: (prompt) => {
+      const { project } = get();
+      if (project === null) return;
+      get().updateShot((shot) => ({
+        ...shot,
+        attempts: [
+          ...shot.attempts,
+          {
+            n: Math.max(0, ...shot.attempts.map((a) => a.n)) + 1,
+            createdAt: new Date().toISOString(),
+            prompt,
+            panel: shot.panel.map((key, i) => ({ index: i + 1, key, label: project.refs.find((r) => r.key === key)?.label ?? key })),
+            segments: shot.segments.map((s) => ({ id: s.id, en: s.text.en })),
+            kitId: shot.kitId,
+            verdict: 'pending',
+            workedRu: '',
+            failedRu: '',
+            symptomIds: [],
+          },
+        ],
+      }));
+    },
+
+    updateAttempt: (n, patch) => get().updateShot((shot) => ({ ...shot, attempts: shot.attempts.map((a) => (a.n === n ? { ...a, ...patch } : a)) })),
+
+    fixing: false,
+    proposals: null,
+
+    proposeFix: async (attemptN) => {
+      const { project, shotId } = get();
+      if (project === null || shotId === null || get().fixing) return;
+      set({ fixing: true, proposals: null });
+      try {
+        const res = await fetch('/api/llm/fix', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId, attemptN }) });
+        const result = await json<WriteResponse>(res);
+        const current = new Map(project.shots.find((s) => s.id === shotId)?.segments.map((s) => [s.id, s.text.en]) ?? []);
+        const changed = result.blocks.filter((b) => current.get(b.segmentId) !== b.en);
+        set({ proposals: { attemptN, items: changed, messageRu: changed.length === 0 ? 'Агент не нашёл, что менять в абзацах. Посмотри подсказки «что сделать самому» у симптомов.' : `Предложено правок: ${changed.length} из ${result.blocks.length} абзацев · ${Math.round(result.meta.durationMs / 1000)} с` } });
+      } catch (cause) {
+        set({ proposals: { attemptN, items: [], messageRu: cause instanceof Error ? cause.message : String(cause) } });
+      } finally {
+        set({ fixing: false });
+      }
+    },
+
+    acceptProposal: (segmentId) => {
+      const item = get().proposals?.items.find((p) => p.segmentId === segmentId);
+      if (item === undefined) return;
+      get().updateShot((shot) => ({ ...shot, segments: shot.segments.map((s) => (s.id === segmentId ? { ...s, text: { ...s.text, en: item.en, source: 'llm', locked: false } } : s)) }));
+      get().dismissProposal(segmentId);
+    },
+
+    dismissProposal: (segmentId) => {
+      const { proposals } = get();
+      if (proposals !== null) set({ proposals: { ...proposals, items: proposals.items.filter((p) => p.segmentId !== segmentId) } });
+    },
 
     planning: false,
     planReport: null,
