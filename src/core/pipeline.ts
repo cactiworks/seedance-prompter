@@ -2,7 +2,7 @@ import { compileShot, joinParagraphs, type CompiledParagraph, type CompileIssue,
 import { resolve, type DialectPack, type ResolveIssue } from './compile/dialect.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
-import type { Project, Shot } from './model/project.ts';
+import { activeStates, type Project, type Shot } from './model/project.ts';
 
 /** Всё, что ядру нужно знать о режиме съёмки. Код правил гайда не знает — он исполняет pack. */
 export interface PackBundle {
@@ -85,7 +85,32 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     suppressed: shot.suppressed.map((s) => s.fingerprint),
   });
 
-  const used = new Set(joinParagraphs(compiled.paragraphs).match(/\{\{(?:ref|intro):[^}]+\}\}/g) ?? []);
+  // Непрерывность — структурные правила: текста мало, нужно знать, что было в прошлых кадрах.
+  const source = joinParagraphs(compiled.paragraphs);
+  const suppressed = new Set(shot.suppressed.map((s) => s.fingerprint));
+  for (const state of activeStates(project, shot.id)) {
+    const label = state.titleRu.trim() === '' ? state.id : `${state.id} «${state.titleRu}»`;
+    const drafts: Pick<Finding, 'ruleId' | 'severity' | 'messageRu' | 'fixHintRu'>[] = [];
+    if (!source.includes(`{{state:${state.id}}}`)) {
+      drafts.push({ ruleId: 'CONT_STATE_PRESENT', severity: 'error', messageRu: `Последствие прошлого кадра ${label} не попало в этот кадр.`, fixHintRu: `Приём 11 «память между кадрами»: вставь {{state:${state.id}}} там, где герой или предмет впервые виден.` });
+    }
+    const hasSide = /\b(left|right|front|rear|back|both)\b/i.test(state.en);
+    const hasLimiter = /\b(no|only|just|slight|light|small|faint)\b/i.test(state.en);
+    if (!hasSide || !hasLimiter) {
+      drafts.push({ ruleId: 'CONT_STATE_COMPLETE', severity: 'warning', messageRu: `У последствия ${label} нет ${[!hasSide && 'стороны', !hasLimiter && 'степени или ограничителя'].filter(Boolean).join(' и ')}.`, fixHintRu: 'Гайд, Кадр 3: «right side only… no blood, no cut, just a light bruise» — иначе модель нарисует разбитое лицо не с той стороны.' });
+    }
+    for (const draft of drafts) {
+      const fingerprint = `${draft.ruleId}:${state.id}`;
+      if (!suppressed.has(fingerprint)) findings.unshift({ ...draft, family: 'continuity', paragraph: null, range: null, evidence: state.en.slice(0, 80), fingerprint });
+    }
+  }
+
+  // Какие картинки панели реально вызваны: {{ref:key}} напрямую, {{intro:key}} — через референс сущности.
+  const used = new Set<string>();
+  for (const match of source.matchAll(/\{\{(ref|intro):([^}]+)\}\}/g)) {
+    const refKey = match[1] === 'ref' ? match[2] : project.entities.find((e) => e.key === match[2])?.refKey;
+    if (refKey !== undefined && refKey !== null && shot.panel.includes(refKey)) used.add(refKey);
+  }
   const speechWords = [...prompt.matchAll(/«([^»]*)»/g)].reduce((n, m) => n + countWords(m[1] ?? ''), 0);
   const { wordsPerSecond, speakingShare } = pack.lintParams.speech;
 

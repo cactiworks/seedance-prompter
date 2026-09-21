@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildShot, type PackBundle } from '../../core/pipeline.ts';
-import { emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
+import { activeStates, emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
 import { currentShot, slugify, useStore } from '../store.ts';
 import styles from './Workspace.module.css';
@@ -118,6 +118,9 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   };
 
   const refByKey = new Map(project.refs.map((ref) => [ref.key, ref]));
+  const incoming = activeStates(project, shot.id);
+  const outcomes = project.states.filter((state) => state.originShotId === shot.id);
+  const nextStateId = `S${Math.max(0, ...project.states.map((s) => Number(s.id.slice(1)))) + 1}`;
   const nextLineId = `L${Math.max(0, ...project.lines.map((l) => Number(l.id.slice(1)))) + 1}`;
 
   return (
@@ -125,7 +128,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
       <header className={`${styles.topbar} lab-glass-thin`}>
         <Button variant="ghost" size="xs" icon={<Icon name="chevron-back" size={1} />} onClick={store.closeProject}>Ролики</Button>
         <Text variant="label" medium>{project.title}</Text>
-        <Text variant="caption" tone="tertiary">{shot.title}</Text>
+        <SegmentedControl aria-label="Кадры ролика" size="s" value={shot.id} onChange={store.selectShot} options={project.shots.map((s, i) => ({ value: s.id, label: `Кадр ${i + 1}` }))} />
+        <Button variant="ghost" size="xs" icon={<Icon name="plus" size={1} />} onClick={store.addShot}>кадр</Button>
         <span className={styles.spacer} />
         <Tag tone={store.save === 'saved' ? 'neutral' : store.save === 'conflict' || store.save === 'error' ? 'danger' : 'outline'}>{SAVE_RU[store.save]}</Tag>
         <Tag tone="outline">{project.dialect.refSyntax === 'higgsfield-chip' ? '<<<image_N>>>' : '@Image N'}</Tag>
@@ -242,6 +246,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                   {project.entities.map((entity) => <Button key={entity.key} variant="soft" size="xs" onClick={() => insert(segment.id, `{{intro:${entity.key}}}`)}>{entity.name}</Button>)}
                   {shot.panel.map((key, i) => <Button key={key} variant="border" size="xs" onClick={() => insert(segment.id, `{{ref:${key}}}`)}>№{i + 1} {refByKey.get(key)?.label}</Button>)}
                   {project.lines.map((line) => <Button key={line.id} variant="secondary" size="xs" icon={<Icon name="mic" size={0.875} />} onClick={() => insert(segment.id, `{{line:${line.id}}}`)}>{line.id}</Button>)}
+                  {incoming.map((state) => <Button key={state.id} variant="danger" size="xs" icon={<Icon name="pin" size={0.875} />} onClick={() => insert(segment.id, `{{state:${state.id}}}`)}>{state.id} {state.titleRu}</Button>)}
                 </div>
               </div>
             ))}
@@ -262,6 +267,35 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">Осталось после ремонта: {store.writeReport.remainingRu.join(' · ')}</Text>}
               </div>
             )}
+          </Section>
+
+          <Section n="07" title="Память между кадрами" note="Что случилось в кадре N, должно быть видно в кадре N+1. Пиши сторону, степень и ограничитель — иначе модель нарисует разбитое лицо не с той стороны.">
+            {incoming.length > 0 && (
+              <div className={styles.incoming}>
+                <Text variant="caption" tone="secondary">Пришло из прошлых кадров — обязано стоять в сценарии</Text>
+                {incoming.map((state) => (
+                  <div key={state.id} className={styles.stateRow}>
+                    <Tag tone={shot.segments.some((s) => s.text.en.includes(`{{state:${state.id}}}`)) ? 'success' : 'danger'} dot>{state.id}</Tag>
+                    <Text variant="label">{state.titleRu || state.en}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
+            {outcomes.map((state) => (
+              <div key={state.id} className={styles.segment}>
+                <div className={styles.segmentHead}>
+                  <Tag tone="danger">{state.id}</Tag>
+                  <Text variant="label" medium>Последствие этого кадра</Text>
+                  <span className={styles.spacer} />
+                  <Button variant="ghost" size="xs" iconOnly aria-label="Удалить последствие" icon={<Icon name="bin" size={1} />} onClick={() => store.update((p) => ({ ...p, states: p.states.filter((s) => s.id !== state.id) }))} />
+                </div>
+                <TextField label="Что случилось (по-русски, для себя)" placeholder="Синяк на правой щеке после удара ногой" value={state.titleRu} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, titleRu: event.target.value } : s)) }))} />
+                <TextField multiline label="Каноническая фраза для следующих кадров (английский)" placeholder="Alexander's face shows a slight redness and a small scrape on the right side only — a mark from a recent hit, no blood, no cut, just a light bruise forming under the skin." value={state.en} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, en: event.target.value } : s)) }))} helper="Агент вставляет эту фразу буква в букву и не перефразирует: сторона, степень, «no blood, no cut»." />
+              </div>
+            ))}
+            <div className={styles.row}>
+              <Button variant="secondary" size="s" icon={<Icon name="pin" />} onClick={() => store.update((p) => ({ ...p, states: [...p.states, { id: nextStateId, titleRu: '', en: '', originShotId: shot.id, resolvedInShotId: null }] }))}>Последствие кадра</Button>
+            </div>
           </Section>
         </div>
 

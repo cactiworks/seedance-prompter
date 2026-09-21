@@ -33,6 +33,9 @@ interface State {
   createProject: (title: string) => Promise<void>;
   openProject: (slug: string) => Promise<void>;
   closeProject: () => void;
+  selectShot: (shotId: string) => void;
+  /** Новый кадр наследует комплект, правила и панель текущего: мир ролика общий. */
+  addShot: () => void;
   /** Единственный способ менять проект: чистая функция над документом, автосейв сам. */
   update: (recipe: (project: Project) => Project) => void;
   updateShot: (recipe: (shot: Shot) => Shot) => void;
@@ -123,6 +126,36 @@ export const useStore = create<State>((set, get) => {
     closeProject: () => {
       set({ project: null, shotId: null });
       void get().loadProjects();
+    },
+
+    selectShot: (shotId) => set({ shotId, writeReport: null }),
+
+    addShot: () => {
+      const { project, shotId } = get();
+      if (project === null) return;
+      const base = project.shots.find((shot) => shot.id === shotId) ?? project.shots.at(-1);
+      const id = `shot-${Date.now().toString(36)}`;
+      get().update((p) => ({
+        ...p,
+        shots: [
+          ...p.shots,
+          {
+            id,
+            title: `Кадр ${p.shots.length + 1}`,
+            kitId: base?.kitId ?? 'arri-alexa35-cooke-s4i',
+            defects: null,
+            behavior: base?.behavior ?? ['real-human', 'no-staged', 'micro-expressions', 'subtle-movement'],
+            operatorRule: base?.operatorRule ?? 'long',
+            locationRule: base?.locationRule ?? 'short',
+            panel: base?.panel ?? [],
+            locationRefs: base?.locationRefs ?? [],
+            roleSplit: null,
+            segments: [{ id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: { ru: '', en: '', source: 'empty', locked: false } }],
+            suppressed: [],
+          },
+        ],
+      }));
+      set({ shotId: id, writeReport: null });
     },
 
     update: (recipe) => {

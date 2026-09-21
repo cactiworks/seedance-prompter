@@ -48,8 +48,23 @@ export const StateSchema = z.object({
   titleRu: z.string().default(''),
   /** Каноническое предложение: сторона, степень, ограничитель. */
   en: z.string(),
+  /** Кадр, в котором это случилось. Состояние обязательно во всех следующих кадрах, пока не снято. */
   originShotId: z.string().nullable().default(null),
+  /** Кадр, начиная с которого состояние больше не действует (синяк прошёл, машину починили). */
+  resolvedInShotId: z.string().nullable().default(null),
 });
+export type ContinuityState = z.infer<typeof StateSchema>;
+
+/** Состояния, действующие в кадре: возникли раньше по порядку кадров и ещё не сняты. */
+export function activeStates(project: { shots: { id: string }[]; states: ContinuityState[] }, shotId: string): ContinuityState[] {
+  const order = new Map(project.shots.map((shot, index) => [shot.id, index]));
+  const here = order.get(shotId) ?? 0;
+  return project.states.filter((state) => {
+    const from = state.originShotId === null ? -1 : (order.get(state.originShotId) ?? -1);
+    const until = state.resolvedInShotId === null ? Infinity : (order.get(state.resolvedInShotId) ?? Infinity);
+    return from < here && here < until;
+  });
+}
 
 export const SegmentSchema = z.object({
   id: z.string(),
