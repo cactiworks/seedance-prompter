@@ -60,6 +60,30 @@ interface State {
   proposeFix: (attemptN: number) => Promise<void>;
   acceptProposal: (segmentId: string) => void;
   dismissProposal: (segmentId: string) => void;
+  /** Vision-анализ референса — только по кнопке: картинка уходит в Anthropic. */
+  analyzing: string | null;
+  visionReports: Record<string, VisionReport>;
+  analyzeRef: (refKey: string) => Promise<void>;
+  applyVisionFlags: (refKey: string) => void;
+}
+
+export interface VisionReport {
+  ok: boolean;
+  summaryRu: string;
+  risksRu: string[];
+  clothingEn: string;
+  flags: { hasPeople: boolean; hasText: boolean; studioBackdrop: boolean } | null;
+}
+
+/** Уменьшенная копия ≤1568 px для vision: без нативных зависимостей на сервере, меньше токенов. */
+export async function downscale(file: File, maxSide = 1568): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob === null ? reject(new Error('Не удалось уменьшить картинку.')) : resolve(blob)), 'image/jpeg', 0.86));
 }
 
 export interface SymptomCatalog {
@@ -291,6 +315,30 @@ export const useStore = create<State>((set, get) => {
     dismissProposal: (segmentId) => {
       const { proposals } = get();
       if (proposals !== null) set({ proposals: { ...proposals, items: proposals.items.filter((p) => p.segmentId !== segmentId) } });
+    },
+
+    analyzing: null,
+    visionReports: {},
+
+    analyzeRef: async (refKey) => {
+      const { project } = get();
+      if (project === null || get().analyzing !== null) return;
+      set({ analyzing: refKey });
+      try {
+        const res = await fetch('/api/llm/vision', { method: 'POST', headers: HEADERS, body: JSON.stringify({ slug: project.slug, refKey }) });
+        const { report, flags } = await json<{ report: { summaryRu: string; risksRu: string[]; clothingEn?: string }; flags: VisionReport['flags'] }>(res);
+        set({ visionReports: { ...get().visionReports, [refKey]: { ok: true, summaryRu: report.summaryRu, risksRu: report.risksRu, clothingEn: report.clothingEn ?? '', flags } } });
+      } catch (cause) {
+        set({ visionReports: { ...get().visionReports, [refKey]: { ok: false, summaryRu: cause instanceof Error ? cause.message : String(cause), risksRu: [], clothingEn: '', flags: null } } });
+      } finally {
+        set({ analyzing: null });
+      }
+    },
+
+    applyVisionFlags: (refKey) => {
+      const flags = get().visionReports[refKey]?.flags;
+      if (flags === null || flags === undefined) return;
+      get().update((p) => ({ ...p, refs: p.refs.map((r) => (r.key === refKey ? { ...r, flags } : r)) }));
     },
 
     planning: false,

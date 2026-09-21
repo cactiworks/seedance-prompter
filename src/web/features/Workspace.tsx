@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildShot, type PackBundle } from '../../core/pipeline.ts';
 import { activeStates, emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
-import { currentShot, slugify, useStore } from '../store.ts';
+import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
 import styles from './Workspace.module.css';
 
@@ -51,6 +51,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const project = store.project;
   const shot = useStore(currentShot);
   const [copied, setCopied] = useState(false);
+  const [visionAgreed, setVisionAgreed] = useState(false);
   const [newRef, setNewRef] = useState<{ label: string; kind: Ref['kind'] }>({ label: '', kind: 'location' });
   const areas = useRef(new Map<string, HTMLTextAreaElement>());
   const fileInputs = useRef(new Map<string, HTMLInputElement>());
@@ -109,7 +110,16 @@ export function Workspace({ pack }: { pack: PackBundle }) {
     const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase().replace('jpeg', 'jpg');
     const fileName = `${ref.key}.${['jpg', 'png', 'webp'].includes(ext) ? ext : 'jpg'}`;
     await store.uploadRef(file, fileName);
+    // Уменьшенная копия для vision-анализа: сама никуда не уходит, пока владелец не нажмёт «Анализ».
+    await downscale(file).then((blob) => store.uploadRef(new File([blob], `${ref.key}-vision.jpg`), `${ref.key}-vision.jpg`)).catch(() => undefined);
     store.update((p) => ({ ...p, refs: p.refs.map((r) => (r.key === ref.key ? { ...r, file: `${fileName}?v=${Date.now()}` } : r)) }));
+  };
+
+  // Гейт «наружу»: картинка уходит в Anthropic только после явного согласия, один раз на сессию.
+  const confirmVision = (key: string): void => {
+    if (!visionAgreed && !window.confirm('Уменьшенная копия этой картинки уйдёт в Anthropic для анализа (тот же получатель, что у сессий Claude Code). На референсе может быть твоё лицо. Отправить?')) return;
+    setVisionAgreed(true);
+    void store.analyzeRef(key);
   };
 
   const copy = async (): Promise<void> => {
@@ -176,11 +186,40 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                       <Button variant="ghost" size="xs" iconOnly aria-label="Правее" icon={<Icon name="chevron-forward" size={1} />} disabled={index === shot.panel.length - 1} onClick={() => moveRef(key, 1)} />
                       <Button variant="ghost" size="xs" iconOnly aria-label="Убрать из панели" icon={<Icon name="close" size={1} />} onClick={() => removeFromPanel(key)} />
                     </div>
+                    {ref.file !== null && (
+                      <Button variant="soft" size="xs" icon={<Icon name="eye" size={0.875} />} loading={store.analyzing === key} disabled={store.analyzing !== null && store.analyzing !== key} onClick={() => confirmVision(key)}>
+                        Анализ
+                      </Button>
+                    )}
+                    {(ref.flags.hasPeople || ref.flags.hasText || ref.flags.studioBackdrop) && (
+                      <div className={styles.flags}>
+                        {ref.flags.hasPeople && <Tag tone="warning">люди</Tag>}
+                        {ref.flags.hasText && <Tag tone="warning">текст</Tag>}
+                        {ref.flags.studioBackdrop && <Tag tone="info">студия</Tag>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
               {shot.panel.length === 0 && <div className={`${styles.stripEmpty} lab-hatch`}><Text variant="label" tone="tertiary">Панель пуста. Добавь референс локации — без него промпт не соберётся.</Text></div>}
             </div>
+            {shot.panel.filter((key) => store.visionReports[key] !== undefined).map((key) => {
+              const report = store.visionReports[key];
+              if (report === undefined) return null;
+              return (
+                <div key={key} className={`${styles.report} ${report.ok ? '' : styles.reportBad}`}>
+                  <Text variant="label" medium>{refByKey.get(key)?.label}: {report.summaryRu}</Text>
+                  {report.risksRu.map((risk, i) => <Text key={i} variant="label" tone="secondary">— {risk}</Text>)}
+                  {report.clothingEn !== '' && <Text variant="caption" tone="tertiary" mono>{report.clothingEn}</Text>}
+                  {report.flags !== null && (
+                    <div className={styles.row}>
+                      <Text variant="caption" tone="tertiary">Флаги кормят линтер и клаузу «do not take the background». Ничего не применяется само.</Text>
+                      <Button variant="secondary" size="xs" onClick={() => store.applyVisionFlags(key)}>Применить флаги</Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <div className={styles.addRow}>
               <TextField label="Новый референс" placeholder="Набережная, Alexander, пикап…" value={newRef.label} onChange={(event) => setNewRef({ ...newRef, label: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && addRef()} />
               <Select label="Что это" value={newRef.kind} onChange={(kind) => setNewRef({ ...newRef, kind: kind as Ref['kind'] })} options={Object.entries(KIND_RU).map(([value, label]) => ({ value, label }))} />

@@ -399,6 +399,12 @@
   justify-self: start;
 }
 
+.flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-2);
+}
+
 /* синопсис и мир */
 .synopsis {
   display: flex;

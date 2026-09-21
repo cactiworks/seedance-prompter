@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
+import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { newProject, ProjectSchema } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
@@ -145,6 +146,36 @@ export function createApp(options: AppOptions) {
       }
     })
     .get('/api/packs/:id/symptoms', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', c.req.param('id'), 'symptoms.json'), 'utf8')) as unknown))
+    // Vision-анализ одного референса — только по кнопке: картинка уходит в Anthropic.
+    // Отправляется уменьшенная копия <key>-vision.jpg, которую браузер делает при загрузке.
+    .post('/api/llm/vision', async (c) => {
+      const body = (await c.req.json()) as { slug?: string; refKey?: string };
+      const project = await store.read(body.slug ?? '');
+      const ref = project.refs.find((r) => r.key === body.refKey);
+      if (ref === undefined || ref.file === null) return c.json({ error: 'NO_IMAGE', messageRu: 'У референса нет картинки.' }, 422);
+      let bytes: Uint8Array;
+      try {
+        bytes = await store.readRef(project.slug, `${ref.key}-vision.jpg`);
+      } catch {
+        return c.json({ error: 'NO_VISION_COPY', messageRu: 'Нет уменьшенной копии для анализа — загрузи картинку референса заново.' }, 422);
+      }
+      try {
+        const result = await (options.runLlm ?? runClaude)<VisionOutput>({
+          system: VISION_SYSTEM,
+          user: buildVisionUser(ref),
+          images: [{ mediaType: 'image/jpeg', base64: Buffer.from(bytes).toString('base64') }],
+          jsonSchema: VISION_SCHEMA,
+          model: process.env.SP_VISION_MODEL ?? 'sonnet',
+          effort: 'low',
+          timeoutMs: 90_000,
+          signal: c.req.raw.signal,
+        });
+        return c.json({ report: result.data, flags: flagsFromVision(result.data, ref.kind), meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        throw error;
+      }
+    })
     // Планировщик: русский синопсис кадра → отрезки по времени. Реплики вынуты из синопсиса заранее.
     .post('/api/llm/plan', async (c) => {
       const body = (await c.req.json()) as { project?: unknown; synopsisRu?: string };

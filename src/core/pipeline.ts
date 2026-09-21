@@ -105,6 +105,20 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     }
   }
 
+  // Риски референсов — по флагам, которые ставит владелец или vision-анализ.
+  for (const key of shot.panel) {
+    const ref = project.refs.find((r) => r.key === key);
+    if (ref === undefined) continue;
+    const drafts: Pick<Finding, 'ruleId' | 'severity' | 'messageRu' | 'fixHintRu'>[] = [];
+    if (ref.flags.hasText) drafts.push({ ruleId: 'REF_TEXT_ON_REF', severity: 'warning', messageRu: `На референсе «${ref.label}» есть читаемый текст — надписи могут просочиться в кадр.`, fixHintRu: 'Гайд, панель Кадра 1: карточка со спецификациями ненадёжна, чистое фото предмета лучше.' });
+    if (ref.flags.hasPeople && ref.kind !== 'location' && ref.kind !== 'character') drafts.push({ ruleId: 'REF_PEOPLE_ON_OBJECT_REF', severity: 'warning', messageRu: `На референсе предмета «${ref.label}» есть человек — модель может забрать и его.`, fixHintRu: 'Гайд: у пикапа рядом стоял человек — нужна оговорка «only the vehicle» или картинка без людей.' });
+    if (ref.flags.studioBackdrop && !project.entities.some((e) => e.refKey === ref.key)) drafts.push({ ruleId: 'REF_STUDIO_BACKDROP', severity: 'warning', messageRu: `У «${ref.label}» студийный задник, а сущности с этим референсом нет — клаузу «do not take the background» поставить некуда.`, fixHintRu: 'Привяжи референс к герою в секции «Герои и предметы» и вводи его кнопкой-плейсхолдером.' });
+    for (const draft of drafts) {
+      const fingerprint = `${draft.ruleId}:${ref.key}`;
+      if (!suppressed.has(fingerprint)) findings.push({ ...draft, family: 'refs', paragraph: null, range: null, evidence: ref.label, fingerprint });
+    }
+  }
+
   // Какие картинки панели реально вызваны: {{ref:key}} напрямую, {{intro:key}} — через референс сущности.
   const used = new Set<string>();
   for (const match of source.matchAll(/\{\{(ref|intro):([^}]+)\}\}/g)) {
