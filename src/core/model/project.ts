@@ -88,6 +88,8 @@ export const ShotSchema = z.object({
   panel: z.array(key).default([]),
   locationRefs: z.array(key).max(2).default([]),
   roleSplit: z.object({ cameraRef: key, lensRef: key, cameraHolder: z.string(), lensHolder: z.string(), propsEn: z.string() }).nullable().default(null),
+  /** Кадр свободным русским текстом — вход планировщика. Реплики в «ёлочках» вынимаются как L-id. */
+  synopsisRu: z.string().default(''),
   segments: z.array(SegmentSchema).default([]),
   /** Отпечатки подавленных находок линтера с причиной. */
   suppressed: z.array(z.object({ fingerprint: z.string(), reasonRu: z.string().min(1) })).default([]),

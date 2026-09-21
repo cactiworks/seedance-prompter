@@ -188,6 +188,10 @@ export function Workspace({ pack }: { pack: PackBundle }) {
           </Section>
 
           <Section n="03" title="Локация и погода" note="Погода должна давать физику: мокрый асфальт, отражения, пар, ветер. Свет — событие, а не состояние.">
+            <div className={styles.pair}>
+              <TextField label="Место по-русски" placeholder="Набережная Москвы-реки у парковки, вдали высотка МГУ" value={project.world.place.ru} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, place: { ...p.world.place, ru: event.target.value } } }))} />
+              <TextField multiline label="Погода и свет по-русски" placeholder="Дождь только закончился, выходит солнце. Мокрый асфальт, лужи, лёгкий ветер." value={project.world.weather.ru} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, weather: { ...p.world.weather, ru: event.target.value } } }))} helper="Агент переведёт оба поля, когда будет раскладывать кадр, — если английские ниже пусты." />
+            </div>
             <TextField label="Место (английский, в промпт)" placeholder="the embankment of the Moskva River near the parking area" value={project.world.place.en} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, place: { ...p.world.place, en: event.target.value, source: 'manual', locked: true } } }))} helper="Продолжает фразу «Location: exactly as in <<<image_1>>> — …»" />
             <TextField label="Что брать с референса" value={project.world.useOnlyEn} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, useOnlyEn: event.target.value } }))} helper="Людей с референса промпт игнорирует сам — это дословная формула гайда." />
             <TextField multiline label="Погода, физика, базовый свет (английский)" placeholder="The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky…" value={project.world.weather.en} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, weather: { ...p.world.weather, en: event.target.value, source: 'manual', locked: true } } }))} />
@@ -221,6 +225,20 @@ export function Workspace({ pack }: { pack: PackBundle }) {
           </Section>
 
           <Section n="06" title="Сценарий по таймлайну" note="Абзац = отрезок времени. Одно главное действие в абзаце; 4–6 крупных событий на 30 секунд.">
+            <div className={styles.synopsis}>
+              <TextField multiline label="Кадр своими словами" placeholder="Alexander стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, John встаёт в стойку, начинается спарринг…" value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper="Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий." />
+              <div className={styles.row}>
+                <Text variant="caption" tone="tertiary">{shot.segments.some((s) => s.beatsRu.trim() !== '' || s.text.en.trim() !== '') ? 'Текущие отрезки будут заменены.' : ''}</Text>
+                <Button variant="soft" size="s" icon={<Icon name="layers" />} loading={store.planning} disabled={shot.synopsisRu.trim() === ''} onClick={() => void store.planShot()}>
+                  {store.planning ? 'Раскладываю…' : 'Разложить по отрезкам'}
+                </Button>
+              </div>
+              {store.planReport !== null && (
+                <div className={`${styles.report} ${store.planReport.ok ? '' : styles.reportBad}`}>
+                  <Text variant="label" tone="secondary">{store.planReport.messageRu}</Text>
+                </div>
+              )}
+            </div>
             {shot.segments.map((segment, index) => (
               <div key={segment.id} className={styles.segment}>
                 <div className={styles.segmentHead}>

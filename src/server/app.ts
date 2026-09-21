@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
+import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { newProject, ProjectSchema } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
@@ -113,6 +114,31 @@ export function createApp(options: AppOptions) {
       } catch (error) {
         if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
         return c.json({ error: 'WRITE_FAILED', messageRu: error instanceof Error ? error.message : 'Писатель не сработал.' }, 422);
+      }
+    })
+    // Планировщик: русский синопсис кадра → отрезки по времени. Реплики вынуты из синопсиса заранее.
+    .post('/api/llm/plan', async (c) => {
+      const body = (await c.req.json()) as { project?: unknown; synopsisRu?: string };
+      const project = ProjectSchema.parse(body.project);
+      const { text, newLines } = extractLines(body.synopsisRu ?? '', project.lines);
+      if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
+      const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
+      const translate = { place: project.world.place.en.trim() === '' && project.world.place.ru.trim() !== '', weather: project.world.weather.en.trim() === '' && project.world.weather.ru.trim() !== '' };
+      const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/planner.system.md'), 'utf8');
+      const run = options.runLlm ?? runClaude;
+      const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
+      try {
+        const user = buildPlannerUser(project, text, lineIds, translate);
+        let result = await run<PlannerOutput>({ ...request, user });
+        let problems = validatePlan(result.data, lineIds);
+        if (problems.length > 0) {
+          result = await run<PlannerOutput>({ ...request, user: `${user}\n\nYour previous plan was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious plan:\n${JSON.stringify(result.data)}` });
+          problems = validatePlan(result.data, lineIds);
+        }
+        return c.json({ plan: result.data, newLines, problems, meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        throw error;
       }
     })
     .get('/api/projects/:slug/refs/:file', async (c) => {

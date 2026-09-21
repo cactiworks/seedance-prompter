@@ -45,6 +45,17 @@ interface State {
   writeReport: WriteReport | null;
   writeShot: () => Promise<void>;
   cancelWrite: () => void;
+  /** Планировщик: синопсис кадра → отрезки. Непустые отрезки заменяются только с согласия владельца. */
+  planning: boolean;
+  planReport: { ok: boolean; messageRu: string } | null;
+  planShot: () => Promise<void>;
+}
+
+interface PlanResponse {
+  plan: { segments: { titleRu: string; beatsRu: string }[]; placeEn: string; weatherEn: string; notesRu: string };
+  newLines: { id: string; ru: string }[];
+  problems: string[];
+  meta: { durationMs: number; model: string | null };
 }
 
 export interface WriteReport {
@@ -150,6 +161,7 @@ export const useStore = create<State>((set, get) => {
             panel: base?.panel ?? [],
             locationRefs: base?.locationRefs ?? [],
             roleSplit: null,
+            synopsisRu: '',
             segments: [{ id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: { ru: '', en: '', source: 'empty', locked: false } }],
             suppressed: [],
           },
@@ -203,6 +215,37 @@ export const useStore = create<State>((set, get) => {
     },
 
     cancelWrite: () => writeAbort?.abort(),
+
+    planning: false,
+    planReport: null,
+
+    planShot: async () => {
+      const { project, shotId } = get();
+      const shot = project?.shots.find((s) => s.id === shotId);
+      if (project === null || shot === undefined || get().planning) return;
+      set({ planning: true, planReport: null });
+      try {
+        const res = await fetch('/api/llm/plan', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, synopsisRu: shot.synopsisRu }) });
+        const { plan, newLines, problems, meta } = await json<PlanResponse>(res);
+        const stamp = Date.now().toString(36);
+        get().update((p) => ({
+          ...p,
+          // Реплики из «ёлочек» синопсиса — буква в букву, невычитанные: галочку ставит владелец.
+          lines: [...p.lines, ...newLines.map((l) => ({ id: l.id, speakerKey: null, ru: l.ru, proofread: false }))],
+          world: {
+            ...p.world,
+            place: plan.placeEn.trim() !== '' && p.world.place.en.trim() === '' ? { ...p.world.place, en: plan.placeEn.trim(), source: 'llm' } : p.world.place,
+            weather: plan.weatherEn.trim() !== '' && p.world.weather.en.trim() === '' ? { ...p.world.weather, en: plan.weatherEn.trim(), source: 'llm' } : p.world.weather,
+          },
+          shots: p.shots.map((s) => (s.id === shotId ? { ...s, segments: plan.segments.map((seg, i) => ({ id: `seg-${stamp}-${i + 1}`, titleRu: seg.titleRu, beatsRu: seg.beatsRu, text: { ru: '', en: '', source: 'empty' as const, locked: false } })) } : s)),
+        }));
+        set({ planReport: { ok: problems.length === 0, messageRu: `Отрезков: ${plan.segments.length} · новых реплик: ${newLines.length} · ${Math.round(meta.durationMs / 1000)} с. ${plan.notesRu}${problems.length > 0 ? ` Осталось: ${problems.join(' ')}` : ''}` } });
+      } catch (cause) {
+        set({ planReport: { ok: false, messageRu: cause instanceof Error ? cause.message : String(cause) } });
+      } finally {
+        set({ planning: false });
+      }
+    },
 
     uploadRef: async (file, fileName) => {
       const { project } = get();
