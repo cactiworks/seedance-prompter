@@ -69,6 +69,7 @@
   min-width: 0;
   min-height: 5.5rem;
   max-height: 28rem;
+
   /* Поле растёт по содержимому: абзац агента на 150 слов должен читаться целиком. */
   field-sizing: content;
   padding: var(--lab-space-6) 0;
