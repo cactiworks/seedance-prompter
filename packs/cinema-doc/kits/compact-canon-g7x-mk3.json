@@ -1,0 +1,26 @@
+{
+ "id": "compact-canon-g7x-mk3",
+ "titleRu": "Цифровой компакт (Canon G7 X Mark III) — хорошая «мыльница», чистая бытовая цифра",
+ "anchor": "Canon PowerShot G7 X Mark III compact camera with its built-in 24-100mm f/1.8-2.8 zoom lens",
+ "look": "1-inch sensor consumer digital look, moderately deep depth of field with a soft background only at the long end of the zoom, clean daylight colors with slightly warm skin tones, in-camera sharpening, fine luminance noise in the shadows, highlights clipping a little early on bright sky and wet surfaces, mild barrel distortion at the wide end, a small soft flare and a faint veil of glare when the sun is near the edge of the frame, stepped motorized zoom, built-in stereo microphone picking up handling noise and wind",
+ "lensNote": null,
+ "layout": "compact",
+ "defaultDefects": [
+  "ae-jumps",
+  "focus-hunting",
+  "af-breathes",
+  "zoom-jerks",
+  "horizon-slight",
+  "hand-repositioning",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "Canon",
+  "PowerShot",
+  "G7 X",
+  "compact camera",
+  "1-inch sensor"
+ ],
+ "source": "derived",
+ "noteRu": "Не из гайда: характер собран по свойствам техники и генерацией ещё не проверен."
+}

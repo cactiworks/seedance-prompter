@@ -33,6 +33,9 @@ export interface Kit {
   effectsList?: string;
   defaultDefects: string[];
   signatureTerms: string[];
+  /** guide — формулировки дословно из гайда; derived — собраны по свойствам техники, генерацией не проверены. */
+  source?: 'guide' | 'derived' | 'custom';
+  noteRu?: string;
 }
 
 export interface ShotCompileInput {
@@ -65,7 +68,7 @@ export interface CompiledParagraph {
 }
 
 export interface CompileIssue {
-  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'ROLE_SPLIT_REQUIRED' | 'EMPTY_SEGMENT';
+  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'EMPTY_SEGMENT';
   messageRu: string;
 }
 
@@ -101,12 +104,14 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
       text: `${pack.format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}, ${kit.look ?? ''}.${lensNote} ${tail}`,
     });
   } else {
-    // Раскладка с разделением ролей: снимающая техника отделена от такой же техники-реквизита.
-    if (input.roleSplit === undefined) {
-      issues.push({ code: 'ROLE_SPLIT_REQUIRED', messageRu: `Комплект «${kit.id}» собирается с разделением ролей: укажи, кто держит камеру и объектив-реквизит.` });
-    }
+    // Раскладка с отдельными абзацами камеры, объектива и блика. Разделение ролей нужно, только когда
+    // в кадре есть такая же техника-реквизит (приём 06); без реквизита якорь техники стоит в первом абзаце.
     const role = input.roleSplit;
-    paragraphs.push({ kind: 'format', layers: [1, 2], origin: 'verbatim', text: `${pack.format}, ${pack.handheld}.` });
+    paragraphs.push(
+      role === undefined
+        ? { kind: 'format', layers: [1, 2, 3], origin: 'verbatim', text: `${pack.format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}.` }
+        : { kind: 'format', layers: [1, 2], origin: 'verbatim', text: `${pack.format}, ${pack.handheld}.` },
+    );
     if (role !== undefined) {
       paragraphs.push({
         kind: 'role-shooting',
@@ -146,7 +151,7 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
       `${fill(pack.location.rule[input.locationRule], refs)}.`,
       fill(pack.location.useOnly, { LIST: input.world.useOnlyEn }),
       input.world.weatherEn,
-    ].join(' '),
+    ].filter((part) => part !== '').join(' '),
   });
 
   for (const segment of input.segments) {

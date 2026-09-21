@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compileShot, joinParagraphs, type Kit, type ShotCompileInput, type VerbatimPack } from '../../src/core/compile/compile.ts';
@@ -118,11 +118,29 @@ describe('комплект — одна переменная', () => {
     expect(parsed.panel).toHaveLength(7);
   });
 
-  it('split-комплект без разделения ролей не собирается молча', () => {
+  it('RED без реквизита в кадре собирается: якорь техники в первом абзаце, абзацев разделения ролей нет', () => {
     const base = CASES[2]?.input([], 'x');
     if (base === undefined) throw new Error('нет кейса');
     const { roleSplit: _omit, ...withoutRoles } = base;
-    expect(compileShot(withoutRoles, pack).issues.map((i) => i.code)).toContain('ROLE_SPLIT_REQUIRED');
+    const compiled = compileShot(withoutRoles, pack);
+    expect(compiled.issues).toEqual([]);
+    expect(compiled.paragraphs[0]?.text).toContain('no stabilization whatsoever, shot on RED V-RAPTOR 8K VV with Laowa Proteus 2x Anamorphic lenses.');
+    expect(compiled.paragraphs.map((p) => p.kind)).toEqual(['format', 'camera', 'lens', 'flare', 'imperfections', 'operator-rule', 'location']);
+  });
+
+  it('комплекты не из гайда помечены и собираются той же формулой стиль-блока', () => {
+    const base = CASES[1]?.input([], 'Dry asphalt.');
+    if (base === undefined) throw new Error('нет кейса');
+    for (const id of ['phone-iphone-15-pro', 'compact-canon-g7x-mk3', 'camcorder-sony-minidv']) {
+      const derived = kit(id);
+      expect(derived.source, id).toBe('derived');
+      const compiled = compileShot({ ...base, kit: derived }, pack);
+      expect(compiled.issues, id).toEqual([]);
+      const style = compiled.paragraphs[0]?.text ?? '';
+      expect(style, id).toContain(`shot on ${derived.anchor}, ${derived.look}. Natural exposure shifts, `);
+      expect(style, id).not.toMatch(/\.\./);
+    }
+    expect(kit('sony-venice2-zeiss-supreme').source).toBe('guide');
   });
 
   it('собранное с нуля проходит линтер без ошибок', () => {
@@ -144,7 +162,9 @@ describe('verbatim.lock: формулировки гайда нельзя «ул
       else if (value !== null && typeof value === 'object') for (const [k, v] of Object.entries(value)) walk(`${prefix}.${k}`, v);
     };
     walk('verbatim', pack);
-    const kits = Object.fromEntries(['arri-alexa35-cooke-s4i', 'sony-venice2-zeiss-supreme', 'red-vraptor-laowa-proteus'].map((id) => {
+    const kitIds = readdirSync(path.join(ROOT, 'packs/cinema-doc/kits')).map((file) => file.replace(/\.json$/, ''));
+    expect(kitIds.length).toBeGreaterThanOrEqual(6);
+    const kits = Object.fromEntries(kitIds.map((id) => {
       const { id: _id, ...rest } = kit(id) as Kit & { id: string };
       return [id, rest];
     }));

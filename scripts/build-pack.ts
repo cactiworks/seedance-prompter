@@ -170,6 +170,50 @@ const kits = {
   },
 };
 
+// ---------- комплекты не из гайда ----------
+// Характер собран по свойствам самой техники в манере гайда (перечень через запятую, без финальной точки).
+// Генерациями не проверены — интерфейс помечает их отдельно. Стек дефектов берётся из каталога гайда.
+const DERIVED_NOTE = 'Не из гайда: характер собран по свойствам техники и генерацией ещё не проверен.';
+const derivedKits = {
+  'phone-iphone-15-pro': {
+    titleRu: 'Телефон (iPhone 15 Pro) — максимально натуральная бытовая съёмка',
+    anchor: 'iPhone 15 Pro main camera, 24mm equivalent at f/1.78',
+    look: 'smartphone footage straight out of the camera app, deep depth of field with almost everything in focus, computational HDR that lifts the shadows and flattens bright skies, slight oversharpening on edges and hair, noise reduction smearing fine texture in the shadows, punchy but natural colors, auto white balance drifting when the light changes, small bright ghost dots and thin streaks when a light source hits the lens, rolling shutter wobble on fast pans, compressed phone-microphone sound',
+    lensNote: null,
+    layout: 'compact',
+    defaultDefects: ['ae-jumps', 'focus-hunting', 'horizon-slight', 'hand-repositioning', 'breathing'],
+    signatureTerms: ['iPhone', 'smartphone', 'computational HDR', 'rolling shutter wobble'],
+    source: 'derived',
+    noteRu: DERIVED_NOTE,
+  },
+  'compact-canon-g7x-mk3': {
+    titleRu: 'Цифровой компакт (Canon G7 X Mark III) — хорошая «мыльница», чистая бытовая цифра',
+    anchor: 'Canon PowerShot G7 X Mark III compact camera with its built-in 24-100mm f/1.8-2.8 zoom lens',
+    look: '1-inch sensor consumer digital look, moderately deep depth of field with a soft background only at the long end of the zoom, clean daylight colors with slightly warm skin tones, in-camera sharpening, fine luminance noise in the shadows, highlights clipping a little early on bright sky and wet surfaces, mild barrel distortion at the wide end, a small soft flare and a faint veil of glare when the sun is near the edge of the frame, stepped motorized zoom, built-in stereo microphone picking up handling noise and wind',
+    lensNote: null,
+    layout: 'compact',
+    defaultDefects: ['ae-jumps', 'focus-hunting', 'af-breathes', 'zoom-jerks', 'horizon-slight', 'hand-repositioning', 'breathing'],
+    signatureTerms: ['Canon', 'PowerShot', 'G7 X', 'compact camera', '1-inch sensor'],
+    source: 'derived',
+    noteRu: DERIVED_NOTE,
+  },
+  'camcorder-sony-minidv': {
+    titleRu: 'Видеокамера MiniDV (Sony Handycam) — домашнее видео 2000-х',
+    anchor: 'Sony Handycam MiniDV camcorder with its built-in zoom lens',
+    look: 'early-2000s standard-definition home video look, soft interlaced detail, fine texture smeared, oversaturated reds bleeding slightly, hard clipping in blown highlights, a vertical smear of light from bright sources, heavy noise in dim areas, deep depth of field, motorized zoom with an audible servo, thin built-in microphone sound with a faint tape-mechanism hum',
+    lensNote: null,
+    layout: 'compact',
+    defaultDefects: ['ae-jumps', 'focus-hunting', 'af-breathes', 'zoom-jerks', 'horizon-slight', 'hand-repositioning', 'breathing'],
+    signatureTerms: ['Handycam', 'MiniDV', 'camcorder', 'home video'],
+    source: 'derived',
+    noteRu: DERIVED_NOTE,
+  },
+};
+for (const kit of Object.values(derivedKits)) {
+  if (/[.!?]\s*$/.test(kit.look)) throw new Error(`характер «${kit.titleRu}» не должен кончаться точкой — её ставит сборка`);
+  for (const id of kit.defaultDefects) if (DEFECTS[id] === undefined) throw new Error(`нет дефекта ${id}`);
+}
+
 // Самопроверка нарезки: хвосты К1 и К3 собираются из каталога побайтно.
 const join = (ids: string[], catalog: Record<string, string>): string => ids.map((id) => catalog[id]).join(', ');
 const checkTail = (label: string, expected: string | undefined, ids: string[]): void => {
@@ -182,7 +226,8 @@ if (k3Format.handheld !== k2Style.handheld || k3Format.format !== k2Style.format
 
 mkdirSync(path.join(PACK, 'kits'), { recursive: true });
 writeFileSync(path.join(PACK, 'verbatim.json'), `${JSON.stringify(verbatimPack, null, 1)}\n`);
-for (const [id, kit] of Object.entries(kits)) writeFileSync(path.join(PACK, 'kits', `${id}.json`), `${JSON.stringify({ id, ...kit }, null, 1)}\n`);
+const allKits: Record<string, object> = { ...Object.fromEntries(Object.entries(kits).map(([id, kit]) => [id, { ...kit, source: 'guide' }])), ...derivedKits };
+for (const [id, kit] of Object.entries(allKits)) writeFileSync(path.join(PACK, 'kits', `${id}.json`), `${JSON.stringify({ id, ...kit }, null, 1)}\n`);
 
 const lock: Record<string, string> = {};
 const hashAll = (prefix: string, value: unknown): void => {
@@ -190,8 +235,8 @@ const hashAll = (prefix: string, value: unknown): void => {
   else if (value !== null && typeof value === 'object') for (const [k, v] of Object.entries(value)) hashAll(`${prefix}.${k}`, v);
 };
 hashAll('verbatim', verbatimPack);
-hashAll('kits', kits);
+hashAll('kits', allKits);
 writeFileSync(path.join(PACK, 'verbatim.lock.json'), `${JSON.stringify(lock, null, 1)}\n`);
 
-console.log(`verbatim.json, kits: ${Object.keys(kits).length}, lock: ${Object.keys(lock).length} записей`);
+console.log(`verbatim.json, kits: ${Object.keys(allKits).length}, lock: ${Object.keys(lock).length} записей`);
 console.log(`behavior К1: ${k1Tail.behavior}\nbehavior К2: ${k2Tail.behavior}\nПлейс К2: ${k2Loc.place}\nuseOnly К1: ${k1Loc.useOnly}\nuseOnly К2: ${k2Loc.useOnly}`);

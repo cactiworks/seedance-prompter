@@ -1,7 +1,7 @@
 import { buildValidationContext, buildWriterSystem, buildWriterUser, fixableSegments, writableSegments, WRITER_SCHEMA, type FewShot, type FixBrief } from '../../../core/llm/buildWriter.ts';
 import { validateWriterOutput, type Violation, type WriterOutput } from '../../../core/llm/validate.ts';
 import type { Project, Shot } from '../../../core/model/project.ts';
-import { buildShot, type PackBundle } from '../../../core/pipeline.ts';
+import { buildShot, kitOf, type PackBundle } from '../../../core/pipeline.ts';
 import type { LlmRequest, LlmResult } from '../claudeCli/provider.ts';
 
 export type Runner = <T>(request: LlmRequest) => Promise<LlmResult<T>>;
@@ -41,7 +41,7 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   const { project, pack } = input;
   const shot = project.shots.find((s) => s.id === input.shotId);
   if (shot === undefined) throw new Error(`Нет кадра ${input.shotId}`);
-  const kit = pack.kits[shot.kitId];
+  const kit = kitOf(shot, pack);
   if (kit === undefined) throw new Error(`Нет комплекта ${shot.kitId}`);
 
   const writable = input.fix === undefined ? writableSegments(shot) : fixableSegments(shot);

@@ -94,7 +94,7 @@ export const OP_RULE_MISSING: TextRule = {
     if (hasOperatorRule(ctx)) return [];
     const mentions = ctx.paragraphs.reduce((n, p) => n + matches(p, /\boperator\b/iu).length, 0);
     if (mentions === 0) return [];
-    return [at('OP_RULE_MISSING', 'warning', null, null, `Оператор упомянут ${mentions} раз, а правила чтения в промпте нет.`, 'Вставить блок: «The operator is never visible in frame — no hands, no body, no face. Every mention of the operator refers only to the behavior of the camera.»')];
+    return [at('OP_RULE_MISSING', 'warning', null, null, `Оператор упомянут ${mentions} раз, а правила чтения в промпте нет.`, 'Секция «Как снято» → правило «оператор не виден»: включить «Полное». Оно добавит дословный блок «The operator is never visible in frame… Every mention of the operator refers only to the behavior of the camera.»')];
   },
 };
 

@@ -1,0 +1,25 @@
+{
+ "id": "camcorder-sony-minidv",
+ "titleRu": "Видеокамера MiniDV (Sony Handycam) — домашнее видео 2000-х",
+ "anchor": "Sony Handycam MiniDV camcorder with its built-in zoom lens",
+ "look": "early-2000s standard-definition home video look, soft interlaced detail, fine texture smeared, oversaturated reds bleeding slightly, hard clipping in blown highlights, a vertical smear of light from bright sources, heavy noise in dim areas, deep depth of field, motorized zoom with an audible servo, thin built-in microphone sound with a faint tape-mechanism hum",
+ "lensNote": null,
+ "layout": "compact",
+ "defaultDefects": [
+  "ae-jumps",
+  "focus-hunting",
+  "af-breathes",
+  "zoom-jerks",
+  "horizon-slight",
+  "hand-repositioning",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "Handycam",
+  "MiniDV",
+  "camcorder",
+  "home video"
+ ],
+ "source": "derived",
+ "noteRu": "Не из гайда: характер собран по свойствам техники и генерацией ещё не проверен."
+}

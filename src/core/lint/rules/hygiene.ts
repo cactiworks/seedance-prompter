@@ -23,7 +23,7 @@ export const HYG_PUNCT: TextRule = {
         out.push(at('HYG_PUNCT', 'warning', p, m, `Сбой пунктуации: «${m.text.trim() || m.text}».`, 'Вычитать абзац: модель такие места игнорирует, но рядом с ними обычно лежит потерянный кусок текста.'));
       }
       const last = p.text.trim().slice(-1);
-      if (!/[.!?»"”)]/.test(last)) {
+      if (!/[.!?»"”)}]/.test(last)) {
         const tail = p.text.trim().slice(-40);
         out.push(at('HYG_PUNCT', 'warning', p, { index: p.text.length - tail.length, text: tail }, 'Абзац обрывается без точки — похоже на недокопированный текст.', 'Проверить, что абзац вставлен целиком.'));
       }

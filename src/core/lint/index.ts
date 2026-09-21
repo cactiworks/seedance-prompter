@@ -1,5 +1,5 @@
 import type { Finding, Lexicon, LintParams, RefSyntax, TextLintContext, TextRule } from './types.ts';
-import { extractLines, toParagraphs } from './tokenize.ts';
+import { extractLines, toParagraphs, type DialogueWrap } from './tokenize.ts';
 import * as hygiene from './rules/hygiene.ts';
 import * as refs from './rules/refs.ts';
 import * as operator from './rules/operator.ts';
@@ -18,6 +18,8 @@ export interface LintTextOptions {
   lexicon: Lexicon;
   params: LintParams;
   refSyntax?: RefSyntax;
+  /** Как в тексте оформлены реплики: от этого зависит, что линтер считает русской речью, а что мусором. */
+  dialogueWrap?: DialogueWrap;
   panelSize?: number | null;
   durationSec?: number;
   /** Отпечатки подавленных находок («осознанное исключение»). */
@@ -32,7 +34,8 @@ function fingerprint(ruleId: string, evidence: string): string {
 
 /** Линт готового текста промпта — для вставленных промптов и golden-тестов на промптах гайда. */
 export function lintText(raw: string, options: LintTextOptions): Finding[] {
-  const paragraphs = toParagraphs(raw);
+  const wrap = options.dialogueWrap ?? 'guillemets';
+  const paragraphs = toParagraphs(raw, wrap);
   const boundary = paragraphs.findIndex((p) => /^(?:Location:|The camera is handheld)/u.test(p.text));
   const styleZone = paragraphs.slice(0, boundary === -1 ? 1 : Math.max(1, boundary));
 
@@ -40,7 +43,7 @@ export function lintText(raw: string, options: LintTextOptions): Finding[] {
     raw: paragraphs.map((p) => p.masked).join('\n'),
     paragraphs,
     styleZone,
-    lines: extractLines(paragraphs),
+    lines: extractLines(paragraphs, wrap),
     refSyntax: options.refSyntax ?? 'higgsfield-chip',
     panelSize: options.panelSize ?? null,
     durationSec: options.durationSec ?? options.params.duration.defaultSec,

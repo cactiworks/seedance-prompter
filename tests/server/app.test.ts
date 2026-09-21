@@ -93,14 +93,19 @@ describe('pack отдаётся клиенту, и новый проект со�
   it('buildShot: пустой проект называет блокеры, заполненный — даёт промпт с номерами по панели', async () => {
     const { app } = makeApp();
     const pack = (await (await app.request('/api/packs/cinema-doc', { headers: { host } })).json()) as PackBundle;
-    expect(Object.keys(pack.kits)).toHaveLength(3);
+    // Три комплекта гайда и производные (телефон, компакт, видеокамера) — все с пометкой происхождения.
+    expect(Object.values(pack.kits).filter((kit) => kit.source === 'guide')).toHaveLength(3);
+    expect(Object.values(pack.kits).filter((kit) => kit.source === 'derived').length).toBeGreaterThanOrEqual(2);
 
     const created = await app.request('/api/projects', { method: 'POST', headers: write, body: JSON.stringify({ slug: 'demo', title: 'Демо' }) });
     const project = (await created.json()) as Project;
     const shot = project.shots[0];
     if (shot === undefined) throw new Error('нет кадра');
 
-    expect(buildShot(project, shot, pack).blockers.map((b) => b.code)).toEqual(expect.arrayContaining(['NO_LOCATION_REF', 'NO_PLACE']));
+    const empty = buildShot(project, shot, pack);
+    expect(empty.blockers.map((b) => b.code)).toEqual(expect.arrayContaining(['NO_LOCATION_REF', 'NO_PLACE', 'NO_SCENARIO']));
+    // Отсутствующая локация называется один раз, без технического хвоста про плейсхолдер.
+    expect(empty.blockers.filter((b) => b.messageRu.includes('missing-location-ref'))).toEqual([]);
 
     const filled: Project = {
       ...project,

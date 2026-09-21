@@ -1,0 +1,75 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-8);
+  scroll-margin-top: 6rem;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lab-space-4);
+}
+
+.summary {
+  display: flex;
+  gap: var(--lab-space-3);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lab-space-4);
+}
+
+.group > button {
+  align-self: flex-start;
+}
+
+.finding {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--lab-space-6);
+  padding-top: var(--lab-space-6);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.finding > :first-child {
+  justify-self: start;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  min-width: 0;
+}
+
+.evidence {
+  padding: var(--lab-space-2) var(--lab-space-4);
+  border-radius: var(--lab-radius-s);
+  background: var(--lab-bg-sunken);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lab-space-3);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.suppress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-4);
+  padding-top: var(--lab-space-4);
+}

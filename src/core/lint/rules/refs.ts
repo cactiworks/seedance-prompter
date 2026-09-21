@@ -5,6 +5,9 @@ import { at, matches } from './helpers.ts';
 const CHIP_RE = /<<<image_(\d+)>>>/g;
 const AT_RE = /@image\s?_?(\d+)/gi;
 
+/** Ссылки в синтаксисе самого проекта — по ним считаются номера. */
+const own = (ctx: { refSyntax: string }): RegExp => (ctx.refSyntax === 'higgsfield-chip' ? CHIP_RE : AT_RE);
+
 export const REF_SYNTAX_FOREIGN: TextRule = {
   id: 'REF_SYNTAX_FOREIGN',
   family: 'refs',
@@ -36,7 +39,7 @@ export const REF_OUT_OF_RANGE: TextRule = {
     if (ctx.panelSize === null) return [];
     const size = ctx.panelSize;
     return ctx.paragraphs.flatMap((p) =>
-      matches(p, CHIP_RE)
+      matches(p, own(ctx))
         .filter((m) => Number(m.text.match(/\d+/)?.[0]) > size || Number(m.text.match(/\d+/)?.[0]) < 1)
         .map((m) => at('REF_OUT_OF_RANGE', 'error', p, m, `${m.text} — в панели только ${size} картинок.`, 'Сверить порядок картинок в панели с номерами в тексте.')),
     );
@@ -48,7 +51,7 @@ export const REF_UNUSED: TextRule = {
   family: 'refs',
   run: (ctx) => {
     if (ctx.panelSize === null) return [];
-    const used = new Set([...ctx.raw.matchAll(CHIP_RE)].map((m) => Number(m[1])));
+    const used = new Set([...ctx.raw.matchAll(own(ctx))].map((m) => Number(m[1])));
     if (used.size === 0) return [];
     const unused = Array.from({ length: ctx.panelSize }, (_, i) => i + 1).filter((n) => !used.has(n));
     return unused.map((n) => at('REF_UNUSED', 'warning', null, null, `Картинка №${n} в панели есть, а в тексте не вызвана.`, 'Лишний референс превращается в героя: убрать из панели или дать ему роль.'));
@@ -61,7 +64,7 @@ export const REF_ON_EXTRA: TextRule = {
   family: 'refs',
   run: (ctx) => {
     const extras = anyOf(ctx.lexicon.extraNouns ?? []).source;
-    const re = new RegExp(`${extras}[^.]{0,30}<<<image_\\d+>>>`, 'giu');
+    const re = new RegExp(`${extras}[^.]{0,30}(?:<<<image_\\d+>>>|@image\\s?_?\\d+)`, 'giu');
     const seen = new Set<string>();
     return ctx.paragraphs.flatMap((p) =>
       matches(p, re)

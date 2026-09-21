@@ -116,14 +116,17 @@ export const ROLE_FX_ON_PROP: TextRule = {
     const handling = anyOf(ctx.lexicon.propHandling ?? []);
     const prop = anyOf(ctx.lexicon.propLensNouns ?? []);
     const out: ReturnType<TextRule['run']> = [];
-    for (const p of ctx.paragraphs) {
+    // Стиль-блок описывает саму снимающую технику: «streaks when a light source hits the lens» там на месте.
+    const style = new Set(ctx.styleZone.map((p) => p.index));
+    for (const p of ctx.paragraphs.filter((x) => !style.has(x.index))) {
       p.sentences.forEach((sentence, i) => {
         if (!fx.test(sentence.text)) return;
         if (/\b(?:no|not|never|without)\b/iu.test(sentence.text)) return;
         if (includesAny(sentence.text, ctx.lexicon.fxOnImageMarkers ?? [])) return;
         const window = p.sentences.slice(Math.max(0, i - 2), i + 1).map((s) => s.text).join(' ');
         if (handling.test(window) && prop.test(window)) {
-          out.push(at('ROLE_FX_ON_PROP', 'error', p, { index: sentence.from, text: sentence.text }, 'Эффект оптики описан рядом с предметом в руках героя — модель нарисует блик на самом предмете.', 'Приём 06: снимающий объектив даёт эффект «on the image itself», а реквизит — «just glass, metal… No flares, no streaks».'));
+          // Эвристика по соседству слов: копирование не блокирует, решение за владельцем.
+          out.push(at('ROLE_FX_ON_PROP', 'warning', p, { index: sentence.from, text: sentence.text }, 'Эффект оптики описан рядом с предметом в руках героя — модель нарисует блик на самом предмете.', 'Приём 06: снимающий объектив даёт эффект «on the image itself», а реквизит — «just glass, metal… No flares, no streaks».'));
         }
       });
     }
@@ -142,7 +145,8 @@ export const LINE_LANG_PHRASE: TextRule = {
       const p = ctx.paragraphs[line.paragraph];
       if (p === undefined) continue;
       const before = p.text.slice(Math.max(0, line.from - 140), line.from);
-      if (!includesAny(before, ctx.lexicon.languagePhrase ?? [])) {
+      // Любой язык и оба диалекта: «clear, native Russian…» (гайд) или «says naturally in Russian:» (ByteDance).
+      if (!includesAny(before, ctx.lexicon.languagePhrase ?? []) && !/\bnative\s+[A-Z][a-z]+\b|\bin\s+[A-Z][a-z]+\s*:\s*$/u.test(before)) {
         out.push(at('LINE_LANG_PHRASE', 'warning', p, { index: line.from, text: `«${line.text.slice(0, 40)}…»` }, 'Перед репликой нет языковой фразы.', 'Приём 09: «says in clear, native Russian, perfect pronunciation, natural intonation: «…»».'));
       }
     }

@@ -1,0 +1,23 @@
+{
+ "id": "phone-iphone-15-pro",
+ "titleRu": "Телефон (iPhone 15 Pro) — максимально натуральная бытовая съёмка",
+ "anchor": "iPhone 15 Pro main camera, 24mm equivalent at f/1.78",
+ "look": "smartphone footage straight out of the camera app, deep depth of field with almost everything in focus, computational HDR that lifts the shadows and flattens bright skies, slight oversharpening on edges and hair, noise reduction smearing fine texture in the shadows, punchy but natural colors, auto white balance drifting when the light changes, small bright ghost dots and thin streaks when a light source hits the lens, rolling shutter wobble on fast pans, compressed phone-microphone sound",
+ "lensNote": null,
+ "layout": "compact",
+ "defaultDefects": [
+  "ae-jumps",
+  "focus-hunting",
+  "horizon-slight",
+  "hand-repositioning",
+  "breathing"
+ ],
+ "signatureTerms": [
+  "iPhone",
+  "smartphone",
+  "computational HDR",
+  "rolling shutter wobble"
+ ],
+ "source": "derived",
+ "noteRu": "Не из гайда: характер собран по свойствам техники и генерацией ещё не проверен."
+}

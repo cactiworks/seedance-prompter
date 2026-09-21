@@ -194,6 +194,7 @@ export const useStore = create<State>((set, get) => {
             id,
             title: `Кадр ${p.shots.length + 1}`,
             kitId: base?.kitId ?? 'arri-alexa35-cooke-s4i',
+            customKit: base?.customKit ?? { camera: '', lens: '', look: '', lensNote: '' },
             defects: null,
             behavior: base?.behavior ?? ['real-human', 'no-staged', 'micro-expressions', 'subtle-movement'],
             operatorRule: base?.operatorRule ?? 'long',

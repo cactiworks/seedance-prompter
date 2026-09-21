@@ -77,7 +77,7 @@ export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable
   const lineIds = project.lines.map((l) => l.id);
   const input = {
     format: { durationSec: project.durationSec, aspect: '9:16', singleContinuousTake: true },
-    kit: { shootingGear: kit.anchor, look: kit.titleRu, flarePolicy: kit.lensNote ?? kit.flareParagraph ?? 'flares follow the look of this lens', doNotMention: 'other camera or lens brands' },
+    kit: { shootingGear: kit.anchor, look: kit.source === 'custom' ? (kit.look ?? '') : kit.titleRu, flarePolicy: kit.lensNote ?? kit.flareParagraph ?? 'flares follow the look of this lens', doNotMention: 'other camera or lens brands' },
     camera: { operatorRuleInPrompt: shot.operatorRule !== 'off', reminder: 'camera verbs only; the operator is never an actor' },
     world: { place: project.world.place.en, weatherAndBaseLight: project.world.weather.en },
     entities: project.entities.map((e) => ({ firstMention: `{{intro:${e.key}}}`, laterName: e.name, kind: e.kind, hasReference: e.refKey !== null })),

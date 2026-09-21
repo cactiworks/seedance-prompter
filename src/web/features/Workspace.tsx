@@ -1,15 +1,21 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { buildShot, type PackBundle } from '../../core/pipeline.ts';
+import { buildShot, CUSTOM_KIT, type PackBundle } from '../../core/pipeline.ts';
 import { activeStates, emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
-import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
+import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
+import { Findings } from './Findings.tsx';
 import styles from './Workspace.module.css';
 
 const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', character: 'Герой', object: 'Предмет', gear: 'Техника', other: 'Другое' };
 const BLOCK_RU: Record<string, string> = { style: 'Стиль-блок', format: 'Формат', 'role-shooting': 'Роль: снимающая техника', 'role-props': 'Роль: реквизит', camera: 'Камера', lens: 'Объектив', flare: 'Блик', imperfections: 'Дефекты и речь', 'operator-rule': 'Правило про оператора', location: 'Локация и погода', segment: 'Сценарий' };
-const SEVERITY: Record<string, { tone: TagTone; label: string }> = { error: { tone: 'danger', label: 'error' }, warning: { tone: 'warning', label: 'warning' }, info: { tone: 'info', label: 'info' } };
 const SAVE_RU = { saved: 'сохранено', dirty: 'есть правки…', saving: 'сохраняю…', conflict: 'конфликт окон', error: 'не сохранено' } as const;
+/** Что линтер проверить не может: это остаётся на человеке и спрашивается перед каждым копированием. */
+const GATE = [
+  { id: 'panel', label: 'Картинки загружены в Higgsfield в том же порядке, что в панели' },
+  { id: 'settings', label: 'Модель Seedance 2.5, формат 9:16, длительность как в промпте' },
+  { id: 'enhance', label: 'Enhance Prompt выключен' },
+] as const;
 
 function Section({ n, title, note, children }: { n: string; title: string; note?: string; children: ReactNode }) {
   return (
@@ -28,12 +34,12 @@ function Section({ n, title, note, children }: { n: string; title: string; note?
 
 /** Подсветка того, что поставил компилятор: ссылки, реплики, неразвёрнутые плейсхолдеры. */
 function Highlighted({ text }: { text: string }) {
-  const parts = text.split(/(<<<image_\d+>>>|@Image \d+|«[^»]*»|\{\{[^}]*\}\})/g);
+  const parts = text.split(/(<<<image_\d+>>>|@Image \d+|«[^»]*»|\{\{[^}]*\}\}|\{[^{}]+\})/g);
   return (
     <>
       {parts.map((part, i) => {
         if (/^(?:<<<image_\d+>>>|@Image \d+)$/.test(part)) return <span key={i} className={`${styles.hl} ${styles.hlRef}`}>{part}</span>;
-        if (part.startsWith('«')) return <span key={i} className={`${styles.hl} ${styles.hlSay}`}>{part}</span>;
+        if (part.startsWith('«') || /^\{[^{]/.test(part)) return <span key={i} className={`${styles.hl} ${styles.hlSay}`}>{part}</span>;
         if (part.startsWith('{{')) return <span key={i} className={`${styles.hl} ${styles.hlBad}`}>{part}</span>;
         return <span key={i}>{part}</span>;
       })}
@@ -52,6 +58,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const shot = useStore(currentShot);
   const [copied, setCopied] = useState(false);
   const [visionAgreed, setVisionAgreed] = useState(false);
+  const [gate, setGate] = useState<{ prompt: string; ticks: string[] }>({ prompt: '', ticks: [] });
   const [newRef, setNewRef] = useState<{ label: string; kind: Ref['kind'] }>({ label: '', kind: 'location' });
   const areas = useRef(new Map<string, HTMLTextAreaElement>());
   const fileInputs = useRef(new Map<string, HTMLInputElement>());
@@ -60,10 +67,20 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   if (project === null || shot === null || build === null) return null;
 
   const errors = build.findings.filter((f) => f.severity === 'error').length;
-  const usedLines = project.lines.filter((line) => shot.segments.some((s) => s.text.en.includes(`{{line:${line.id}}}`)));
-  const unread = usedLines.filter((line) => !line.proofread).length;
-  const canCopy = build.blockers.length === 0 && errors === 0 && unread === 0;
+  const warnings = build.findings.filter((f) => f.severity === 'warning').length;
+  const blocking = build.blockers.length + errors;
+  const canCopy = blocking === 0;
+  // Галочки гейта действуют только для того текста, под которым поставлены: любая правка промпта их сбрасывает.
+  const ticks = gate.prompt === build.prompt ? gate.ticks : [];
+  const gateItems = warnings > 0 ? [...GATE, { id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : GATE;
+  const gatePassed = gateItems.every((item) => ticks.includes(item.id));
   const speechTone = build.metrics.speechWords > build.metrics.speechCapacity ? 'warning' : 'accent';
+  const kits = Object.values(pack.kits).sort((a, b) => Number(a.source !== 'guide' && a.source !== undefined) - Number(b.source !== 'guide' && b.source !== undefined));
+  const kit = pack.kits[shot.kitId];
+  const isCustom = shot.kitId === CUSTOM_KIT;
+  const gearRefs = shot.panel.flatMap((key) => { const ref = project.refs.find((r) => r.key === key); return ref !== undefined && ref.kind !== 'location' && ref.kind !== 'character' ? [ref] : []; });
+  const setCustom = (patch: Partial<Shot['customKit']>): void => store.updateShot((s) => ({ ...s, customKit: { ...s.customKit, ...patch } }));
+  const setRole = (patch: Partial<NonNullable<Shot['roleSplit']>>): void => store.updateShot((s) => (s.roleSplit === null ? s : { ...s, roleSplit: { ...s.roleSplit, ...patch } }));
 
   const insert = (segmentId: string, token: string): void => {
     const area = areas.current.get(segmentId);
@@ -150,13 +167,60 @@ export function Workspace({ pack }: { pack: PackBundle }) {
         <div className={styles.form}>
           <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
             <div className={styles.kits}>
-              {Object.values(pack.kits).map((kit) => (
-                <button key={kit.id} type="button" className={`${styles.kit} ${shot.kitId === kit.id ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: kit.id, defects: null }))} aria-pressed={shot.kitId === kit.id}>
-                  <Text variant="label" medium>{kit.anchor.split(' with ')[0]}</Text>
-                  <Text variant="caption" tone="secondary">{kit.titleRu.split(' — ')[1] ?? kit.titleRu}</Text>
+              {kits.map((item) => (
+                <button key={item.id} type="button" className={`${styles.kit} ${shot.kitId === item.id ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: item.id, defects: null, roleSplit: item.layout === 'split' ? s.roleSplit : null }))} aria-pressed={shot.kitId === item.id}>
+                  <Text variant="label" medium>{item.titleRu.split(' — ')[0]}</Text>
+                  <Text variant="caption" tone="secondary">{item.titleRu.split(' — ')[1] ?? ''}</Text>
+                  {item.source !== undefined && item.source !== 'guide' && <Tag tone="outline">не из гайда</Tag>}
                 </button>
               ))}
+              <button type="button" className={`${styles.kit} ${isCustom ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: CUSTOM_KIT, defects: null, roleSplit: null }))} aria-pressed={isCustom}>
+                <Text variant="label" medium>Своя камера</Text>
+                <Text variant="caption" tone="secondary">любая техника: модель, объектив и характер картинки своими словами</Text>
+                <Tag tone="outline">не из гайда</Tag>
+              </button>
             </div>
+            {kit?.noteRu !== undefined && kit.noteRu !== '' && (
+              <div className={styles.report}>
+                <Text variant="label" tone="secondary">{kit.noteRu}</Text>
+              </div>
+            )}
+            {isCustom && (
+              <div className={styles.customKit}>
+                <div className={styles.pair}>
+                  <TextField label="Камера (английский)" placeholder="Fujifilm X100V" value={shot.customKit.camera} onChange={(event) => setCustom({ camera: event.target.value })} helper="Реальная модель. «Cinematic camera» — не якорь, модель выберет усреднённую картинку." />
+                  <TextField label="Объектив (английский, можно пусто)" placeholder="its fixed 23mm f/2 lens" value={shot.customKit.lens} onChange={(event) => setCustom({ lens: event.target.value })} helper="Встанет после «with». Для встроенной оптики пиши «its built-in … lens»." />
+                </div>
+                <TextField multiline label="Характер картинки (английский)" placeholder="fine digital grain, slightly muted colors with a soft green-teal cast, gentle contrast, smooth highlight rolloff, mild softness toward the corners" value={shot.customKit.look} onChange={(event) => setCustom({ look: event.target.value })} helper="Продолжает фразу через запятую: зерно, цвет, контраст, боке, блики — чем эта техника видна на картинке. Без точки в конце." />
+                <TextField label="Примечание об оптике (можно пусто)" placeholder="No anamorphic streaks, only a faint veiling glow when the sun enters the frame" value={shot.customKit.lensNote} onChange={(event) => setCustom({ lensNote: event.target.value })} helper="Отдельное предложение сразу после характера — обычно про поведение блика." />
+                <Text variant="caption" tone="tertiary" mono>
+                  …shot on {shot.customKit.camera.trim() || '<камера>'}{shot.customKit.lens.trim() !== '' ? ` with ${shot.customKit.lens.trim()}` : ''}, {shot.customKit.look.trim() || '<характер>'}.
+                </Text>
+              </div>
+            )}
+            {kit?.layout === 'split' && (
+              <div className={styles.customKit}>
+                <Switch checked={shot.roleSplit !== null} onChange={(on) => store.updateShot((s) => ({ ...s, roleSplit: on ? { cameraRef: gearRefs[0]?.key ?? '', lensRef: gearRefs[1]?.key ?? gearRefs[0]?.key ?? '', cameraHolder: '', lensHolder: '', propsEn: '' } : null }))} label="В кадре есть такая же камера или объектив как реквизит" disabled={shot.roleSplit === null && gearRefs.length === 0} />
+                <Text variant="caption" tone="tertiary">
+                  {shot.roleSplit === null
+                    ? gearRefs.length === 0 ? 'Приём 06 «один объект — одна роль». Нужен, только когда герои держат эту же технику в руках; для него добавь в панель референсы камеры и объектива (тип «Техника»).' : 'Приём 06 «один объект — одна роль». Без реквизита разделение не нужно — кадр собирается как есть.'
+                    : 'Промпт разведёт снимающую технику и реквизит: блики и боке — только «on the image itself», на предметах в руках их не будет.'}
+                </Text>
+                {shot.roleSplit !== null && (
+                  <>
+                    <div className={styles.pair}>
+                      <Select label="Референс камеры" value={shot.roleSplit.cameraRef} onChange={(cameraRef) => setRole({ cameraRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
+                      <Select label="Референс объектива" value={shot.roleSplit.lensRef} onChange={(lensRef) => setRole({ lensRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
+                    </div>
+                    <div className={styles.pair}>
+                      <TextField label="Кто держит камеру (имя в промпте)" placeholder="Alexander" value={shot.roleSplit.cameraHolder} onChange={(event) => setRole({ cameraHolder: event.target.value })} />
+                      <TextField label="Кто показывает объектив" placeholder="John" value={shot.roleSplit.lensHolder} onChange={(event) => setRole({ lensHolder: event.target.value })} />
+                    </div>
+                    <TextField multiline label="Реквизит одним предложением (английский)" placeholder="Alexander holds a RED V-RAPTOR in his hands, and John holds an open case with Laowa Proteus lenses" value={shot.roleSplit.propsEn} onChange={(event) => setRole({ propsEn: event.target.value })} helper="Встанет после «Separately, …». Без точки в конце." />
+                  </>
+                )}
+              </div>
+            )}
             <div className={styles.row}>
               <Text variant="label" tone="secondary">Правило «оператор не виден»</Text>
               <SegmentedControl aria-label="Правило про оператора" size="s" value={shot.operatorRule} onChange={(operatorRule) => store.updateShot((s) => ({ ...s, operatorRule }))} options={[{ value: 'long', label: 'Полное' }, { value: 'short', label: 'Краткое' }, { value: 'off', label: 'Нет' }]} />
@@ -365,28 +429,44 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               <Meter label="Референсы" value={build.metrics.refsUsed} max={Math.max(1, build.metrics.refsInPanel)} unit={`/ ${build.metrics.refsInPanel} в панели`} tone={build.metrics.refsUsed < build.metrics.refsInPanel ? 'warning' : 'success'} />
             </div>
 
-            {build.blockers.length > 0 && (
-              <div className={styles.blockers}>
-                {build.blockers.map((b, i) => (
-                  <div key={`${b.code}-${i}`} className={styles.blocker}>
-                    <Icon name="alert-circle" size={1.125} />
-                    <Text variant="label">{b.messageRu}</Text>
-                  </div>
+            {canCopy && (
+              <div className={styles.gate}>
+                <Text variant="caption" tone="secondary">Этого линтер не видит — отметь перед генерацией. Любая правка промпта сбрасывает отметки.</Text>
+                {gateItems.map((item) => (
+                  <label key={item.id} className={styles.gateItem}>
+                    <input type="checkbox" checked={ticks.includes(item.id)} onChange={(event) => setGate({ prompt: build.prompt, ticks: event.target.checked ? [...ticks, item.id] : ticks.filter((id) => id !== item.id) })} />
+                    <Text variant="label">{item.label}</Text>
+                  </label>
                 ))}
               </div>
             )}
 
             <div className={styles.copyRow}>
-              <Button variant="dark" size="m" icon={<Icon name={copied ? 'checkmark' : 'copy'} />} disabled={!canCopy} onClick={() => void copy()}>
+              <Button variant="dark" size="m" icon={<Icon name={copied ? 'checkmark' : 'copy'} />} disabled={!canCopy || !gatePassed} onClick={() => void copy()}>
                 {copied ? 'Скопировано' : 'Копировать для генерации'}
               </Button>
-              {!canCopy && (
-                <Text variant="caption" tone="secondary">
-                  {build.blockers.length > 0 ? 'Сначала сними блокеры сборки.' : errors > 0 ? `Линтер: ${errors} ошибок.` : `Не вычитано реплик: ${unread}.`}
-                </Text>
-              )}
+              {!canCopy ? (
+                <button type="button" className={styles.linkButton} onClick={() => document.getElementById('findings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+                  <Text variant="caption" tone="secondary">Не готово к генерации: {blocking} — список ниже</Text>
+                </button>
+              ) : !gatePassed ? (
+                <Text variant="caption" tone="secondary">Отметь пункты выше.</Text>
+              ) : null}
             </div>
           </Card>
+
+          <Findings
+            build={build}
+            shot={shot}
+            blockLabel={(index) => {
+              const paragraph = build.paragraphs[index];
+              if (paragraph === undefined) return `абзац ${index + 1}`;
+              const segment = paragraph.segmentId === undefined ? -1 : shot.segments.findIndex((s) => s.id === paragraph.segmentId);
+              return segment === -1 ? `абзац ${index + 1} · ${BLOCK_RU[paragraph.kind] ?? paragraph.kind}` : `абзац ${index + 1} · отрезок ${segment + 1}`;
+            }}
+            onSuppress={(fingerprint, reasonRu) => store.updateShot((s) => ({ ...s, suppressed: [...s.suppressed.filter((x) => x.fingerprint !== fingerprint), { fingerprint, reasonRu }] }))}
+            onRestore={(fingerprint) => store.updateShot((s) => ({ ...s, suppressed: s.suppressed.filter((x) => x.fingerprint !== fingerprint) }))}
+          />
 
           <Card padding="l" className={styles.previewCard}>
             <Text variant="caption" tone="secondary">Промпт</Text>
@@ -395,25 +475,10 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 <div className={styles.paragraphHead}>
                   <Text variant="caption" tone="tertiary" mono>{String(i + 1).padStart(2, '0')}</Text>
                   <Text variant="caption" tone="secondary">{BLOCK_RU[paragraph.kind] ?? paragraph.kind}</Text>
-                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : 'outline'}>{paragraph.origin === 'verbatim' ? 'дословно из гайда' : paragraph.origin === 'template' ? 'шаблон' : 'твой текст'}</Tag>
+                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? 'формула гайда · техника не из гайда' : 'дословно из гайда') : paragraph.origin === 'template' ? 'шаблон' : 'твой текст'}</Tag>
                 </div>
                 <p className={styles.promptText}><Highlighted text={build.resolvedParagraphs[i] ?? ''} /></p>
               </div>
-            ))}
-          </Card>
-
-          <Card padding="l" className={styles.previewCard}>
-            <Text variant="caption" tone="secondary" as="h3">Линтер · {build.findings.length}</Text>
-            {build.findings.length === 0 && <Text variant="label" tone="tertiary">Находок нет.</Text>}
-            {build.findings.map((finding, i) => (
-              <button key={`${finding.fingerprint}-${i}`} type="button" className={styles.finding} onClick={() => finding.paragraph !== null && document.getElementById(`p-${finding.paragraph}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                <Tag tone={SEVERITY[finding.severity]?.tone ?? 'neutral'} dot>{SEVERITY[finding.severity]?.label}</Tag>
-                <span className={styles.findingBody}>
-                  <Text variant="label">{finding.messageRu}</Text>
-                  <Text variant="caption" tone="secondary">{finding.fixHintRu}</Text>
-                  <Text variant="caption" tone="tertiary" mono>{finding.ruleId}{finding.paragraph !== null ? ` · абзац ${finding.paragraph + 1}` : ''}</Text>
-                </span>
-              </button>
             ))}
           </Card>
 

@@ -95,7 +95,10 @@ export type Attempt = z.infer<typeof AttemptSchema>;
 export const ShotSchema = z.object({
   id: z.string(),
   title: z.string().default('Кадр'),
+  /** id комплекта из pack или 'custom' — тогда техника берётся из customKit. */
   kitId: z.string(),
+  /** Своя камера: якорь «shot on <camera> with <lens>» и характер картинки рядом с ним (приём 01). */
+  customKit: z.object({ camera: z.string().default(''), lens: z.string().default(''), look: z.string().default(''), lensNote: z.string().default('') }).default({ camera: '', lens: '', look: '', lensNote: '' }),
   /** null — набор дефектов комплекта. */
   defects: z.array(z.string()).nullable().default(null),
   behavior: z.array(z.string()).default(['real-human', 'no-staged', 'micro-expressions', 'subtle-movement']),
