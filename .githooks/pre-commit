@@ -1,0 +1,9 @@
+#!/bin/bash
+# Критерий «готово» проверяется самим git, а не памятью того, кто коммитит:
+# красный typecheck / eslint / stylelint / тесты / сборка — коммита не будет.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if ! npm run check --silent > /tmp/sp-precommit.log 2>&1; then
+  echo "pre-commit: npm run check не прошёл — коммит остановлен. Хвост лога:"
+  tail -25 /tmp/sp-precommit.log
+  exit 1
+fi
