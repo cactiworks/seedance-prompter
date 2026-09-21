@@ -1,4 +1,4 @@
-import type { Project } from '../model/project.ts';
+import { eventBudget, type Project } from '../model/project.ts';
 
 export const PLANNER_SCHEMA = {
   type: 'object',
@@ -48,9 +48,16 @@ export function extractLines(synopsisRu: string, existing: { id: string; ru: str
   return { text, newLines };
 }
 
-export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], translate: { place: boolean; weather: boolean }): string {
+/** Сколько отрезков уместно при такой длительности: 2–8 на 30 секунд, один — для совсем короткого кадра. */
+export function segmentRange(durationSec: number): { min: number; max: number } {
+  return { min: durationSec <= 8 ? 1 : 2, max: Math.max(2, Math.round((8 * durationSec) / 30)) };
+}
+
+export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], translate: { place: boolean; weather: boolean }, durationSec: number = project.durationSec): string {
   const input = {
-    durationSec: project.durationSec,
+    durationSec,
+    majorEvents: eventBudget(durationSec),
+    segments: segmentRange(durationSec),
     synopsisRu: synopsis,
     lineIds,
     entities: project.entities.map((e) => ({ name: e.name, kind: e.kind })),
@@ -60,9 +67,10 @@ export function buildPlannerUser(project: Project, synopsis: string, lineIds: st
 }
 
 /** Проверка плана: число отрезков, реплики по одному разу и в порядке, английский без кириллицы. */
-export function validatePlan(plan: PlannerOutput, lineIds: string[]): string[] {
+export function validatePlan(plan: PlannerOutput, lineIds: string[], durationSec = 30): string[] {
   const problems: string[] = [];
-  if (plan.segments.length < 2 || plan.segments.length > 8) problems.push(`Segments: ${plan.segments.length}; expected 2–8.`);
+  const range = segmentRange(durationSec);
+  if (plan.segments.length < range.min || plan.segments.length > range.max) problems.push(`Segments: ${plan.segments.length}; expected ${range.min}–${range.max}.`);
   if (plan.segments.some((s) => s.beatsRu.trim() === '')) problems.push('Every segment needs Russian beats.');
   const seen = plan.segments.flatMap((s) => s.beatsRu.match(/\bL\d+\b/g) ?? []);
   for (const id of lineIds) {

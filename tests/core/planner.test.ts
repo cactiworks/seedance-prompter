@@ -2,8 +2,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { extractLines, validatePlan, type PlannerOutput } from '../../src/core/llm/buildPlanner.ts';
-import { newProject } from '../../src/core/model/project.ts';
+import { buildPlannerUser, extractLines, validatePlan, type PlannerOutput } from '../../src/core/llm/buildPlanner.ts';
+import { eventBudget, newProject } from '../../src/core/model/project.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
 import type { LlmRequest } from '../../src/server/llm/claudeCli/provider.ts';
 
@@ -36,6 +36,18 @@ describe('проверка плана', () => {
     expect(validatePlan(plan(['говорит «Привет»', 'финал']), []).join(' ')).toContain('by id only');
     expect(validatePlan(plan(['A', 'B'], { placeEn: 'набережная' }), []).join(' ')).toContain('must be English');
     expect(validatePlan(plan(['только один']), []).join(' ')).toContain('expected 2–8');
+  });
+
+  it('число отрезков и бюджет событий считаются от длительности кадра', () => {
+    expect(eventBudget(30)).toEqual({ min: 4, max: 6 });
+    expect(eventBudget(15)).toEqual({ min: 2, max: 3 });
+    expect(eventBudget(5)).toEqual({ min: 1, max: 1 });
+    // Кадр на 5 секунд — один отрезок допустим; шесть отрезков на 10 секунд — перегруз.
+    expect(validatePlan(plan(['Пикап заносит, брызги.']), [], 5)).toEqual([]);
+    expect(validatePlan(plan(['A', 'B', 'C', 'D', 'E', 'F']), [], 10).join(' ')).toContain('expected 2–3');
+    const user = buildPlannerUser(newProject('demo', 'Демо'), 'Пикап заносит.', [], { place: false, weather: false }, 10);
+    expect(user).toContain('"durationSec": 10');
+    expect(user).toMatch(/"majorEvents": \{\s+"min": 1,\s+"max": 2\s+\}/);
   });
 });
 

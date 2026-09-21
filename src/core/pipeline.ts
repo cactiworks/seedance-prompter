@@ -2,7 +2,7 @@ import { compileShot, joinParagraphs, type CompiledParagraph, type CompileIssue,
 import { resolve, type DialectPack, type ResolveIssue } from './compile/dialect.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
-import { activeStates, type Project, type Shot } from './model/project.ts';
+import { activeStates, durationOf, type Project, type Shot } from './model/project.ts';
 
 /** Всё, что ядру нужно знать о режиме съёмки. Код правил гайда не знает — он исполняет pack. */
 export interface PackBundle {
@@ -95,9 +95,11 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     });
   }
 
+  const durationSec = durationOf(project, shot);
   const compiled = compileShot(
     {
       kit,
+      durationSec,
       defects: shot.defects ?? undefined,
       behavior: shot.behavior,
       operatorRule: shot.operatorRule,
@@ -148,7 +150,7 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     refSyntax: project.dialect.refSyntax,
     dialogueWrap: project.dialect.dialogueWrap,
     panelSize: shot.panel.length,
-    durationSec: project.durationSec,
+    durationSec,
     suppressed,
   })
     // Пока сценария нет, правила о сценарии молчат: об этом уже сказал блокер NO_SCENARIO.
@@ -242,6 +244,6 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     resolvedParagraphs,
     blockers,
     findings: all,
-    metrics: { chars: prompt.length, words: countWords(prompt), speechWords, speechCapacity: Math.round(project.durationSec * speakingShare * wordsPerSecond), refsInPanel: shot.panel.length, refsUsed: used.size },
+    metrics: { chars: prompt.length, words: countWords(prompt), speechWords, speechCapacity: Math.round(durationSec * speakingShare * wordsPerSecond), refsInPanel: shot.panel.length, refsUsed: used.size },
   };
 }

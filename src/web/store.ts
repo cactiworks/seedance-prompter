@@ -193,6 +193,7 @@ export const useStore = create<State>((set, get) => {
           {
             id,
             title: `Кадр ${p.shots.length + 1}`,
+            durationSec: base?.durationSec ?? null,
             kitId: base?.kitId ?? 'arri-alexa35-cooke-s4i',
             customKit: base?.customKit ?? { camera: '', lens: '', look: '', lensNote: '' },
             defects: null,
@@ -351,7 +352,7 @@ export const useStore = create<State>((set, get) => {
       if (project === null || shot === undefined || get().planning) return;
       set({ planning: true, planReport: null });
       try {
-        const res = await fetch('/api/llm/plan', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, synopsisRu: shot.synopsisRu }) });
+        const res = await fetch('/api/llm/plan', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId: shot.id, synopsisRu: shot.synopsisRu }) });
         const { plan, newLines, problems, meta } = await json<PlanResponse>(res);
         const stamp = Date.now().toString(36);
         get().update((p) => ({

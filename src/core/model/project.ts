@@ -95,6 +95,8 @@ export type Attempt = z.infer<typeof AttemptSchema>;
 export const ShotSchema = z.object({
   id: z.string(),
   title: z.string().default('Кадр'),
+  /** Длительность дубля, с: каждый кадр — отдельная генерация. null — как у ролика. Seedance 2.5 принимает целое 4–30. */
+  durationSec: z.number().int().min(4).max(30).nullable().default(null),
   /** id комплекта из pack или 'custom' — тогда техника берётся из customKit. */
   kitId: z.string(),
   /** Своя камера: якорь «shot on <camera> with <lens>» и характер картинки рядом с ним (приём 01). */
@@ -139,6 +141,17 @@ export const ProjectSchema = z.object({
   shots: z.array(ShotSchema).default([]),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+/** Длительность кадра: своя или общая для ролика. */
+export function durationOf(project: { durationSec: number }, shot: { durationSec: number | null }): number {
+  return shot.durationSec ?? project.durationSec;
+}
+
+/** Бюджет внимания гайда — 4–6 крупных событий на 30 секунд — в пересчёте на длительность кадра. */
+export function eventBudget(durationSec: number): { min: number; max: number } {
+  const min = Math.max(1, Math.round((4 * durationSec) / 30));
+  return { min, max: Math.max(min, Math.round((6 * durationSec) / 30)) };
+}
 
 export function newProject(slug: string, title: string): Project {
   return ProjectSchema.parse({

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildShot, CUSTOM_KIT, type PackBundle } from '../../core/pipeline.ts';
-import { activeStates, emptyUnit, type Project, type Ref, type Shot } from '../../core/model/project.ts';
+import { activeStates, durationOf, emptyUnit, eventBudget, type Project, type Ref, type Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
@@ -11,11 +11,32 @@ const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', chara
 const BLOCK_RU: Record<string, string> = { style: 'Стиль-блок', format: 'Формат', 'role-shooting': 'Роль: снимающая техника', 'role-props': 'Роль: реквизит', camera: 'Камера', lens: 'Объектив', flare: 'Блик', imperfections: 'Дефекты и речь', 'operator-rule': 'Правило про оператора', location: 'Локация и погода', segment: 'Сценарий' };
 const SAVE_RU = { saved: 'сохранено', dirty: 'есть правки…', saving: 'сохраняю…', conflict: 'конфликт окон', error: 'не сохранено' } as const;
 /** Что линтер проверить не может: это остаётся на человеке и спрашивается перед каждым копированием. */
-const GATE = [
+const gateFor = (durationSec: number): { id: string; label: string }[] => [
   { id: 'panel', label: 'Картинки загружены в Higgsfield в том же порядке, что в панели' },
-  { id: 'settings', label: 'Модель Seedance 2.5, формат 9:16, длительность как в промпте' },
+  { id: 'settings', label: `В Higgsfield выставлено: Seedance 2.5, формат 9:16, длительность ${durationSec} с` },
   { id: 'enhance', label: 'Enhance Prompt выключен' },
-] as const;
+];
+const DURATION_PRESETS = [5, 10, 15, 20, 30];
+
+/** Длительность дубля. Черновик живёт в поле: в кадр уходит только целое 4–30, недопечатанное число промпт не ломает. */
+function DurationField({ value, onCommit }: { value: number; onCommit: (durationSec: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const parse = (text: string): number | null => (/^\d+$/.test(text.trim()) && Number(text) >= 4 && Number(text) <= 30 ? Number(text) : null);
+  const valid = parse(draft) !== null;
+  const set = (text: string): void => {
+    setDraft(text);
+    const n = parse(text);
+    if (n !== null) onCommit(n);
+  };
+  return (
+    <div className={styles.duration}>
+      <TextField label="Длительность, с" type="number" inputMode="numeric" min={4} max={30} step={1} value={draft} onChange={(event) => set(event.target.value)} onBlur={() => !valid && setDraft(String(value))} error={valid ? undefined : `Seedance 2.5 принимает целое от 4 до 30. В промпте остаётся ${value} с.`} helper="Это же число ставится в Higgsfield. От него считаются ёмкость речи и бюджет событий." />
+      <div className={styles.presets}>
+        {DURATION_PRESETS.map((n) => <Button key={n} variant={value === n ? 'secondary' : 'ghost'} size="xs" onClick={() => set(String(n))}>{n}</Button>)}
+      </div>
+    </div>
+  );
+}
 
 function Section({ n, title, note, children }: { n: string; title: string; note?: string; children: ReactNode }) {
   return (
@@ -72,7 +93,9 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const canCopy = blocking === 0;
   // Галочки гейта действуют только для того текста, под которым поставлены: любая правка промпта их сбрасывает.
   const ticks = gate.prompt === build.prompt ? gate.ticks : [];
-  const gateItems = warnings > 0 ? [...GATE, { id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : GATE;
+  const duration = durationOf(project, shot);
+  const budget = eventBudget(duration);
+  const gateItems = warnings > 0 ? [...gateFor(duration), { id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : gateFor(duration);
   const gatePassed = gateItems.every((item) => ticks.includes(item.id));
   const speechTone = build.metrics.speechWords > build.metrics.speechCapacity ? 'warning' : 'accent';
   const kits = Object.values(pack.kits).sort((a, b) => Number(a.source !== 'guide' && a.source !== undefined) - Number(b.source !== 'guide' && b.source !== undefined));
@@ -166,6 +189,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
       <div className={styles.columns}>
         <div className={styles.form}>
           <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
+            <DurationField key={shot.id} value={duration} onCommit={(durationSec) => store.updateShot((s) => ({ ...s, durationSec }))} />
             <div className={styles.kits}>
               {kits.map((item) => (
                 <button key={item.id} type="button" className={`${styles.kit} ${shot.kitId === item.id ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: item.id, defects: null, roleSplit: item.layout === 'split' ? s.roleSplit : null }))} aria-pressed={shot.kitId === item.id}>
@@ -328,7 +352,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             </div>
           </Section>
 
-          <Section n="06" title="Сценарий по таймлайну" note="Абзац = отрезок времени. Одно главное действие в абзаце; 4–6 крупных событий на 30 секунд.">
+          <Section n="06" title="Сценарий по таймлайну" note={`Абзац = отрезок времени. Одно главное действие в абзаце; на ${duration} с — ${budget.min === budget.max ? budget.min : `${budget.min}–${budget.max}`} крупных событий (гайд: 4–6 на 30 секунд).`}>
             <div className={styles.synopsis}>
               <TextField multiline label="Кадр своими словами" placeholder="Alexander стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, John встаёт в стойку, начинается спарринг…" value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper="Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий." />
               <div className={styles.row}>

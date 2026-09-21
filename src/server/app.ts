@@ -5,7 +5,7 @@ import { APP_NAME, APP_VERSION } from '../core/meta.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
-import { newProject, ProjectSchema } from '../core/model/project.ts';
+import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
 import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
@@ -178,8 +178,10 @@ export function createApp(options: AppOptions) {
     })
     // Планировщик: русский синопсис кадра → отрезки по времени. Реплики вынуты из синопсиса заранее.
     .post('/api/llm/plan', async (c) => {
-      const body = (await c.req.json()) as { project?: unknown; synopsisRu?: string };
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string; synopsisRu?: string };
       const project = ProjectSchema.parse(body.project);
+      // Длительность — свойство кадра: от неё зависят бюджет событий и число отрезков.
+      const durationSec = durationOf(project, project.shots.find((s) => s.id === body.shotId) ?? { durationSec: null });
       const { text, newLines } = extractLines(body.synopsisRu ?? '', project.lines);
       if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
@@ -188,12 +190,12 @@ export function createApp(options: AppOptions) {
       const run = options.runLlm ?? runClaude;
       const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
-        const user = buildPlannerUser(project, text, lineIds, translate);
+        const user = buildPlannerUser(project, text, lineIds, translate, durationSec);
         let result = await run<PlannerOutput>({ ...request, user });
-        let problems = validatePlan(result.data, lineIds);
+        let problems = validatePlan(result.data, lineIds, durationSec);
         if (problems.length > 0) {
           result = await run<PlannerOutput>({ ...request, user: `${user}\n\nYour previous plan was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious plan:\n${JSON.stringify(result.data)}` });
-          problems = validatePlan(result.data, lineIds);
+          problems = validatePlan(result.data, lineIds, durationSec);
         }
         return c.json({ plan: result.data, newLines, problems, meta: result.meta });
       } catch (error) {

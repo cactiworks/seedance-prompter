@@ -329,6 +329,19 @@
   font-size: var(--lab-type-caption-size);
 }
 
+.duration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--lab-space-8);
+}
+
+.presets {
+  display: flex;
+  gap: var(--lab-space-1);
+  padding-top: var(--lab-space-4);
+}
+
 .customKit {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 import type { Kit } from '../compile/compile.ts';
-import type { Project, Shot } from '../model/project.ts';
+import { durationOf, eventBudget, type Project, type Shot } from '../model/project.ts';
 import type { ValidationContext, Violation } from './validate.ts';
 
 export interface FewShot {
@@ -76,7 +76,7 @@ export function fixableSegments(shot: Shot): string[] {
 export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable: string[], repair?: { previous: { segmentId: string; en: string }[]; violations: Violation[]; lintFindings: string[] }, fix?: FixBrief): string {
   const lineIds = project.lines.map((l) => l.id);
   const input = {
-    format: { durationSec: project.durationSec, aspect: '9:16', singleContinuousTake: true },
+    format: { durationSec: durationOf(project, shot), majorEvents: eventBudget(durationOf(project, shot)), aspect: '9:16', singleContinuousTake: true },
     kit: { shootingGear: kit.anchor, look: kit.source === 'custom' ? (kit.look ?? '') : kit.titleRu, flarePolicy: kit.lensNote ?? kit.flareParagraph ?? 'flares follow the look of this lens', doNotMention: 'other camera or lens brands' },
     camera: { operatorRuleInPrompt: shot.operatorRule !== 'off', reminder: 'camera verbs only; the operator is never an actor' },
     world: { place: project.world.place.en, weatherAndBaseLight: project.world.weather.en },

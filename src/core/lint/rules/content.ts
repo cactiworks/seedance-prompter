@@ -204,7 +204,7 @@ export const MICRO_ACTION_OVERLOAD: TextRule = {
     return ctx.paragraphs
       .map((p) => ({ p, found: matches(p, gesture) }))
       .filter(({ found }) => found.length > limit)
-      .map(({ p, found }) => at('MICRO_ACTION_OVERLOAD', 'warning', p, null, `В абзаце ${found.length} мелких жестов подряд (${found.slice(0, 5).map((m) => m.text).join(', ')}…). За 30 секунд модель это не покажет.`, 'Гайд, Кадр 1 попытка 1: «больше 15 мелких действий подряд… лучше оставить одно действие на героя».'));
+      .map(({ p, found }) => at('MICRO_ACTION_OVERLOAD', 'warning', p, null, `В абзаце ${found.length} мелких жестов подряд (${found.slice(0, 5).map((m) => m.text).join(', ')}…). За ${ctx.durationSec} секунд модель это не покажет.`, 'Гайд, Кадр 1 попытка 1: «больше 15 мелких действий подряд… лучше оставить одно действие на героя».'));
   },
 };
 
@@ -274,6 +274,18 @@ export const SAME_OBJECTS_MERGE: TextRule = {
         .map((m) => at('SAME_OBJECTS_MERGE', 'info', p, m, `«${m.text}»: однотипные объекты в одном состоянии модель склеивает (три кейса → один с тремя отсеками).`, 'Развести состояния или цвета объектов — либо принять слияние заранее.')),
     );
   },
+};
+
+/** «30-second take» в тексте при кадре на 15 секунд: модель растянет или оборвёт действие. */
+export const DURATION_MISMATCH: TextRule = {
+  id: 'DURATION_MISMATCH',
+  family: 'platform',
+  run: (ctx) =>
+    ctx.paragraphs.flatMap((p) =>
+      matches(p, /\b(\d{1,3})[- ]seconds?\s+(?:take|shot|clip|video|scene)\b/iu)
+        .filter((m) => Number(m.text.match(/\d+/)?.[0]) !== ctx.durationSec)
+        .map((m) => at('DURATION_MISMATCH', 'warning', p, m, `В тексте «${m.text}», а длительность кадра — ${ctx.durationSec} с.`, 'Убрать число из абзаца: длительность называет только первый блок, и она же выставляется в Higgsfield.')),
+    ),
 };
 
 export const LEN_RANGE: TextRule = {

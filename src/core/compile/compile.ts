@@ -40,6 +40,8 @@ export interface Kit {
 
 export interface ShotCompileInput {
   kit: Kit;
+  /** Длительность дубля, с. Формула формата в pack написана под 30 — при другой длительности меняется только число. */
+  durationSec?: number;
   /** id элементов стека дефектов в порядке pack; по умолчанию — набор комплекта. */
   defects?: string[];
   behavior: string[];
@@ -68,7 +70,7 @@ export interface CompiledParagraph {
 }
 
 export interface CompileIssue {
-  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'EMPTY_SEGMENT';
+  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'EMPTY_SEGMENT' | 'FORMAT_NO_DURATION';
   messageRu: string;
 }
 
@@ -89,6 +91,14 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
       return text === undefined ? [] : [text];
     });
 
+  // Дословная формула гайда написана под 30 секунд; при другой длительности в ней меняется только число.
+  const PACK_DURATION = /\b30-second\b/;
+  const duration = input.durationSec ?? 30;
+  if (duration !== 30 && !PACK_DURATION.test(pack.format)) {
+    issues.push({ code: 'FORMAT_NO_DURATION', messageRu: `В формуле формата нет «30-second» — длительность ${duration} с подставить некуда, промпт обещал бы другую.` });
+  }
+  const format = duration === 30 ? pack.format : pack.format.replace(PACK_DURATION, `${duration}-second`);
+
   const defects = pick(input.defects ?? kit.defaultDefects, pack.defects, 'UNKNOWN_DEFECT');
   const behavior = pick(input.behavior, pack.behavior, 'UNKNOWN_BEHAVIOR');
   const tail = `${[pack.exposureLead, ...defects].join(', ')}. ${behavior.join(', ')}. ${fill(pack.languageTail, { LANG: input.languageName })}`;
@@ -101,7 +111,7 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
       kind: 'style',
       layers: [1, 2, 3, 4, 5],
       origin: 'verbatim',
-      text: `${pack.format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}, ${kit.look ?? ''}.${lensNote} ${tail}`,
+      text: `${format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}, ${kit.look ?? ''}.${lensNote} ${tail}`,
     });
   } else {
     // Раскладка с отдельными абзацами камеры, объектива и блика. Разделение ролей нужно, только когда
@@ -109,8 +119,8 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
     const role = input.roleSplit;
     paragraphs.push(
       role === undefined
-        ? { kind: 'format', layers: [1, 2, 3], origin: 'verbatim', text: `${pack.format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}.` }
-        : { kind: 'format', layers: [1, 2], origin: 'verbatim', text: `${pack.format}, ${pack.handheld}.` },
+        ? { kind: 'format', layers: [1, 2, 3], origin: 'verbatim', text: `${format}, ${pack.handheld}, ${fill(pack.shotOn, { ANCHOR: kit.anchor })}.` }
+        : { kind: 'format', layers: [1, 2], origin: 'verbatim', text: `${format}, ${pack.handheld}.` },
     );
     if (role !== undefined) {
       paragraphs.push({

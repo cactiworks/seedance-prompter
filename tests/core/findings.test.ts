@@ -168,3 +168,38 @@ describe('осознанное исключение', () => {
     expect(after.findings.length).toBe(before.findings.length - 1);
   });
 });
+
+describe('длительность кадра — параметр, а не константа гайда', () => {
+  it('30 секунд: формула гайда байт в байт; другая длительность меняет в ней только число', () => {
+    expect(run(CLEAN).prompt).toContain(pack.verbatim.format);
+    const short = run(CLEAN, {}, { durationSec: 15 });
+    expect(short.prompt).toContain('One continuous 15-second take, one uninterrupted shot');
+    expect(short.prompt).not.toContain('30-second');
+    expect(short.prompt.replace('15-second', '30-second')).toBe(run(CLEAN).prompt);
+    // RED собирается отдельным абзацем формата — число меняется и там.
+    expect(run(CLEAN, {}, { durationSec: 12, kitId: 'red-vraptor-laowa-proteus' }).prompt).toContain('One continuous 12-second take');
+  });
+
+  it('длительность кадра главнее длительности ролика; ёмкость речи считается от неё', () => {
+    const { wordsPerSecond, speakingShare } = pack.lintParams.speech;
+    expect(run(CLEAN, { durationSec: 20 }).prompt).toContain('20-second take');
+    const own = run(CLEAN, { durationSec: 20 }, { durationSec: 10 });
+    expect(own.prompt).toContain('10-second take');
+    expect(own.metrics.speechCapacity).toBe(Math.round(10 * speakingShare * wordsPerSecond));
+  });
+
+  it('реплики, которые влезали в 30 секунд, в 5 секунд не влезают — предупреждение SPEECH_BUDGET', () => {
+    const long = { lines: [{ id: 'L1', speakerKey: null, ru: 'Сейчас мы снимаем на другую камеру, и у каждой камеры свой характер, смотрите сами, как меняется картинка.', proofread: true }] };
+    expect(rules(run(CLEAN, long), 'warning')).not.toContain('SPEECH_BUDGET');
+    expect(rules(run(CLEAN, long, { durationSec: 5 }), 'warning')).toContain('SPEECH_BUDGET');
+  });
+
+  it('число секунд, вписанное в абзац руками, сверяется с длительностью кадра', () => {
+    const typed = ['{{intro:alex}} stands in a medium shot for the whole 30-second take and {{line:L1}}', CLEAN[1] ?? ''];
+    expect(rules(run(typed))).not.toContain('DURATION_MISMATCH');
+    const finding = run(typed, {}, { durationSec: 15 }).findings.find((f) => f.ruleId === 'DURATION_MISMATCH');
+    expect([finding?.severity, finding?.evidence]).toEqual(['warning', '30-second take']);
+    // «shifts for two seconds» — тайминг внутри сцены, а не длительность дубля.
+    expect(rules(run(CLEAN, {}, { durationSec: 15 }))).not.toContain('DURATION_MISMATCH');
+  });
+});
