@@ -29,6 +29,8 @@ export interface LlmRequest {
   images?: ImageInput[];
   timeoutMs: number;
   signal?: AbortSignal;
+  /** Кто спрашивает — для сообщений владельцу: «Критик не ответил за…». По умолчанию «Писатель». */
+  taskRu?: string;
 }
 
 export interface LlmResult<T> {
@@ -86,7 +88,7 @@ export function runClaude<T>(request: LlmRequest): Promise<LlmResult<T>> {
       reject(error);
     };
 
-    const timer = setTimeout(() => fail(new LlmError('TIMEOUT', `Писатель не ответил за ${Math.round(request.timeoutMs / 1000)} с.`)), request.timeoutMs);
+    const timer = setTimeout(() => fail(new LlmError('TIMEOUT', `${request.taskRu ?? 'Писатель'} не ответил за ${Math.round(request.timeoutMs / 1000)} с. Попробуй ещё раз или переключи модель на Sonnet (SP_CRITIC_MODEL=sonnet).`)), request.timeoutMs);
     request.signal?.addEventListener('abort', () => fail(new LlmError('CANCELLED', 'Отменено.')), { once: true });
 
     child.on('error', (error: NodeJS.ErrnoException) => fail(error.code === 'ENOENT' ? new LlmError('NOT_INSTALLED', 'Не найден `claude` в PATH. Нужен установленный Claude Code.') : new LlmError('PROCESS_CRASH', 'Не удалось запустить claude.', error.message)));

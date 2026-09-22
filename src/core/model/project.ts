@@ -89,8 +89,24 @@ export const AttemptSchema = z.object({
   workedRu: z.string().default(''),
   failedRu: z.string().default(''),
   symptomIds: z.array(z.string()).default([]),
+  /** Пересказ критика «что увидит зритель» на момент копирования — чтобы после генерации сравнить ожидание с результатом. */
+  readbackRu: z.string().default(''),
 });
 export type Attempt = z.infer<typeof AttemptSchema>;
+
+/** Итоговая проверка агентом-критиком. Хранится вместе с текстом, для которого сделана: изменился промпт — проверка устарела. */
+export const CritiqueSchema = z.object({
+  prompt: z.string(),
+  createdAt: z.string(),
+  model: z.string().nullable().default(null),
+  verdict: z.enum(['ready', 'risky', 'not-ready']),
+  summaryRu: z.string(),
+  readback: z.array(z.object({ paragraph: z.number().int(), seesRu: z.string(), unsureRu: z.string().optional() })),
+  findings: z.array(z.object({ severity: z.enum(['critical', 'warning', 'note']), category: z.string(), quote: z.string(), paragraph: z.number().int(), problemRu: z.string(), fixRu: z.string(), symptomId: z.string().optional() })),
+  /** Находки без опоры в тексте, выброшенные проверкой ответа. */
+  droppedRu: z.array(z.string()).default([]),
+});
+export type Critique = z.infer<typeof CritiqueSchema>;
 
 export const ShotSchema = z.object({
   id: z.string(),
@@ -116,6 +132,7 @@ export const ShotSchema = z.object({
   /** Отпечатки подавленных находок линтера с причиной. */
   suppressed: z.array(z.object({ fingerprint: z.string(), reasonRu: z.string().min(1) })).default([]),
   attempts: z.array(AttemptSchema).default([]),
+  critique: CritiqueSchema.nullable().default(null),
 });
 export type Shot = z.infer<typeof ShotSchema>;
 

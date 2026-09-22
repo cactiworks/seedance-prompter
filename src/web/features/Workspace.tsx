@@ -4,18 +4,14 @@ import { activeStates, durationOf, emptyUnit, eventBudget, type Project, type Re
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
+import { ExportCard } from './ExportCard.tsx';
 import { Findings } from './Findings.tsx';
+import { PromptText } from './PromptText.tsx';
 import styles from './Workspace.module.css';
 
 const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', character: 'Герой', object: 'Предмет', gear: 'Техника', other: 'Другое' };
 const BLOCK_RU: Record<string, string> = { style: 'Стиль-блок', format: 'Формат', 'role-shooting': 'Роль: снимающая техника', 'role-props': 'Роль: реквизит', camera: 'Камера', lens: 'Объектив', flare: 'Блик', imperfections: 'Дефекты и речь', 'operator-rule': 'Правило про оператора', location: 'Локация и погода', segment: 'Сценарий' };
 const SAVE_RU = { saved: 'сохранено', dirty: 'есть правки…', saving: 'сохраняю…', conflict: 'конфликт окон', error: 'не сохранено' } as const;
-/** Что линтер проверить не может: это остаётся на человеке и спрашивается перед каждым копированием. */
-const gateFor = (durationSec: number): { id: string; label: string }[] => [
-  { id: 'panel', label: 'Картинки загружены в Higgsfield в том же порядке, что в панели' },
-  { id: 'settings', label: `В Higgsfield выставлено: Seedance 2.5, формат 9:16, длительность ${durationSec} с` },
-  { id: 'enhance', label: 'Enhance Prompt выключен' },
-];
 const DURATION_PRESETS = [5, 10, 15, 20, 30];
 
 /** Длительность дубля. Черновик живёт в поле: в кадр уходит только целое 4–30, недопечатанное число промпт не ломает. */
@@ -53,21 +49,6 @@ function Section({ n, title, note, children }: { n: string; title: string; note?
   );
 }
 
-/** Подсветка того, что поставил компилятор: ссылки, реплики, неразвёрнутые плейсхолдеры. */
-function Highlighted({ text }: { text: string }) {
-  const parts = text.split(/(<<<image_\d+>>>|@Image \d+|«[^»]*»|\{\{[^}]*\}\}|\{[^{}]+\})/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (/^(?:<<<image_\d+>>>|@Image \d+)$/.test(part)) return <span key={i} className={`${styles.hl} ${styles.hlRef}`}>{part}</span>;
-        if (part.startsWith('«') || /^\{[^{]/.test(part)) return <span key={i} className={`${styles.hl} ${styles.hlSay}`}>{part}</span>;
-        if (part.startsWith('{{')) return <span key={i} className={`${styles.hl} ${styles.hlBad}`}>{part}</span>;
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
-}
-
 function syncLocationRefs(project: Project, shot: Shot): Shot {
   const kinds = new Map(project.refs.map((ref) => [ref.key, ref.kind]));
   return { ...shot, locationRefs: shot.panel.filter((key) => kinds.get(key) === 'location').slice(0, 2) };
@@ -77,9 +58,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const store = useStore();
   const project = store.project;
   const shot = useStore(currentShot);
-  const [copied, setCopied] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [visionAgreed, setVisionAgreed] = useState(false);
-  const [gate, setGate] = useState<{ prompt: string; ticks: string[] }>({ prompt: '', ticks: [] });
   const [newRef, setNewRef] = useState<{ label: string; kind: Ref['kind'] }>({ label: '', kind: 'location' });
   const areas = useRef(new Map<string, HTMLTextAreaElement>());
   const fileInputs = useRef(new Map<string, HTMLInputElement>());
@@ -91,12 +71,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const warnings = build.findings.filter((f) => f.severity === 'warning').length;
   const blocking = build.blockers.length + errors;
   const canCopy = blocking === 0;
-  // Галочки гейта действуют только для того текста, под которым поставлены: любая правка промпта их сбрасывает.
-  const ticks = gate.prompt === build.prompt ? gate.ticks : [];
   const duration = durationOf(project, shot);
   const budget = eventBudget(duration);
-  const gateItems = warnings > 0 ? [...gateFor(duration), { id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : gateFor(duration);
-  const gatePassed = gateItems.every((item) => ticks.includes(item.id));
   const speechTone = build.metrics.speechWords > build.metrics.speechCapacity ? 'warning' : 'accent';
   const kits = Object.values(pack.kits).sort((a, b) => Number(a.source !== 'guide' && a.source !== undefined) - Number(b.source !== 'guide' && b.source !== undefined));
   const kit = pack.kits[shot.kitId];
@@ -160,12 +136,6 @@ export function Workspace({ pack }: { pack: PackBundle }) {
     if (!visionAgreed && !window.confirm('Уменьшенная копия этой картинки уйдёт в Anthropic для анализа (тот же получатель, что у сессий Claude Code). На референсе может быть твоё лицо. Отправить?')) return;
     setVisionAgreed(true);
     void store.analyzeRef(key);
-  };
-
-  const copy = async (): Promise<void> => {
-    await navigator.clipboard.writeText(build.prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
   };
 
   const refByKey = new Map(project.refs.map((ref) => [ref.key, ref]));
@@ -453,31 +423,23 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               <Meter label="Референсы" value={build.metrics.refsUsed} max={Math.max(1, build.metrics.refsInPanel)} unit={`/ ${build.metrics.refsInPanel} в панели`} tone={build.metrics.refsUsed < build.metrics.refsInPanel ? 'warning' : 'success'} />
             </div>
 
-            {canCopy && (
-              <div className={styles.gate}>
-                <Text variant="caption" tone="secondary">Этого линтер не видит — отметь перед генерацией. Любая правка промпта сбрасывает отметки.</Text>
-                {gateItems.map((item) => (
-                  <label key={item.id} className={styles.gateItem}>
-                    <input type="checkbox" checked={ticks.includes(item.id)} onChange={(event) => setGate({ prompt: build.prompt, ticks: event.target.checked ? [...ticks, item.id] : ticks.filter((id) => id !== item.id) })} />
-                    <Text variant="label">{item.label}</Text>
-                  </label>
-                ))}
-              </div>
-            )}
-
             <div className={styles.copyRow}>
-              <Button variant="dark" size="m" icon={<Icon name={copied ? 'checkmark' : 'copy'} />} disabled={!canCopy || !gatePassed} onClick={() => void copy()}>
-                {copied ? 'Скопировано' : 'Копировать для генерации'}
+              <Button variant="dark" size="m" icon={<Icon name="push" />} disabled={!canCopy} onClick={() => setExportOpen(true)}>
+                Забрать в Higgsfield
               </Button>
               {!canCopy ? (
                 <button type="button" className={styles.linkButton} onClick={() => document.getElementById('findings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
                   <Text variant="caption" tone="secondary">Не готово к генерации: {blocking} — список ниже</Text>
                 </button>
-              ) : !gatePassed ? (
-                <Text variant="caption" tone="secondary">Отметь пункты выше.</Text>
-              ) : null}
+              ) : (
+                <Text variant="caption" tone="secondary">
+                  {shot.critique?.prompt === build.prompt ? `Критик: ${shot.critique.verdict === 'ready' ? 'готов' : shot.critique.verdict === 'risky' ? 'с рисками' : 'не готов'}.` : 'Собран. Настройки, картинки по номерам и промпт — в одном окне.'}
+                </Text>
+              )}
             </div>
           </Card>
+
+          <ExportCard open={exportOpen} onOpenChange={setExportOpen} project={project} shot={shot} shotIndex={project.shots.findIndex((s) => s.id === shot.id)} build={build} durationSec={duration} warnings={warnings} />
 
           <Findings
             build={build}
@@ -490,6 +452,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             }}
             onSuppress={(fingerprint, reasonRu) => store.updateShot((s) => ({ ...s, suppressed: [...s.suppressed.filter((x) => x.fingerprint !== fingerprint), { fingerprint, reasonRu }] }))}
             onRestore={(fingerprint) => store.updateShot((s) => ({ ...s, suppressed: s.suppressed.filter((x) => x.fingerprint !== fingerprint) }))}
+            critic={{ running: store.critiquing, error: store.critiqueError, onRun: () => void store.critiqueShot(), onCancel: store.cancelCritique }}
           />
 
           <Card padding="l" className={styles.previewCard}>
@@ -501,7 +464,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                   <Text variant="caption" tone="secondary">{BLOCK_RU[paragraph.kind] ?? paragraph.kind}</Text>
                   <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? 'формула гайда · техника не из гайда' : 'дословно из гайда') : paragraph.origin === 'template' ? 'шаблон' : 'твой текст'}</Tag>
                 </div>
-                <p className={styles.promptText}><Highlighted text={build.resolvedParagraphs[i] ?? ''} /></p>
+                <PromptText text={build.resolvedParagraphs[i] ?? ''} />
               </div>
             ))}
           </Card>

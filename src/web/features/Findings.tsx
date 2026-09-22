@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ShotBuild } from '../../core/pipeline.ts';
 import type { Finding } from '../../core/lint/index.ts';
-import type { Shot } from '../../core/model/project.ts';
+import type { Critique, Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
 import styles from './Findings.module.css';
 
@@ -9,6 +9,16 @@ const SEVERITY: Record<Finding['severity'], { tone: TagTone; label: string }> = 
   error: { tone: 'danger', label: 'ошибка' },
   warning: { tone: 'warning', label: 'проверь' },
   info: { tone: 'info', label: 'заметка' },
+};
+const CRITIC_SEVERITY: Record<Critique['findings'][number]['severity'], { tone: TagTone; label: string }> = {
+  critical: { tone: 'danger', label: 'серьёзно' },
+  warning: { tone: 'warning', label: 'проверь' },
+  note: { tone: 'info', label: 'заметка' },
+};
+const VERDICT: Record<Critique['verdict'], { tone: TagTone; label: string }> = {
+  ready: { tone: 'success', label: 'готов' },
+  risky: { tone: 'warning', label: 'с рисками' },
+  'not-ready': { tone: 'danger', label: 'не готов' },
 };
 
 interface FindingsProps {
@@ -18,6 +28,8 @@ interface FindingsProps {
   blockLabel: (paragraph: number) => string;
   onSuppress: (fingerprint: string, reasonRu: string) => void;
   onRestore: (fingerprint: string) => void;
+  /** Критик: запускается только по клику, результат привязан к тексту промпта. */
+  critic: { running: boolean; error: string | null; onRun: () => void; onCancel: () => void };
 }
 
 const jump = (paragraph: number | null): void => {
@@ -63,13 +75,16 @@ function Row({ finding, blockLabel, onSuppress }: { finding: Finding; blockLabel
 }
 
 /** Окно проверки: что не даёт копировать, что стоит посмотреть, что просто к сведению. */
-export function Findings({ build, shot, blockLabel, onSuppress, onRestore }: FindingsProps) {
+export function Findings({ build, shot, blockLabel, onSuppress, onRestore, critic }: FindingsProps) {
   const [showNotes, setShowNotes] = useState(false);
   const [showSuppressed, setShowSuppressed] = useState(false);
+  const [showReadback, setShowReadback] = useState(false);
   const errors = build.findings.filter((f) => f.severity === 'error');
   const warnings = build.findings.filter((f) => f.severity === 'warning');
   const notes = build.findings.filter((f) => f.severity === 'info');
   const blocking = build.blockers.length + errors.length;
+  const critique = shot.critique !== null && shot.critique.prompt === build.prompt ? shot.critique : null;
+  const stale = shot.critique !== null && critique === null;
 
   return (
     <Card padding="l" className={styles.card} id="findings">
@@ -105,6 +120,65 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore }: Fin
       )}
 
       {blocking === 0 && warnings.length === 0 && <Text variant="label" tone="tertiary">Ошибок и предупреждений нет.</Text>}
+
+      <section className={`${styles.group} ${styles.critic}`}>
+        <div className={styles.criticHead}>
+          <div className={styles.criticTitle}>
+            <Icon name="sparkles" size={1} />
+            <Text variant="label" medium>Критик — итоговая проверка агентом</Text>
+            {critique !== null && <Tag tone={VERDICT[critique.verdict].tone} dot>{VERDICT[critique.verdict].label}</Tag>}
+            {stale && <Tag tone="outline">промпт изменился после проверки</Tag>}
+            {shot.critique === null && !critic.running && <Tag tone="outline">не запускался</Tag>}
+          </div>
+          <div className={styles.actions}>
+            {critic.running && <Button variant="ghost" size="xs" onClick={critic.onCancel}>Отмена</Button>}
+            <Button variant={critique === null ? 'primary' : 'soft'} size="s" icon={<Icon name="eye" size={1} />} loading={critic.running} disabled={blocking > 0} onClick={critic.onRun}>
+              {critic.running ? 'Критик читает… до пары минут' : critique === null ? (stale ? 'Перепроверить' : 'Проверить итоговую') : 'Перепроверить'}
+            </Button>
+          </div>
+        </div>
+        <Text variant="caption" tone="tertiary">
+          {blocking > 0 ? 'Сначала сними блокеры: критик читает только собранный промпт.' : 'Читает промпт как видеомодель: пересказывает, что увидит зритель, и называет то, чего regex не видит — физику, причинность, роли, двусмысленности. Вердикт — мнение, не пропуск.'}
+        </Text>
+        {critic.error !== null && <Text variant="label" tone="secondary">{critic.error}</Text>}
+        {critique !== null && (
+          <>
+            <Text variant="label">{critique.summaryRu}</Text>
+            {critique.findings.map((f, i) => (
+              <div key={`${f.paragraph}-${i}`} className={styles.finding}>
+                <Tag tone={CRITIC_SEVERITY[f.severity].tone} dot>{CRITIC_SEVERITY[f.severity].label}</Tag>
+                <div className={styles.body}>
+                  <Text variant="label">{f.problemRu}</Text>
+                  <Text variant="caption" tone="secondary" mono className={styles.evidence}>{f.quote}</Text>
+                  <Text variant="caption" tone="secondary">{f.fixRu}</Text>
+                  <div className={styles.actions}>
+                    <Text variant="caption" tone="tertiary" mono>критик · {f.category}{f.symptomId !== undefined ? ` · ${f.symptomId}` : ''} · {blockLabel(f.paragraph - 1)}</Text>
+                    <span className={styles.spacer} />
+                    <Button variant="ghost" size="xs" onClick={() => jump(f.paragraph - 1)}>К абзацу</Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {critique.readback.length > 0 && (
+              <>
+                <Button variant="ghost" size="xs" icon={<Icon name={showReadback ? 'chevron-up' : 'chevron-down'} size={0.875} />} onClick={() => setShowReadback(!showReadback)}>
+                  Что увидит зритель — пересказ по абзацам
+                </Button>
+                {showReadback && critique.readback.map((r) => (
+                  <div key={r.paragraph} className={styles.readbackRow}>
+                    <Text variant="caption" tone="tertiary" mono>{String(r.paragraph).padStart(2, '0')}</Text>
+                    <div className={styles.body}>
+                      <Text variant="label">{r.seesRu}</Text>
+                      {r.unsureRu !== undefined && r.unsureRu !== '' && <Text variant="caption" tone="secondary">Не уверен: {r.unsureRu}</Text>}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {critique.droppedRu.length > 0 && <Text variant="caption" tone="tertiary">Выброшено проверкой ответа (цитаты нет в тексте): {critique.droppedRu.length}.</Text>}
+          </>
+        )}
+      </section>
 
       {notes.length > 0 && (
         <section className={styles.group}>

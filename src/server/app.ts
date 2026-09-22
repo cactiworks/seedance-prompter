@@ -1,12 +1,14 @@
+import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
+import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
-import type { PackBundle } from '../core/pipeline.ts';
+import { buildShot, type PackBundle } from '../core/pipeline.ts';
 import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
@@ -31,6 +33,13 @@ export interface AppOptions {
   /** Подменяется в тестах: живой вызов тратит квоту подписки. */
   runLlm?: Runner;
   writerModel?: string;
+  /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
+  reveal?: ((dir: string) => void) | false;
+}
+
+function revealInFinder(dir: string): void {
+  if (process.platform !== 'darwin') return;
+  spawn('open', [dir], { stdio: 'ignore', detached: true }).unref();
 }
 
 function loadPack(rootDir: string, id: string): PackBundle {
@@ -116,6 +125,42 @@ export function createApp(options: AppOptions) {
         if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
         return c.json({ error: 'WRITE_FAILED', messageRu: error instanceof Error ? error.message : 'Писатель не сработал.' }, 422);
       }
+    })
+    // Итоговая проверка критиком — по клику, когда блокеров нет: тратить квоту на заведомо несобранный промпт незачем.
+    .post('/api/llm/critique', async (c) => {
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string; visionSummaries?: Record<string, string> };
+      const project = ProjectSchema.parse(body.project);
+      const shot = project.shots.find((s) => s.id === body.shotId);
+      if (shot === undefined) return c.json({ error: 'NO_SHOT', messageRu: 'Кадр не найден.' }, 404);
+      const pack = loadPack(options.rootDir, project.packId);
+      const build = buildShot(project, shot, pack);
+      if (build.blockers.length > 0) return c.json({ error: 'BLOCKED', messageRu: `Сначала сними блокеры сборки (${build.blockers.length}): критик проверяет только собранный промпт.` }, 422);
+      const packDir = path.join(options.rootDir, 'packs', project.packId);
+      const catalog = JSON.parse(readFileSync(path.join(packDir, 'symptoms.json'), 'utf8')) as SymptomCatalog;
+      const system = buildCriticSystem(readFileSync(path.join(packDir, 'prompts/critic.system.md'), 'utf8'), catalog);
+      const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries });
+      try {
+        // Критик читает ~12 тыс. токенов и пишет длинный JSON: на opus это не укладывалось в 240 с, по умолчанию — sonnet.
+        const result = await (options.runLlm ?? runClaude)<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
+        const verified = verifyCritique(result.data, build.resolvedParagraphs);
+        return c.json({ critique: { ...verified.critique, prompt: build.prompt, createdAt: new Date().toISOString(), model: result.meta.model, droppedRu: verified.droppedRu }, meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        return c.json({ error: 'CRITIQUE_FAILED', messageRu: error instanceof Error ? error.message : 'Критик не сработал.' }, 422);
+      }
+    })
+    // Панель кадра пронумерованными файлами в data/projects/<slug>/export/<shotId>/ + Finder.
+    .post('/api/projects/:slug/shots/:shotId/export', async (c) => {
+      const project = await store.read(c.req.param('slug'));
+      const shot = project.shots.find((s) => s.id === c.req.param('shotId'));
+      if (shot === undefined) return c.json({ error: 'NO_SHOT', messageRu: 'Кадр не найден.' }, 404);
+      const items = shot.panel.map((key) => {
+        const file = project.refs.find((r) => r.key === key)?.file ?? null;
+        return { key, fileName: file === null ? null : file.split('?')[0] ?? null };
+      });
+      const result = await store.exportPanel(project.slug, shot.id, items);
+      if (options.reveal !== false) (options.reveal ?? revealInFinder)(result.dir);
+      return c.json(result);
     })
     // Починка после неудачной генерации: симптомы попытки → минимальные правки абзацев (как предложение).
     .post('/api/llm/fix', async (c) => {

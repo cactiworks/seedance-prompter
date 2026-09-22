@@ -117,7 +117,9 @@ describe('pack отдаётся клиенту, и новый проект со�
     const filledShot = { ...shot, panel: ['loc', 'hero'], locationRefs: ['loc'], segments: [{ id: 'seg-1', titleRu: '', beatsRu: '', text: { ru: '', en: '{{intro:alex}} turns to the camera and {{line:L1}}', source: 'manual' as const, locked: true } }] };
     const build = buildShot(filled, filledShot, pack);
     expect(build.blockers).toEqual([]);
-    expect(build.prompt).toContain('Location: exactly as in <<<image_1>>> and <<<image_1>>> — a quiet embankment.');
+    // Один референс локации — формула гайда «as in N and N» схлопывается до одного номера.
+    expect(build.prompt).toContain('Location: exactly as in <<<image_1>>> — a quiet embankment.');
+    expect(build.prompt).not.toContain('<<<image_1>>> and <<<image_1>>>');
     expect(build.prompt).toContain('Alexander, matching <<<image_2>>> turns to the camera and says in clear, native Russian, perfect pronunciation, natural intonation: «Привет.»');
     expect(build.metrics.speechWords).toBe(1);
 

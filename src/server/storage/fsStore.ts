@@ -103,6 +103,34 @@ export function createStore(dataDir: string) {
         throw new StoreError('NOT_FOUND', 'Файл референса не найден.');
       }
     },
+
+    /**
+     * Панель кадра пронумерованными файлами: 01-<key>.jpg, 02-… — в Finder они лежат в порядке
+     * панели, и перепутать порядок загрузки в Higgsfield становится трудно. Папка пересобирается с нуля.
+     */
+    async exportPanel(slug: string, shotId: string, items: { key: string; fileName: string | null }[]): Promise<{ dir: string; files: { n: number; key: string; file: string | null }[] }> {
+      if (!SLUG.test(shotId)) throw new StoreError('BAD_SLUG', 'Недопустимый id кадра.');
+      const dir = path.join(dirOf(slug), 'export', shotId);
+      await rm(dir, { recursive: true, force: true });
+      await mkdir(dir, { recursive: true });
+      const files: { n: number; key: string; file: string | null }[] = [];
+      for (const [i, item] of items.entries()) {
+        const n = i + 1;
+        if (item.fileName === null || !REF_FILE.test(item.fileName)) {
+          files.push({ n, key: item.key, file: null });
+          continue;
+        }
+        const ext = item.fileName.split('.').pop() ?? 'jpg';
+        const target = `${String(n).padStart(2, '0')}-${item.key}.${ext}`;
+        try {
+          await copyFile(path.join(dirOf(slug), 'refs', item.fileName), path.join(dir, target));
+          files.push({ n, key: item.key, file: target });
+        } catch {
+          files.push({ n, key: item.key, file: null });
+        }
+      }
+      return { dir, files };
+    },
   };
 }
 

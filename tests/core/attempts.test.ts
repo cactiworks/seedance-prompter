@@ -61,7 +61,7 @@ describe('POST /api/llm/fix: симптомы попытки → минимал�
       locationRefs: ['loc'],
       // Отрезок защищён ручной правкой — фиксер всё равно вправе ПРЕДЛОЖИТЬ правку.
       segments: [{ id: 'seg-1', titleRu: '', beatsRu: '', text: { ru: '', en: 'The operator rides in the cargo bed. He {{line:L1}}', source: 'manual' as const, locked: true } }],
-      attempts: [{ n: 1, createdAt: '2026-09-21T00:00:00.000Z', prompt: '…', panel: [], segments: [], kitId: s.kitId, verdict: 'rejected' as const, workedRu: 'Локация та.', failedRu: 'В кадре руки оператора.', symptomIds: ['operator-visible', 'wrong-clothes'] }],
+      attempts: [{ n: 1, createdAt: '2026-09-21T00:00:00.000Z', prompt: '…', panel: [], segments: [], kitId: s.kitId, verdict: 'rejected' as const, workedRu: 'Локация та.', failedRu: 'В кадре руки оператора.', symptomIds: ['operator-visible', 'wrong-clothes'], readbackRu: '' }],
     })),
   };
 

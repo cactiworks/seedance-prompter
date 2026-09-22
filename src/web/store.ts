@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Attempt, Project, Shot } from '../core/model/project.ts';
+import type { Attempt, Critique, Project, Shot } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
@@ -65,6 +65,21 @@ interface State {
   visionReports: Record<string, VisionReport>;
   analyzeRef: (refKey: string) => Promise<void>;
   applyVisionFlags: (refKey: string) => void;
+  /** Итоговая проверка критиком — по клику; результат хранится в кадре вместе с текстом, для которого сделан. */
+  critiquing: boolean;
+  critiqueError: string | null;
+  critiqueShot: () => Promise<void>;
+  cancelCritique: () => void;
+  /** Панель пронумерованными файлами + Finder. */
+  exporting: boolean;
+  exportResult: ExportResult | null;
+  exportPanel: () => Promise<void>;
+}
+
+export interface ExportResult {
+  dir: string;
+  files: { n: number; key: string; file: string | null }[];
+  errorRu?: string;
 }
 
 export interface VisionReport {
@@ -115,6 +130,7 @@ interface WriteResponse {
 }
 
 let writeAbort: AbortController | null = null;
+let critiqueAbort: AbortController | null = null;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -207,6 +223,7 @@ export const useStore = create<State>((set, get) => {
             segments: [{ id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: { ru: '', en: '', source: 'empty', locked: false } }],
             suppressed: [],
             attempts: [],
+            critique: null,
           },
         ],
       }));
@@ -280,9 +297,50 @@ export const useStore = create<State>((set, get) => {
             workedRu: '',
             failedRu: '',
             symptomIds: [],
+            // Пересказ критика сохраняется только если он сделан для этого же текста.
+            readbackRu: shot.critique?.prompt === prompt ? shot.critique.readback.map((r) => `${r.paragraph}. ${r.seesRu}${r.unsureRu !== undefined && r.unsureRu !== '' ? ` (не уверен: ${r.unsureRu})` : ''}`).join('\n') : '',
           },
         ],
       }));
+    },
+
+    critiquing: false,
+    critiqueError: null,
+
+    critiqueShot: async () => {
+      const { project, shotId } = get();
+      if (project === null || shotId === null || get().critiquing) return;
+      critiqueAbort = new AbortController();
+      set({ critiquing: true, critiqueError: null });
+      try {
+        const res = await fetch('/api/llm/critique', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId, visionSummaries: Object.fromEntries(Object.entries(get().visionReports).map(([key, r]) => [key, r.summaryRu])) }), signal: critiqueAbort.signal });
+        const { critique } = await json<{ critique: Critique }>(res);
+        get().updateShot((shot) => ({ ...shot, critique }));
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) set({ critiqueError: error instanceof Error ? error.message : 'Критик не сработал.' });
+      } finally {
+        critiqueAbort = null;
+        set({ critiquing: false });
+      }
+    },
+
+    cancelCritique: () => critiqueAbort?.abort(),
+
+    exporting: false,
+    exportResult: null,
+
+    exportPanel: async () => {
+      const { project, shotId } = get();
+      if (project === null || shotId === null || get().exporting) return;
+      set({ exporting: true });
+      try {
+        const res = await fetch(`/api/projects/${project.slug}/shots/${shotId}/export`, { method: 'POST', headers: HEADERS });
+        set({ exportResult: await json<ExportResult>(res) });
+      } catch (error) {
+        set({ exportResult: { dir: '', files: [], errorRu: error instanceof Error ? error.message : 'Не удалось выгрузить панель.' } });
+      } finally {
+        set({ exporting: false });
+      }
     },
 
     updateAttempt: (n, patch) => get().updateShot((shot) => ({ ...shot, attempts: shot.attempts.map((a) => (a.n === n ? { ...a, ...patch } : a)) })),

@@ -152,13 +152,16 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
   }
 
   const refs = { REF1: placeholder('ref', input.locationRefs[0]), REF2: placeholder('ref', input.locationRefs[1]) };
+  // Формула гайда написана под два референса локации. С одним — «exactly as in N and N» читается как опечатка; пара схлопывается.
+  const single = input.locationRefs[0] === input.locationRefs[1] ? `${refs.REF1} and ${refs.REF1}` : null;
+  const collapse = (text: string): string => (single === null ? text : text.replaceAll(single, refs.REF1));
   paragraphs.push({
     kind: 'location',
     layers: [7],
     origin: 'template',
     text: [
-      fill(pack.location.lead, { ...refs, PLACE: input.world.placeEn }),
-      `${fill(pack.location.rule[input.locationRule], refs)}.`,
+      collapse(fill(pack.location.lead, { ...refs, PLACE: input.world.placeEn })),
+      `${collapse(fill(pack.location.rule[input.locationRule], refs))}.`,
       fill(pack.location.useOnly, { LIST: input.world.useOnlyEn }),
       input.world.weatherEn,
     ].filter((part) => part !== '').join(' '),

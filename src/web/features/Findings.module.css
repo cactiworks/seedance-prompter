@@ -67,6 +67,35 @@
   flex: 1;
 }
 
+.critic {
+  padding: var(--lab-space-8);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-xl);
+}
+
+.criticHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lab-space-4);
+}
+
+.criticTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lab-space-3);
+}
+
+.readbackRow {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--lab-space-4);
+  padding-top: var(--lab-space-4);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
 .suppress {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,30 @@
+.text {
+  margin: 0;
+  font-size: var(--lab-type-label-size);
+  line-height: 1.5rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.hl {
+  padding: 0.0625rem var(--lab-space-2);
+  border-radius: var(--lab-radius-xs);
+}
+
+.ref {
+  background: var(--lab-accent-soft);
+  color: var(--lab-accent);
+  font-family: var(--lab-font-mono);
+  font-size: var(--lab-type-caption-size);
+}
+
+.say {
+  background: var(--lab-success-soft);
+}
+
+.bad {
+  background: var(--lab-danger-soft);
+  color: var(--lab-danger);
+  font-family: var(--lab-font-mono);
+  font-size: var(--lab-type-caption-size);
+}

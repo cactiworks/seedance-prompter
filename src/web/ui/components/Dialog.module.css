@@ -1,0 +1,100 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--lab-scrim);
+  backdrop-filter: blur(var(--lab-blur-soft));
+  animation: fade var(--lab-duration-base) var(--lab-ease-standard);
+}
+
+.content {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(100vw - var(--lab-space-8) * 2, 52rem);
+  max-height: calc(100vh - var(--lab-space-12) * 2);
+  margin: auto;
+  overflow: hidden;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-3xl);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-xl);
+  animation: rise var(--lab-duration-base) var(--lab-ease-standard);
+}
+
+.l {
+  width: min(100vw - var(--lab-space-8) * 2, 68rem);
+}
+
+.head,
+.foot {
+  position: sticky;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-6);
+  padding: var(--lab-space-8) var(--lab-space-12);
+}
+
+/* Скругление шапки и подвала даёт overflow: hidden у .content — свои радиусы им не нужны. */
+.head {
+  top: 0;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+.foot {
+  bottom: 0;
+  justify-content: flex-end;
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  min-width: 0;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lab-space-12);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--lab-space-4)) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .content {
+    animation: none;
+  }
+}
+
+@media (width <= 48rem) {
+  .content {
+    width: 100vw;
+    max-height: 100vh;
+    border-radius: var(--lab-radius-none);
+  }
+
+  .body,
+  .head,
+  .foot {
+    padding-inline: var(--lab-space-8);
+  }
+}
