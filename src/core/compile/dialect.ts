@@ -13,6 +13,8 @@ export interface DialectPack {
   dialogueWrap: Record<DialogueWrap, { template: string }>;
   intro: { character: string; object: string; studioBackdropClause: string };
   languageNames: Record<string, string>;
+  /** Как формат кадра называется в формуле формата: «Vertical 9:16», «Horizontal 16:9». */
+  aspect?: { phrases: Record<string, string>; labelsRu: Record<string, string> };
 }
 
 export interface ResolveEntity {

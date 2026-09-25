@@ -21,7 +21,9 @@ removes an "average" choice from the model, adds one of those signals, or protec
    `says in clear, native Russian, perfect pronunciation, natural intonation: «…»`. After the placeholder
    you may add delivery: `He stumbles on a word, repeats it, keeps going.`
 3. **States from previous shots go in only as `{{state:S1}}`** — a canonical sentence with side, degree
-   and limiter. Do not rephrase injuries or damage yourself.
+   and limiter. Every state in `states` must appear exactly once in the shot, in the paragraph where that
+   person or object is first clearly visible (unless a locked paragraph already has it). Do not rephrase
+   injuries or damage yourself.
 4. English only. No Cyrillic outside placeholders.
 5. Each `{{line:Ln}}` listed for a segment appears in that segment exactly once, in the given order.
    Paragraph order is time order.

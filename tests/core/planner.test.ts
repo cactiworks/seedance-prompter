@@ -22,19 +22,18 @@ describe('реплики вынимаются из синопсиса детер
   });
 });
 
-const plan = (segments: string[], extra: Partial<PlannerOutput> = {}): PlannerOutput => ({ segments: segments.map((beatsRu, i) => ({ titleRu: `Отрезок ${i + 1}`, beatsRu })), placeEn: '', weatherEn: '', notesRu: '', ...extra });
+const plan = (segments: string[], extra: Partial<PlannerOutput> = {}): PlannerOutput => ({ segments: segments.map((beatsRu, i) => ({ titleRu: `Отрезок ${i + 1}`, beatsRu })), notesRu: '', ...extra });
 
 describe('проверка плана', () => {
   it('чистый план проходит', () => {
     expect(validatePlan(plan(['Пикап заносит.', 'Alexander выходит и говорит L1.', 'Облако, пауза, финал, L2.']), ['L1', 'L2'])).toEqual([]);
   });
 
-  it('ловит потерянную, задвоенную и переставленную реплику, текст реплики и кириллицу в английском', () => {
+  it('ловит потерянную, задвоенную и переставленную реплику и текст реплики', () => {
     expect(validatePlan(plan(['A', 'говорит L1']), ['L1', 'L2']).join(' ')).toContain('L2 must be placed');
     expect(validatePlan(plan(['L1 здесь', 'и L1 тут']), ['L1']).join(' ')).toContain('found 2');
     expect(validatePlan(plan(['сначала L2', 'потом L1']), ['L1', 'L2']).join(' ')).toContain('spoken order');
     expect(validatePlan(plan(['говорит «Привет»', 'финал']), []).join(' ')).toContain('by id only');
-    expect(validatePlan(plan(['A', 'B'], { placeEn: 'набережная' }), []).join(' ')).toContain('must be English');
     expect(validatePlan(plan(['только один']), []).join(' ')).toContain('expected 2–8');
   });
 
@@ -45,7 +44,7 @@ describe('проверка плана', () => {
     // Кадр на 5 секунд — один отрезок допустим; шесть отрезков на 10 секунд — перегруз.
     expect(validatePlan(plan(['Пикап заносит, брызги.']), [], 5)).toEqual([]);
     expect(validatePlan(plan(['A', 'B', 'C', 'D', 'E', 'F']), [], 10).join(' ')).toContain('expected 2–3');
-    const user = buildPlannerUser(newProject('demo', 'Демо'), 'Пикап заносит.', [], { place: false, weather: false }, 10);
+    const user = buildPlannerUser(newProject('demo', 'Демо'), 'Пикап заносит.', [], 10);
     expect(user).toContain('"durationSec": 10');
     expect(user).toMatch(/"majorEvents": \{\s+"min": 1,\s+"max": 2\s+\}/);
   });
@@ -54,7 +53,7 @@ describe('проверка плана', () => {
 describe('POST /api/llm/plan', () => {
   it('планировщик получает синопсис без текста реплик; плохой план уходит на ремонт', async () => {
     const calls: LlmRequest[] = [];
-    const answers: PlannerOutput[] = [plan(['Пикап заносит.', 'Финал.']), plan(['Пикап заносит.', 'Alexander говорит L1.', 'Финал.'], { placeEn: 'a quiet embankment', notesRu: 'Борт пикапа — риск механики.' })];
+    const answers: PlannerOutput[] = [plan(['Пикап заносит.', 'Финал.']), plan(['Пикап заносит.', 'Alexander говорит L1.', 'Финал.'], { notesRu: 'Борт пикапа — риск механики.' })];
     const app = createApp({
       rootDir: ROOT,
       dataDir: mkdtempSync(path.join(tmpdir(), 'sp-plan-')),

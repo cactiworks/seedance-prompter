@@ -47,7 +47,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const nextAttempt = Math.max(0, ...shot.attempts.map((a) => a.n)) + 1;
 
   const items: GateItem[] = [
-    { id: 'settings', label: `В Higgsfield выставлено: Seedance 2.5, 9:16, ${durationSec} с, Enhance Prompt выключен` },
+    { id: 'settings', label: `В Higgsfield выставлено: Seedance 2.5, ${project.aspectRatio}, ${durationSec} с, Enhance Prompt выключен` },
     { id: 'panel', label: `Картинки загружены в этом порядке: ${shot.panel.map((_, i) => i + 1).join(' → ')}` },
     ...(warnings > 0 ? [{ id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : []),
     critique === null
@@ -90,7 +90,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
           <StepHead n="1" title="Настройки генерации" />
           <div className={styles.chips}>
             <Tag tone="neutral">Seedance 2.5</Tag>
-            <Tag tone="neutral">9:16</Tag>
+            <Tag tone="neutral">{project.aspectRatio}</Tag>
             <Tag tone="neutral">{durationSec} с</Tag>
             <Tag tone="danger">Enhance Prompt: выкл</Tag>
             <Tag tone="outline">ссылки: {project.dialect.refSyntax === 'higgsfield-chip' ? '<<<image_N>>>' : '@Image N'}</Tag>

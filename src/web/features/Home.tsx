@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Icon, Text, TextField } from '../ui/components/index.ts';
 import { useStore } from '../store.ts';
 import styles from './Home.module.css';
+import { ThemeSwitch } from './ThemeSwitch.tsx';
 
 const formatDate = (ms: number): string => new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
@@ -22,11 +23,14 @@ export function Home() {
 
   return (
     <main className={styles.page}>
+      <div className={styles.top}>
+        <ThemeSwitch />
+      </div>
       <header className={styles.hero}>
         <Text as="h1" variant="display">
           Промпт, в который <Text as="span" variant="display" tone="accent">верит модель</Text>
         </Text>
-        <Text tone="secondary">Заполняешь параметры кадра — получаешь промпт для Seedance 2.5 по правилам гайда: номера референсов, реплики и дословные блоки ставятся сами, линтер ловит ошибки до генерации.</Text>
+        <Text tone="secondary">Заполняешь поля кадра тезисно по-русски — агент пишет из них промпт для Seedance 2.5 по правилам гайда: номера референсов, реплики и дословные блоки ставятся сами, линтер ловит ошибки до генерации.</Text>
       </header>
 
       <Card padding="l" className={styles.create}>

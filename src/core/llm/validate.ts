@@ -19,11 +19,13 @@ export interface ValidationContext {
   known: { intro: string[]; ref: string[]; line: string[]; state: string[] };
   /** Сущности, уже представленные в заблокированных сегментах: повторный intro запрещён. */
   alreadyIntroduced: string[];
+  /** Последствия прошлых кадров, которые обязаны стоять в кадре; `placedElsewhere` — уже стоят в нетронутых отрезках. */
+  requiredStates?: { ids: string[]; placedElsewhere: string[] };
 }
 
 export interface Violation {
   segmentId: string;
-  code: 'UNKNOWN_SEGMENT' | 'MISSING_SEGMENT' | 'EMPTY' | 'MALFORMED_PLACEHOLDER' | 'UNKNOWN_ID' | 'RAW_REF' | 'RAW_LINE' | 'CYRILLIC' | 'LINE_MISSING' | 'LINE_DUPLICATED' | 'LINE_ORDER' | 'INTRO_DUPLICATED';
+  code: 'UNKNOWN_SEGMENT' | 'MISSING_SEGMENT' | 'EMPTY' | 'MALFORMED_PLACEHOLDER' | 'UNKNOWN_ID' | 'RAW_REF' | 'RAW_LINE' | 'CYRILLIC' | 'LINE_MISSING' | 'LINE_DUPLICATED' | 'LINE_ORDER' | 'INTRO_DUPLICATED' | 'STATE_MISSING';
   messageEn: string;
 }
 
@@ -84,6 +86,16 @@ export function validateWriterOutput(output: WriterOutput, ctx: ValidationContex
 
   for (const id of ctx.writable) {
     if (!seen.has(id)) violations.push({ segmentId: id, code: 'MISSING_SEGMENT', messageEn: `Segment "${id}" is missing from the answer.` });
+  }
+
+  // Память между кадрами: владелец больше не вставляет {{state:Sn}} руками — это обязанность писателя.
+  const states = ctx.requiredStates;
+  if (states !== undefined) {
+    const written = output.blocks.filter((b) => ctx.writable.includes(b.segmentId)).map((b) => b.en).join('\n');
+    for (const stateId of states.ids) {
+      if (states.placedElsewhere.includes(stateId) || written.includes(`{{state:${stateId}}}`)) continue;
+      violations.push({ segmentId: ctx.writable[0] ?? '', code: 'STATE_MISSING', messageEn: `{{state:${stateId}}} came from a previous shot and must appear in this shot once — where that person or object is first visible.` });
+    }
   }
   return violations;
 }

@@ -42,6 +42,8 @@ export interface ShotCompileInput {
   kit: Kit;
   /** Длительность дубля, с. Формула формата в pack написана под 30 — при другой длительности меняется только число. */
   durationSec?: number;
+  /** Формат словами: «Horizontal 16:9». Формула формата в pack написана под «Vertical 9:16» — меняется только эта пара слов. */
+  aspectPhrase?: string;
   /** id элементов стека дефектов в порядке pack; по умолчанию — набор комплекта. */
   defects?: string[];
   behavior: string[];
@@ -70,7 +72,7 @@ export interface CompiledParagraph {
 }
 
 export interface CompileIssue {
-  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'EMPTY_SEGMENT' | 'FORMAT_NO_DURATION';
+  code: 'UNKNOWN_DEFECT' | 'UNKNOWN_BEHAVIOR' | 'KIT_INCOMPLETE' | 'EMPTY_SEGMENT' | 'FORMAT_NO_DURATION' | 'FORMAT_NO_ASPECT';
   messageRu: string;
 }
 
@@ -97,7 +99,14 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
   if (duration !== 30 && !PACK_DURATION.test(pack.format)) {
     issues.push({ code: 'FORMAT_NO_DURATION', messageRu: `В формуле формата нет «30-second» — длительность ${duration} с подставить некуда, промпт обещал бы другую.` });
   }
-  const format = duration === 30 ? pack.format : pack.format.replace(PACK_DURATION, `${duration}-second`);
+  const timed = duration === 30 ? pack.format : pack.format.replace(PACK_DURATION, `${duration}-second`);
+  // То же с форматом кадра: в дословной формуле меняется только «Vertical 9:16».
+  const PACK_ASPECT = 'Vertical 9:16';
+  const aspect = input.aspectPhrase ?? PACK_ASPECT;
+  if (aspect !== PACK_ASPECT && !timed.includes(PACK_ASPECT)) {
+    issues.push({ code: 'FORMAT_NO_ASPECT', messageRu: `В формуле формата нет «${PACK_ASPECT}» — формат «${aspect}» подставить некуда, промпт обещал бы другой.` });
+  }
+  const format = aspect === PACK_ASPECT ? timed : timed.replace(PACK_ASPECT, aspect);
 
   const defects = pick(input.defects ?? kit.defaultDefects, pack.defects, 'UNKNOWN_DEFECT');
   const behavior = pick(input.behavior, pack.behavior, 'UNKNOWN_BEHAVIOR');

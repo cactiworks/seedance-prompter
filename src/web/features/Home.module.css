@@ -1,10 +1,16 @@
 .page {
   max-width: 52rem;
   margin: 0 auto;
-  padding: var(--lab-space-36) var(--lab-space-12);
+  padding: var(--lab-space-12) var(--lab-space-12) var(--lab-space-36);
   display: flex;
   flex-direction: column;
   gap: var(--lab-space-16);
+}
+
+.top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--lab-space-8);
 }
 
 .hero {

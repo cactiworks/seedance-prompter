@@ -1,5 +1,5 @@
 import type { Kit } from '../compile/compile.ts';
-import { durationOf, eventBudget, type Project, type Shot } from '../model/project.ts';
+import { activeStates, durationOf, eventBudget, segmentNeedsWriter, type Project, type Shot } from '../model/project.ts';
 import type { ValidationContext, Violation } from './validate.ts';
 
 export interface FewShot {
@@ -43,8 +43,13 @@ export function linesInBeats(beatsRu: string, known: string[]): string[] {
   return out;
 }
 
-export function writableSegments(shot: Shot): string[] {
-  return shot.segments.filter((s) => !s.text.locked && s.beatsRu.trim() !== '').map((s) => s.id);
+/**
+ * Что писатель пишет: отрезки, чьи биты изменились после прошлого абзаца (или абзаца нет). Явный
+ * список — «переписать кадр» целиком; отрезок без битов писать не из чего.
+ */
+export function writableSegments(shot: Shot, only?: string[]): string[] {
+  const described = shot.segments.filter((s) => s.beatsRu.trim() !== '');
+  return (only === undefined ? described.filter(segmentNeedsWriter) : described.filter((s) => only.includes(s.id))).map((s) => s.id);
 }
 
 export function buildValidationContext(project: Project, shot: Shot, writable: string[], fixing = false): ValidationContext {
@@ -57,6 +62,7 @@ export function buildValidationContext(project: Project, shot: Shot, writable: s
     requiredLines: Object.fromEntries(shot.segments.filter((s) => writable.includes(s.id)).map((s) => [s.id, required(s)])),
     known: { intro: project.entities.map((e) => e.key), ref: shot.panel, line: lineIds, state: project.states.map((s) => s.id) },
     alreadyIntroduced: [...lockedText.matchAll(/\{\{intro:([^}]+)\}\}/g)].map((m) => m[1] ?? ''),
+    requiredStates: { ids: activeStates(project, shot.id).map((s) => s.id), placedElsewhere: [...lockedText.matchAll(/\{\{state:(S\d+)\}\}/g)].map((m) => m[1] ?? '') },
   };
 }
 
@@ -76,13 +82,14 @@ export function fixableSegments(shot: Shot): string[] {
 export function buildWriterUser(project: Project, shot: Shot, kit: Kit, writable: string[], repair?: { previous: { segmentId: string; en: string }[]; violations: Violation[]; lintFindings: string[] }, fix?: FixBrief): string {
   const lineIds = project.lines.map((l) => l.id);
   const input = {
-    format: { durationSec: durationOf(project, shot), majorEvents: eventBudget(durationOf(project, shot)), aspect: '9:16', singleContinuousTake: true },
+    format: { durationSec: durationOf(project, shot), majorEvents: eventBudget(durationOf(project, shot)), aspect: project.aspectRatio, singleContinuousTake: true },
     kit: { shootingGear: kit.anchor, look: kit.source === 'custom' ? (kit.look ?? '') : kit.titleRu, flarePolicy: kit.lensNote ?? kit.flareParagraph ?? 'flares follow the look of this lens', doNotMention: 'other camera or lens brands' },
     camera: { operatorRuleInPrompt: shot.operatorRule !== 'off', reminder: 'camera verbs only; the operator is never an actor' },
     world: { place: project.world.place.en, weatherAndBaseLight: project.world.weather.en },
     entities: project.entities.map((e) => ({ firstMention: `{{intro:${e.key}}}`, laterName: e.name, kind: e.kind, hasReference: e.refKey !== null })),
     lines: project.lines.map((l) => ({ placeholder: `{{line:${l.id}}}`, speaker: project.entities.find((e) => e.key === l.speakerKey)?.name ?? null, ru: l.ru })),
-    states: project.states.map((s) => ({ placeholder: `{{state:${s.id}}}`, meaning: s.en })),
+    // Только последствия прошлых кадров, действующие здесь: каждое обязано появиться один раз.
+    states: activeStates(project, shot.id).map((s) => ({ placeholder: `{{state:${s.id}}}`, meaning: s.en, mustAppear: true })),
     segments: shot.segments.map((s) => ({
       id: s.id,
       beatsRu: s.beatsRu,

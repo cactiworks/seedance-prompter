@@ -3,7 +3,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
+import { staleFields, type FieldsOutput } from '../core/compose.ts';
 import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
+import { buildFieldsUser, FIELDS_SCHEMA, normalizeFields, validateFields } from '../core/llm/buildFields.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
@@ -106,13 +108,14 @@ export function createApp(options: AppOptions) {
     // Писатель запускается только по клику владельца. Клиент присылает текущий снимок проекта,
     // чтобы не было гонки с автосейвом; отмена запроса убивает дочерний процесс.
     .post('/api/llm/write', async (c) => {
-      const body = (await c.req.json()) as { project?: unknown; shotId?: string };
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string; segmentIds?: string[] };
       const project = ProjectSchema.parse(body.project);
       const packDir = path.join(options.rootDir, 'packs', project.packId);
       try {
         const result = await writeShot({
           project,
           shotId: body.shotId ?? '',
+          segmentIds: Array.isArray(body.segmentIds) ? body.segmentIds : undefined,
           pack: loadPack(options.rootDir, project.packId),
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
@@ -124,6 +127,35 @@ export function createApp(options: AppOptions) {
       } catch (error) {
         if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
         return c.json({ error: 'WRITE_FAILED', messageRu: error instanceof Error ? error.message : 'Писатель не сработал.' }, 422);
+      }
+    })
+    // Агент полей: русские тезисы владельца (место, погода, имена, последствия, своя камера, реквизит) →
+    // английские фрагменты под слоты компилятора. Первый шаг кнопки «Собрать промпт», только по клику.
+    .post('/api/llm/fields', async (c) => {
+      const body = (await c.req.json()) as { project?: unknown; shotId?: string };
+      const project = ProjectSchema.parse(body.project);
+      const shot = project.shots.find((s) => s.id === body.shotId);
+      if (shot === undefined) return c.json({ error: 'NO_SHOT', messageRu: 'Кадр не найден.' }, 404);
+      const items = staleFields(project, shot, 'compose');
+      const asked = items.filter((item) => item.ru !== '');
+      if (asked.length === 0) return c.json({ items, output: null, problems: [], meta: null });
+      const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/fields.system.md'), 'utf8');
+      const run = options.runLlm ?? runClaude;
+      const request = { system, jsonSchema: FIELDS_SCHEMA, model: options.writerModel ?? process.env.SP_FIELDS_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'low' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
+      try {
+        const user = buildFieldsUser(project, items);
+        let result = await run<FieldsOutput>({ ...request, user });
+        let output = normalizeFields(result.data, items);
+        let problems = validateFields(output, items, project);
+        if (problems.length > 0) {
+          result = await run<FieldsOutput>({ ...request, user: `${user}\n\nYour previous answer was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious answer:\n${JSON.stringify(result.data)}` });
+          output = normalizeFields(result.data, items);
+          problems = validateFields(output, items, project);
+        }
+        return c.json({ items, output, problems, meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        throw error;
       }
     })
     // Итоговая проверка критиком — по клику, когда блокеров нет: тратить квоту на заведомо несобранный промпт незачем.
@@ -230,12 +262,11 @@ export function createApp(options: AppOptions) {
       const { text, newLines } = extractLines(body.synopsisRu ?? '', project.lines);
       if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
-      const translate = { place: project.world.place.en.trim() === '' && project.world.place.ru.trim() !== '', weather: project.world.weather.en.trim() === '' && project.world.weather.ru.trim() !== '' };
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/planner.system.md'), 'utf8');
       const run = options.runLlm ?? runClaude;
       const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
-        const user = buildPlannerUser(project, text, lineIds, translate, durationSec);
+        const user = buildPlannerUser(project, text, lineIds, durationSec);
         let result = await run<PlannerOutput>({ ...request, user });
         let problems = validatePlan(result.data, lineIds, durationSec);
         if (problems.length > 0) {

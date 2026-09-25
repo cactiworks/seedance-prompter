@@ -97,10 +97,15 @@ describe('окно проверки срабатывает, когда гене�
     expect(rules(other)).not.toContain('ENTITY_NOT_INTRODUCED');
   });
 
-  it('отрезок описан по-русски, но не написан по-английски — блокер: кусок сцены молча выпал бы из промпта', () => {
+  it('отрезок описан по-русски, но агент его ещё не написал — блокер: кусок сцены молча выпал бы из промпта', () => {
     const { project, shot } = make(CLEAN);
     const withGap: Shot = { ...shot, segments: [...shot.segments, { id: 'seg-3', titleRu: '', beatsRu: 'Герой садится в машину', text: { ru: '', en: '', source: 'empty', locked: false } }] };
-    expect(codes(buildShot(project, withGap, pack))).toEqual(['SEGMENT_NOT_WRITTEN']);
+    const build = buildShot(project, withGap, pack);
+    expect(codes(build)).toEqual(['NEEDS_COMPOSE']);
+    expect(build.blockers[0]?.messageRu).toContain('отрезок 3');
+    // Биты поменялись после того, как агент написал абзац, — тот же блокер: промпт уже не про то.
+    const edited: Shot = { ...shot, segments: shot.segments.map((s, i) => (i === 0 ? { ...s, beatsRu: 'Саша у пикапа, говорит L1', text: { ...s.text, enFor: 'Саша у пикапа' } } : s)) };
+    expect(buildShot(project, edited, pack).blockers.map((b) => b.messageRu)).toEqual([expect.stringContaining('отрезок 1')]);
     // Пустой отрезок без описания — просто заготовка, не повод блокировать.
     const blank: Shot = { ...shot, segments: [...shot.segments, { id: 'seg-3', titleRu: '', beatsRu: '', text: { ru: '', en: '', source: 'empty', locked: false } }] };
     expect(codes(buildShot(project, blank, pack))).toEqual([]);
@@ -131,8 +136,15 @@ describe('окно проверки срабатывает, когда гене�
     expect(build.findings.find((f) => f.ruleId === 'REF_UNUSED')?.messageRu).toBe('Картинка №3 «Пикап» в панели есть, а в тексте не вызвана.');
   });
 
-  it('своя камера: без модели и характера — блокеры; кириллица в полях — одна ошибка с самим словом, без дубля', () => {
-    expect(codes(run(CLEAN, {}, { kitId: CUSTOM_KIT }))).toEqual(['CUSTOM_KIT_NO_CAMERA', 'CUSTOM_KIT_NO_LOOK']);
+  it('своя камера: не описана — один блокер; описана, но не переведена — «собери»; без характера — блокер; кириллица — одна ошибка', () => {
+    expect(codes(run(CLEAN, {}, { kitId: CUSTOM_KIT }))).toEqual(['CUSTOM_KIT_EMPTY']);
+    // Дыра в стиль-блоке («shot on , .») названа блокером — пунктуацией второй раз не называется.
+    expect(rules(run(CLEAN, {}, { kitId: CUSTOM_KIT }))).toEqual([]);
+    const ru = 'Fujifilm X100V, мелкое зерно, приглушённые цвета';
+    const described = run(CLEAN, {}, { kitId: CUSTOM_KIT, customKit: { ru, camera: '', lens: '', look: '', lensNote: '' } });
+    expect(codes(described)).toEqual(['NEEDS_COMPOSE']);
+    expect(described.blockers[0]?.messageRu).toContain('своя камера');
+    expect(codes(run(CLEAN, {}, { kitId: CUSTOM_KIT, customKit: { ru, enFor: ru, camera: 'Fujifilm X100V', lens: '', look: '', lensNote: '' } }))).toEqual(['CUSTOM_KIT_NO_LOOK']);
     const cyrillic = run(CLEAN, {}, { kitId: CUSTOM_KIT, customKit: { camera: 'Кэнон', lens: '', look: 'soft grain', lensNote: '' } });
     expect(codes(cyrillic)).toEqual([]);
     expect(cyrillic.findings.filter((f) => f.severity === 'error').map((f) => [f.ruleId, f.evidence])).toEqual([['HYG_CYRILLIC_OUTSIDE_QUOTES', 'Кэнон']]);
@@ -146,6 +158,46 @@ describe('окно проверки срабатывает, когда гене�
     expect(codes(run(CLEAN, {}, { kitId: 'red-vraptor-laowa-proteus', roleSplit }))).toEqual(['ROLE_SPLIT_INCOMPLETE']);
     // На комплекте без отдельных абзацев техники разделение не действует и ничего не требует.
     expect(codes(run(CLEAN, {}, { roleSplit }))).toEqual([]);
+  });
+
+  it('разделение ролей: держатели — герои из списка, реквизит по-русски; имена в шаблон берутся из сущностей', () => {
+    const { project } = make(CLEAN);
+    const withJohn: Partial<Project> = { entities: [...project.entities, { key: 'john', name: 'John', kind: 'character', refKey: null }] };
+    const roleSplit = { cameraRef: 'hero', lensRef: 'hero', cameraHolderKey: 'alex', lensHolderKey: 'john', cameraHolder: '', lensHolder: '', propsRu: 'Саша держит RED, Женя — кейс', propsFor: 'Саша держит RED, Женя — кейс', propsEn: 'Alexander holds a RED V-RAPTOR, and John holds a lens case.' };
+    const build = run(CLEAN, withJohn, { kitId: 'red-vraptor-laowa-proteus', roleSplit });
+    expect(codes(build)).toEqual([]);
+    expect(build.prompt).toContain('This is not the camera held by Alexander. This is not the lens shown by John.');
+    // Хвостовую точку реквизита ставит шаблон — двух точек не будет.
+    expect(build.prompt).toContain('Separately, Alexander holds a RED V-RAPTOR, and John holds a lens case. These are props');
+    // Реквизит описан, но ещё не переведён — «собери», а не «не заполнено».
+    expect(codes(run(CLEAN, withJohn, { kitId: 'red-vraptor-laowa-proteus', roleSplit: { ...roleSplit, propsFor: undefined, propsEn: '' } }))).toEqual(['NEEDS_COMPOSE']);
+  });
+
+  it('поля по-русски: описано, но не переведено — один блокер «собери» со списком; ничего не описано — свой блокер', () => {
+    const { project, shot } = make(CLEAN);
+    const typed: Project = { ...project, world: { ...project.world, place: { ru: 'Тихая набережная', en: '', source: 'empty', locked: false }, weather: { ru: 'Дождь закончился', en: '', source: 'empty', locked: false } } };
+    const build = buildShot(typed, shot, pack);
+    expect(codes(build)).toEqual(['NEEDS_COMPOSE']);
+    expect(build.blockers[0]?.messageRu).toContain('место, погода и свет');
+    // Погода описана по-русски — предупреждения «погода не описана» нет: об этом уже сказал блокер.
+    expect(rules(build)).not.toContain('NO_WEATHER');
+    const empty: Project = { ...project, world: { ...project.world, place: { ru: '', en: '', source: 'empty', locked: false } } };
+    expect(codes(buildShot(empty, shot, pack))).toEqual(['NO_PLACE']);
+    // Переведено агентом — блокера нет; русский поменяли потом — снова «собери».
+    const done: Project = { ...typed, world: { ...typed.world, place: { ...typed.world.place, en: 'a quiet embankment', enFor: 'Тихая набережная' }, weather: { ...typed.world.weather, en: 'Wet asphalt, puddles reflecting the sky, steam rising, a light wind in the clothes.', enFor: 'Дождь закончился' } } };
+    expect(codes(buildShot(done, shot, pack))).toEqual([]);
+    const changed: Project = { ...done, world: { ...done.world, place: { ...done.world.place, ru: 'Набережная у МГУ' } } };
+    expect(buildShot(changed, shot, pack).blockers.map((b) => b.messageRu)).toEqual([expect.stringContaining('место')]);
+  });
+
+  it('герой: русское имя без перевода — «собери»; без имени вовсе — свой блокер; сценарий только по-русски — не «сценария нет»', () => {
+    const { project, shot } = make(CLEAN);
+    expect(codes(buildShot({ ...project, entities: [...project.entities, { key: 'sasha', nameRu: 'Саша', name: '', kind: 'character', refKey: null }] }, shot, pack))).toEqual(['NEEDS_COMPOSE']);
+    expect(codes(buildShot({ ...project, entities: [...project.entities, { key: 'x', nameRu: '', name: '', kind: 'object', refKey: null }] }, shot, pack))).toEqual(['ENTITY_NO_NAME']);
+    // В старом проекте вписали русское имя к английскому — это изменение, а не «уже переведено».
+    expect(codes(buildShot({ ...project, entities: [{ key: 'alex', nameRu: 'Саша', name: 'Alexander', kind: 'character', refKey: 'hero' }] }, shot, pack))).toEqual(['NEEDS_COMPOSE']);
+    const onlyBeats: Shot = { ...shot, segments: [{ id: 'seg-1', titleRu: '', beatsRu: 'Саша у пикапа', text: { ru: '', en: '', source: 'empty', locked: false } }] };
+    expect(codes(buildShot(project, onlyBeats, pack))).toEqual(['NEEDS_COMPOSE']);
   });
 
   it('погода не описана — одно предупреждение по существу вместо общего «мало физики»', () => {
@@ -166,6 +218,25 @@ describe('осознанное исключение', () => {
     const after = buildShot(project, { ...shot, suppressed: [{ fingerprint: 'LINE_UNUSED:L2', reasonRu: 'Реплика для следующего кадра' }] }, pack);
     expect(rules(after)).not.toContain('LINE_UNUSED');
     expect(after.findings.length).toBe(before.findings.length - 1);
+  });
+});
+
+describe('формат кадра — параметр ролика, а не константа гайда', () => {
+  it('9:16 — формула гайда байт в байт; другой формат меняет в ней только «Vertical 9:16»', () => {
+    const vertical = run(CLEAN);
+    expect(vertical.prompt).toContain(pack.verbatim.format);
+    const wide = run(CLEAN, { aspectRatio: '16:9' });
+    expect(wide.prompt).toContain('Horizontal 16:9 aspect ratio. One continuous 30-second take');
+    expect(wide.prompt).not.toContain('9:16');
+    expect(wide.prompt.replace('Horizontal 16:9', 'Vertical 9:16')).toBe(vertical.prompt);
+    // У каждого формата из списка есть формулировка, и чистый кадр на нём остаётся чистым.
+    for (const aspectRatio of ['9:16', '3:4', '1:1', '4:3', '16:9', '21:9'] as const) {
+      const build = run(CLEAN, { aspectRatio });
+      expect([aspectRatio, codes(build), rules(build, 'error'), rules(build, 'warning')]).toEqual([aspectRatio, [], [], []]);
+      expect(build.prompt).toContain(`${pack.dialects.aspect?.phrases[aspectRatio]} aspect ratio.`);
+    }
+    // RED собирается отдельным абзацем формата — формат меняется и там, вместе с длительностью.
+    expect(run(CLEAN, { aspectRatio: '1:1' }, { durationSec: 12, kitId: 'red-vraptor-laowa-proteus' }).prompt).toContain('Square 1:1 aspect ratio. One continuous 12-second take');
   });
 });
 

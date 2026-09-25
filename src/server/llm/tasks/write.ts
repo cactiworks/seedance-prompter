@@ -17,6 +17,8 @@ export interface WriteShotInput {
   signal?: AbortSignal;
   /** Режим починки после неудачной генерации: правятся все абзацы с текстом, результат — предложение. */
   fix?: FixBrief;
+  /** Явный список отрезков («переписать кадр»); по умолчанию — те, чьи биты изменились. */
+  segmentIds?: string[];
 }
 
 export interface WriteShotResult {
@@ -44,8 +46,8 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   const kit = kitOf(shot, pack);
   if (kit === undefined) throw new Error(`Нет комплекта ${shot.kitId}`);
 
-  const writable = input.fix === undefined ? writableSegments(shot) : fixableSegments(shot);
-  if (writable.length === 0) throw new Error(input.fix === undefined ? 'Нечего писать: у незаблокированных отрезков нет описания по-русски.' : 'Нечего чинить: в кадре нет ни одного абзаца с текстом.');
+  const writable = input.fix === undefined ? writableSegments(shot, input.segmentIds) : fixableSegments(shot);
+  if (writable.length === 0) throw new Error(input.fix === undefined ? 'Нечего писать: ни один отрезок не менялся после прошлой сборки или у отрезков нет описания по-русски.' : 'Нечего чинить: в кадре нет ни одного абзаца с текстом.');
 
   const system = buildWriterSystem(input.rules, input.fewshot);
   const ctx = buildValidationContext(project, shot, writable, input.fix !== undefined);

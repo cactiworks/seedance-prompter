@@ -3,22 +3,19 @@ import { eventBudget, type Project } from '../model/project.ts';
 export const PLANNER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['segments', 'placeEn', 'weatherEn', 'notesRu'],
+  required: ['segments', 'notesRu'],
   properties: {
     segments: {
       type: 'array',
       items: { type: 'object', additionalProperties: false, required: ['titleRu', 'beatsRu'], properties: { titleRu: { type: 'string' }, beatsRu: { type: 'string' } } },
     },
-    placeEn: { type: 'string' },
-    weatherEn: { type: 'string' },
     notesRu: { type: 'string' },
   },
 } as const;
 
+/** Планировщик только раскладывает кадр по времени; место и погоду переводит агент полей. */
 export interface PlannerOutput {
   segments: { titleRu: string; beatsRu: string }[];
-  placeEn: string;
-  weatherEn: string;
   notesRu: string;
 }
 
@@ -53,15 +50,15 @@ export function segmentRange(durationSec: number): { min: number; max: number } 
   return { min: durationSec <= 8 ? 1 : 2, max: Math.max(2, Math.round((8 * durationSec) / 30)) };
 }
 
-export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], translate: { place: boolean; weather: boolean }, durationSec: number = project.durationSec): string {
+export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], durationSec: number = project.durationSec): string {
   const input = {
     durationSec,
     majorEvents: eventBudget(durationSec),
     segments: segmentRange(durationSec),
     synopsisRu: synopsis,
     lineIds,
-    entities: project.entities.map((e) => ({ name: e.name, kind: e.kind })),
-    translateWorld: { ...(translate.place ? { place: project.world.place.ru } : {}), ...(translate.weather ? { weather: project.world.weather.ru } : {}) },
+    entities: project.entities.map((e) => ({ name: (e.nameRu ?? '').trim() === '' ? e.name : e.nameRu, kind: e.kind })),
+    world: { placeRu: project.world.place.ru, weatherRu: project.world.weather.ru },
   };
   return `Plan the timeline for this shot.\n\n\`\`\`json\n${JSON.stringify(input, null, 1)}\n\`\`\``;
 }
@@ -81,6 +78,5 @@ export function validatePlan(plan: PlannerOutput, lineIds: string[], durationSec
   const order = seen.filter((id, i) => seen.indexOf(id) === i && lineIds.includes(id));
   if (order.join() !== lineIds.filter((id) => order.includes(id)).join()) problems.push(`Lines must keep the spoken order: ${lineIds.join(', ')}.`);
   if (/[«»]/.test(plan.segments.map((s) => s.beatsRu).join(' '))) problems.push('Do not write line text; reference lines by id only.');
-  if (/[Ѐ-ӿ]/u.test(`${plan.placeEn}${plan.weatherEn}`)) problems.push('placeEn and weatherEn must be English.');
   return problems;
 }

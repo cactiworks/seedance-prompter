@@ -94,7 +94,7 @@ export function buildCriticUser(input: CriticInput): string {
   const refs = new Map(project.refs.map((r) => [r.key, r]));
   const entities = project.entities.filter((e) => e.refKey !== null && shot.panel.includes(e.refKey));
   const payload = {
-    format: { durationSec: input.durationSec, aspect: '9:16', singleContinuousTake: true, dialect: project.dialect },
+    format: { durationSec: input.durationSec, aspect: project.aspectRatio, singleContinuousTake: true, dialect: project.dialect },
     panel: shot.panel.map((key, i) => {
       const ref = refs.get(key);
       const bound = entities.filter((e) => e.refKey === key).map((e) => e.name);

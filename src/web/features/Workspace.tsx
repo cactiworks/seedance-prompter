@@ -1,12 +1,14 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
-import { buildShot, CUSTOM_KIT, type PackBundle } from '../../core/pipeline.ts';
-import { activeStates, durationOf, emptyUnit, eventBudget, type Project, type Ref, type Shot } from '../../core/model/project.ts';
+import { pendingLabels } from '../../core/compose.ts';
+import { buildShot, CUSTOM_KIT, holderName, type PackBundle } from '../../core/pipeline.ts';
+import { activeStates, ASPECT_RATIOS, durationOf, emptyUnit, eventBudget, needsAgent, segmentNeedsWriter, type AspectRatio, type Project, type Ref, type Segment, type Shot } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
 import { ExportCard } from './ExportCard.tsx';
 import { Findings } from './Findings.tsx';
 import { PromptText } from './PromptText.tsx';
+import { ThemeSwitch } from './ThemeSwitch.tsx';
 import styles from './Workspace.module.css';
 
 const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', character: 'Герой', object: 'Предмет', gear: 'Техника', other: 'Другое' };
@@ -49,6 +51,22 @@ function Section({ n, title, note, children }: { n: string; title: string; note?
   );
 }
 
+/** Что агент сделал из русского поля: только для чтения. Устарело — сказано прямо, английский не показывается как верный. */
+function Derived({ label, en, pending }: { label: string; en: string; pending: boolean }) {
+  if (en.trim() === '' && !pending) return null;
+  return (
+    <Text variant="caption" tone="tertiary" className={styles.derived}>
+      {pending ? 'обновится при сборке' : <>{label}: <span className={styles.derivedEn}>{en}</span></>}
+    </Text>
+  );
+}
+
+function segmentStatus(segment: Segment): { tone: 'outline' | 'warning' | 'neutral'; label: string } {
+  if (segment.beatsRu.trim() === '' && segment.text.en.trim() === '') return { tone: 'outline', label: 'пусто' };
+  if (segmentNeedsWriter(segment)) return segment.text.en.trim() === '' ? { tone: 'outline', label: 'не написан' } : { tone: 'warning', label: 'изменён — перепишется' };
+  return { tone: 'neutral', label: segment.text.source === 'llm' ? 'написан агентом' : 'написан' };
+}
+
 function syncLocationRefs(project: Project, shot: Shot): Shot {
   const kinds = new Map(project.refs.map((ref) => [ref.key, ref.kind]));
   return { ...shot, locationRefs: shot.panel.filter((key) => kinds.get(key) === 'location').slice(0, 2) };
@@ -61,7 +79,6 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const [exportOpen, setExportOpen] = useState(false);
   const [visionAgreed, setVisionAgreed] = useState(false);
   const [newRef, setNewRef] = useState<{ label: string; kind: Ref['kind'] }>({ label: '', kind: 'location' });
-  const areas = useRef(new Map<string, HTMLTextAreaElement>());
   const fileInputs = useRef(new Map<string, HTMLInputElement>());
 
   const build = useMemo(() => (project !== null && shot !== null ? buildShot(project, shot, pack) : null), [project, shot, pack]);
@@ -78,20 +95,14 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const kit = pack.kits[shot.kitId];
   const isCustom = shot.kitId === CUSTOM_KIT;
   const gearRefs = shot.panel.flatMap((key) => { const ref = project.refs.find((r) => r.key === key); return ref !== undefined && ref.kind !== 'location' && ref.kind !== 'character' ? [ref] : []; });
-  const setCustom = (patch: Partial<Shot['customKit']>): void => store.updateShot((s) => ({ ...s, customKit: { ...s.customKit, ...patch } }));
+  const characters = project.entities.filter((e) => e.kind === 'character');
   const setRole = (patch: Partial<NonNullable<Shot['roleSplit']>>): void => store.updateShot((s) => (s.roleSplit === null ? s : { ...s, roleSplit: { ...s.roleSplit, ...patch } }));
+  const setWorld = (field: 'place' | 'weather', ru: string): void => store.update((p) => ({ ...p, world: { ...p.world, [field]: { ...p.world[field], ru } } }));
 
-  const insert = (segmentId: string, token: string): void => {
-    const area = areas.current.get(segmentId);
-    store.updateShot((s) => ({
-      ...s,
-      segments: s.segments.map((segment) => {
-        if (segment.id !== segmentId) return segment;
-        const at = area?.selectionStart ?? segment.text.en.length;
-        return { ...segment, text: { ...segment.text, en: `${segment.text.en.slice(0, at)}${token}${segment.text.en.slice(at)}`, source: 'manual', locked: true } };
-      }),
-    }));
-  };
+  // Кнопка учитывает и последствия этого кадра для следующих — блокер кадра о них молчит.
+  const pending = pendingLabels(project, shot, 'compose');
+  const described = shot.segments.some((s) => s.beatsRu.trim() !== '');
+  const composeLabel = store.composing === 'fields' ? 'Перевожу поля…' : store.composing === 'writing' ? 'Пишу отрезки…' : pending.length > 0 ? 'Собрать промпт' : 'Переписать кадр';
 
   const addRef = (): void => {
     const label = newRef.label.trim();
@@ -138,11 +149,19 @@ export function Workspace({ pack }: { pack: PackBundle }) {
     void store.analyzeRef(key);
   };
 
+  const scrollToParagraph = (segmentId: string): void => {
+    const index = build.paragraphs.findIndex((p) => p.segmentId === segmentId);
+    if (index !== -1) document.getElementById(`p-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const refByKey = new Map(project.refs.map((ref) => [ref.key, ref]));
   const incoming = activeStates(project, shot.id);
   const outcomes = project.states.filter((state) => state.originShotId === shot.id);
   const nextStateId = `S${Math.max(0, ...project.states.map((s) => Number(s.id.slice(1)))) + 1}`;
   const nextLineId = `L${Math.max(0, ...project.lines.map((l) => Number(l.id.slice(1)))) + 1}`;
+  const { place, weather } = project.world;
+  const kitPending = needsAgent((shot.customKit.ru ?? '').trim(), shot.customKit.camera, shot.customKit.enFor, false);
+  const propsPending = shot.roleSplit !== null && needsAgent((shot.roleSplit.propsRu ?? '').trim(), shot.roleSplit.propsEn, shot.roleSplit.propsFor, false);
 
   return (
     <div className={styles.shell}>
@@ -153,12 +172,21 @@ export function Workspace({ pack }: { pack: PackBundle }) {
         <Button variant="ghost" size="xs" icon={<Icon name="plus" size={1} />} onClick={store.addShot}>кадр</Button>
         <span className={styles.spacer} />
         <Tag tone={store.save === 'saved' ? 'neutral' : store.save === 'conflict' || store.save === 'error' ? 'danger' : 'outline'}>{SAVE_RU[store.save]}</Tag>
-        <Tag tone="outline">{project.dialect.refSyntax === 'higgsfield-chip' ? '<<<image_N>>>' : '@Image N'}</Tag>
+        <ThemeSwitch />
+        {store.composing !== null && <Button variant="ghost" size="s" onClick={store.cancelCompose}>Отмена</Button>}
+        <Button variant="primary" size="s" icon={<Icon name="sparkles" variant="filled" />} loading={store.composing !== null} disabled={store.composing === null && pending.length === 0 && !described} onClick={() => void store.composeShot(pending.length === 0)} title={pending.length > 0 ? `Агент перепишет в промпт: ${pending.join(', ')}` : 'Переписать все отрезки кадра заново'}>
+          {composeLabel}
+        </Button>
       </header>
 
       <div className={styles.columns}>
         <div className={styles.form}>
           <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
+            <div className={styles.aspect}>
+              <Text variant="label" tone="secondary">Формат кадра</Text>
+              <SegmentedControl<AspectRatio> aria-label="Формат кадра" size="s" value={project.aspectRatio} onChange={(aspectRatio) => store.update((p) => ({ ...p, aspectRatio }))} options={ASPECT_RATIOS.map((value) => ({ value, label: value, title: pack.dialects.aspect?.labelsRu[value] }))} />
+              <Text variant="caption" tone="tertiary">{pack.dialects.aspect?.labelsRu[project.aspectRatio] ?? ''} · общий для всех кадров ролика; это же значение выставь в Higgsfield.</Text>
+            </div>
             <DurationField key={shot.id} value={duration} onCommit={(durationSec) => store.updateShot((s) => ({ ...s, durationSec }))} />
             <div className={styles.kits}>
               {kits.map((item) => (
@@ -170,7 +198,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               ))}
               <button type="button" className={`${styles.kit} ${isCustom ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: CUSTOM_KIT, defects: null, roleSplit: null }))} aria-pressed={isCustom}>
                 <Text variant="label" medium>Своя камера</Text>
-                <Text variant="caption" tone="secondary">любая техника: модель, объектив и характер картинки своими словами</Text>
+                <Text variant="caption" tone="secondary">любая техника — описываешь своими словами</Text>
                 <Tag tone="outline">не из гайда</Tag>
               </button>
             </div>
@@ -181,20 +209,20 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             )}
             {isCustom && (
               <div className={styles.customKit}>
-                <div className={styles.pair}>
-                  <TextField label="Камера (английский)" placeholder="Fujifilm X100V" value={shot.customKit.camera} onChange={(event) => setCustom({ camera: event.target.value })} helper="Реальная модель. «Cinematic camera» — не якорь, модель выберет усреднённую картинку." />
-                  <TextField label="Объектив (английский, можно пусто)" placeholder="its fixed 23mm f/2 lens" value={shot.customKit.lens} onChange={(event) => setCustom({ lens: event.target.value })} helper="Встанет после «with». Для встроенной оптики пиши «its built-in … lens»." />
-                </div>
-                <TextField multiline label="Характер картинки (английский)" placeholder="fine digital grain, slightly muted colors with a soft green-teal cast, gentle contrast, smooth highlight rolloff, mild softness toward the corners" value={shot.customKit.look} onChange={(event) => setCustom({ look: event.target.value })} helper="Продолжает фразу через запятую: зерно, цвет, контраст, боке, блики — чем эта техника видна на картинке. Без точки в конце." />
-                <TextField label="Примечание об оптике (можно пусто)" placeholder="No anamorphic streaks, only a faint veiling glow when the sun enters the frame" value={shot.customKit.lensNote} onChange={(event) => setCustom({ lensNote: event.target.value })} helper="Отдельное предложение сразу после характера — обычно про поведение блика." />
-                <Text variant="caption" tone="tertiary" mono>
-                  …shot on {shot.customKit.camera.trim() || '<камера>'}{shot.customKit.lens.trim() !== '' ? ` with ${shot.customKit.lens.trim()}` : ''}, {shot.customKit.look.trim() || '<характер>'}.
-                </Text>
+                <TextField
+                  multiline
+                  label="Камера и картинка — своими словами"
+                  placeholder="Fujifilm X100V со встроенным 23 мм. Мелкое цифровое зерно, приглушённые цвета с зеленцой, мягкий контраст, углы чуть мягче центра"
+                  value={shot.customKit.ru ?? ''}
+                  onChange={(event) => store.updateShot((s) => ({ ...s, customKit: { ...s.customKit, ru: event.target.value } }))}
+                  helper="Нужна реальная модель — «кинокамера» не якорь, модель выберет усреднённую картинку. Зерно, цвет, контраст, блики — тезисно. Агент перепишет это в формулу гайда «shot on … with …»."
+                />
+                <Derived label="в промпте" en={shot.customKit.camera.trim() === '' ? '' : `shot on ${shot.customKit.camera}${shot.customKit.lens.trim() !== '' ? ` with ${shot.customKit.lens}` : ''}, ${shot.customKit.look}.${shot.customKit.lensNote.trim() !== '' ? ` ${shot.customKit.lensNote}.` : ''}`} pending={kitPending} />
               </div>
             )}
             {kit?.layout === 'split' && (
               <div className={styles.customKit}>
-                <Switch checked={shot.roleSplit !== null} onChange={(on) => store.updateShot((s) => ({ ...s, roleSplit: on ? { cameraRef: gearRefs[0]?.key ?? '', lensRef: gearRefs[1]?.key ?? gearRefs[0]?.key ?? '', cameraHolder: '', lensHolder: '', propsEn: '' } : null }))} label="В кадре есть такая же камера или объектив как реквизит" disabled={shot.roleSplit === null && gearRefs.length === 0} />
+                <Switch checked={shot.roleSplit !== null} onChange={(on) => store.updateShot((s) => ({ ...s, roleSplit: on ? { cameraRef: gearRefs[0]?.key ?? '', lensRef: gearRefs[1]?.key ?? gearRefs[0]?.key ?? '', cameraHolderKey: characters[0]?.key, lensHolderKey: characters[1]?.key ?? characters[0]?.key, cameraHolder: '', lensHolder: '', propsRu: '', propsEn: '' } : null }))} label="В кадре есть такая же камера или объектив как реквизит" disabled={shot.roleSplit === null && gearRefs.length === 0} />
                 <Text variant="caption" tone="tertiary">
                   {shot.roleSplit === null
                     ? gearRefs.length === 0 ? 'Приём 06 «один объект — одна роль». Нужен, только когда герои держат эту же технику в руках; для него добавь в панель референсы камеры и объектива (тип «Техника»).' : 'Приём 06 «один объект — одна роль». Без реквизита разделение не нужно — кадр собирается как есть.'
@@ -202,27 +230,34 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 </Text>
                 {shot.roleSplit !== null && (
                   <>
-                    <div className={styles.pair}>
+                    <div className={styles.twoCols}>
                       <Select label="Референс камеры" value={shot.roleSplit.cameraRef} onChange={(cameraRef) => setRole({ cameraRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
                       <Select label="Референс объектива" value={shot.roleSplit.lensRef} onChange={(lensRef) => setRole({ lensRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
                     </div>
-                    <div className={styles.pair}>
-                      <TextField label="Кто держит камеру (имя в промпте)" placeholder="Alexander" value={shot.roleSplit.cameraHolder} onChange={(event) => setRole({ cameraHolder: event.target.value })} />
-                      <TextField label="Кто показывает объектив" placeholder="John" value={shot.roleSplit.lensHolder} onChange={(event) => setRole({ lensHolder: event.target.value })} />
+                    <div className={styles.twoCols}>
+                      <Select label="Кто держит камеру" value={shot.roleSplit.cameraHolderKey ?? ''} onChange={(cameraHolderKey) => setRole({ cameraHolderKey })} options={[{ value: '', label: characters.length === 0 ? 'сначала добавь героя в секции 04' : 'не выбран' }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
+                      <Select label="Кто показывает объектив" value={shot.roleSplit.lensHolderKey ?? ''} onChange={(lensHolderKey) => setRole({ lensHolderKey })} options={[{ value: '', label: characters.length === 0 ? 'сначала добавь героя в секции 04' : 'не выбран' }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
                     </div>
-                    <TextField multiline label="Реквизит одним предложением (английский)" placeholder="Alexander holds a RED V-RAPTOR in his hands, and John holds an open case with Laowa Proteus lenses" value={shot.roleSplit.propsEn} onChange={(event) => setRole({ propsEn: event.target.value })} helper="Встанет после «Separately, …». Без точки в конце." />
+                    {(shot.roleSplit.cameraHolderKey === undefined || shot.roleSplit.cameraHolderKey === '') && shot.roleSplit.cameraHolder !== '' && <Text variant="caption" tone="tertiary">Из старой версии: камеру держит {holderName(project, undefined, shot.roleSplit.cameraHolder)}, объектив — {shot.roleSplit.lensHolder}.</Text>}
+                    <TextField multiline label="Реквизит — кто что держит" placeholder="Саша держит в руках RED V-RAPTOR, Женя — открытый кейс с объективами Laowa Proteus" value={shot.roleSplit.propsRu ?? ''} onChange={(event) => setRole({ propsRu: event.target.value })} />
+                    <Derived label="в промпте" en={shot.roleSplit.propsEn === '' ? '' : `Separately, ${shot.roleSplit.propsEn}.`} pending={propsPending} />
                   </>
                 )}
               </div>
             )}
-            <div className={styles.row}>
-              <Text variant="label" tone="secondary">Правило «оператор не виден»</Text>
-              <SegmentedControl aria-label="Правило про оператора" size="s" value={shot.operatorRule} onChange={(operatorRule) => store.updateShot((s) => ({ ...s, operatorRule }))} options={[{ value: 'long', label: 'Полное' }, { value: 'short', label: 'Краткое' }, { value: 'off', label: 'Нет' }]} />
-            </div>
-            <div className={styles.row}>
-              <Text variant="label" tone="secondary">Формула референса локации</Text>
-              <SegmentedControl aria-label="Формула локации" size="s" value={shot.locationRule} onChange={(locationRule) => store.updateShot((s) => ({ ...s, locationRule }))} options={[{ value: 'short', label: 'Краткая' }, { value: 'long', label: 'С повтором номеров' }]} />
-            </div>
+            <details className={styles.more}>
+              <summary><Text as="span" variant="label" tone="secondary">Формулы гайда — обычно не трогать</Text></summary>
+              <div className={styles.moreBody}>
+                <div className={styles.row}>
+                  <Text variant="label" tone="secondary">Правило «оператор не виден»</Text>
+                  <SegmentedControl aria-label="Правило про оператора" size="s" value={shot.operatorRule} onChange={(operatorRule) => store.updateShot((s) => ({ ...s, operatorRule }))} options={[{ value: 'long', label: 'Полное' }, { value: 'short', label: 'Краткое' }, { value: 'off', label: 'Нет' }]} />
+                </div>
+                <div className={styles.row}>
+                  <Text variant="label" tone="secondary">Формула референса локации</Text>
+                  <SegmentedControl aria-label="Формула локации" size="s" value={shot.locationRule} onChange={(locationRule) => store.updateShot((s) => ({ ...s, locationRule }))} options={[{ value: 'short', label: 'Краткая' }, { value: 'long', label: 'С повтором номеров' }]} />
+                </div>
+              </div>
+            </details>
           </Section>
 
           <Section n="02" title="Панель референсов" note="Порядок картинок — это нумерация в тексте. Загружай в Higgsfield в том же порядке.">
@@ -279,33 +314,33 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               );
             })}
             <div className={styles.addRow}>
-              <TextField label="Новый референс" placeholder="Набережная, Alexander, пикап…" value={newRef.label} onChange={(event) => setNewRef({ ...newRef, label: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && addRef()} />
+              <TextField label="Новый референс" placeholder="Набережная, Саша, пикап…" value={newRef.label} onChange={(event) => setNewRef({ ...newRef, label: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && addRef()} />
               <Select label="Что это" value={newRef.kind} onChange={(kind) => setNewRef({ ...newRef, kind: kind as Ref['kind'] })} options={Object.entries(KIND_RU).map(([value, label]) => ({ value, label }))} />
               <Button variant="secondary" size="m" icon={<Icon name="plus" />} onClick={addRef} disabled={newRef.label.trim() === ''}>В панель</Button>
             </div>
           </Section>
 
-          <Section n="03" title="Локация и погода" note="Погода должна давать физику: мокрый асфальт, отражения, пар, ветер. Свет — событие, а не состояние.">
-            <div className={styles.pair}>
-              <TextField label="Место по-русски" placeholder="Набережная Москвы-реки у парковки, вдали высотка МГУ" value={project.world.place.ru} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, place: { ...p.world.place, ru: event.target.value } } }))} />
-              <TextField multiline label="Погода и свет по-русски" placeholder="Дождь только закончился, выходит солнце. Мокрый асфальт, лужи, лёгкий ветер." value={project.world.weather.ru} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, weather: { ...p.world.weather, ru: event.target.value } } }))} helper="Агент переведёт оба поля, когда будет раскладывать кадр, — если английские ниже пусты." />
-            </div>
-            <TextField label="Место (английский, в промпт)" placeholder="the embankment of the Moskva River near the parking area" value={project.world.place.en} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, place: { ...p.world.place, en: event.target.value, source: 'manual', locked: true } } }))} helper="Продолжает фразу «Location: exactly as in <<<image_1>>> — …»" />
-            <TextField label="Что брать с референса" value={project.world.useOnlyEn} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, useOnlyEn: event.target.value } }))} helper="Людей с референса промпт игнорирует сам — это дословная формула гайда." />
-            <TextField multiline label="Погода, физика, базовый свет (английский)" placeholder="The rain has just stopped, the sun is coming out. Wet asphalt, puddles reflecting the sky…" value={project.world.weather.en} onChange={(event) => store.update((p) => ({ ...p, world: { ...p.world, weather: { ...p.world.weather, en: event.target.value, source: 'manual', locked: true } } }))} />
+          <Section n="03" title="Локация и погода" note="Тезисно, как думаешь. Агент допишет физику, которую модель умеет рисовать: мокрый асфальт, отражения, пар, ветер.">
+            <TextField label="Место" placeholder="Набережная Москвы-реки у парковки, вдали высотка МГУ" value={place.ru} onChange={(event) => setWorld('place', event.target.value)} helper="Что это за место и что в нём видно. Как оно выглядит, модель возьмёт с референса локации." />
+            <TextField multiline label="Погода и свет" placeholder="Дождь только закончился, выходит солнце. Мокрый асфальт, лужи, лёгкий ветер." value={weather.ru} onChange={(event) => setWorld('weather', event.target.value)} helper="Базовое состояние на весь дубль. Если свет меняется по ходу — это событие, пиши его в сценарий." />
+            {place.ru.trim() === '' && place.en.trim() !== '' && <Derived label="место в промпте (из старой версии)" en={place.en} pending={false} />}
+            {weather.ru.trim() === '' && weather.en.trim() !== '' && <Derived label="погода в промпте (из старой версии)" en={weather.en} pending={false} />}
           </Section>
 
-          <Section n="04" title="Герои и предметы" note="Внешность берётся с character sheet, а не из текста. Под каждый образ — своя карта.">
+          <Section n="04" title="Герои и предметы" note="Внешность берётся с character sheet, а не из текста. Здесь — как ты их называешь; имя для промпта агент сделает сам.">
             {project.entities.map((entity) => (
-              <div key={entity.key} className={styles.entityRow}>
-                <TextField label="Имя в промпте (латиницей)" value={entity.name} onChange={(event) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, name: event.target.value } : e)) }))} />
-                <Select label="Референс" value={entity.refKey ?? ''} onChange={(refKey) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, refKey: refKey === '' ? null : refKey } : e)) }))} options={[{ value: '', label: 'без референса' }, ...project.refs.filter((r) => r.kind !== 'location').map((r) => ({ value: r.key, label: r.label }))]} />
-                <Button variant="ghost" size="m" iconOnly aria-label="Удалить" icon={<Icon name="bin" />} onClick={() => store.update((p) => ({ ...p, entities: p.entities.filter((e) => e.key !== entity.key) }))} />
+              <div key={entity.key} className={styles.entity}>
+                <div className={styles.entityRow}>
+                  <TextField label={entity.kind === 'character' ? 'Кто это' : 'Что это'} placeholder={entity.kind === 'character' ? 'Саша' : 'пикап'} value={entity.nameRu ?? ''} onChange={(event) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, nameRu: event.target.value } : e)) }))} />
+                  <Select label="Референс" value={entity.refKey ?? ''} onChange={(refKey) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, refKey: refKey === '' ? null : refKey } : e)) }))} options={[{ value: '', label: 'без референса' }, ...project.refs.filter((r) => r.kind !== 'location').map((r) => ({ value: r.key, label: r.label }))]} />
+                  <Button variant="ghost" size="m" iconOnly aria-label="Удалить" icon={<Icon name="bin" />} onClick={() => store.update((p) => ({ ...p, entities: p.entities.filter((e) => e.key !== entity.key) }))} />
+                </div>
+                <Derived label="в промпте" en={entity.name} pending={needsAgent((entity.nameRu ?? '').trim(), entity.name, entity.nameFor, false)} />
               </div>
             ))}
             <div className={styles.row}>
-              <Button variant="secondary" size="s" icon={<Icon name="person" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `hero-${p.entities.length + 1}-${Date.now().toString(36)}`, name: 'Alexander', kind: 'character', refKey: null }] }))}>Герой</Button>
-              <Button variant="secondary" size="s" icon={<Icon name="component" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `prop-${p.entities.length + 1}-${Date.now().toString(36)}`, name: 'the main pickup', kind: 'object', refKey: null }] }))}>Предмет</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="person" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `hero-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'character', refKey: null }] }))}>Герой</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="component" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `prop-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'object', refKey: null }] }))}>Предмет</Button>
             </div>
           </Section>
 
@@ -322,9 +357,9 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             </div>
           </Section>
 
-          <Section n="06" title="Сценарий по таймлайну" note={`Абзац = отрезок времени. Одно главное действие в абзаце; на ${duration} с — ${budget.min === budget.max ? budget.min : `${budget.min}–${budget.max}`} крупных событий (гайд: 4–6 на 30 секунд).`}>
+          <Section n="06" title="Сценарий по таймлайну" note={`Абзац = отрезок времени. Одно главное действие в отрезке; на ${duration} с — ${budget.min === budget.max ? budget.min : `${budget.min}–${budget.max}`} крупных событий (гайд: 4–6 на 30 секунд).`}>
             <div className={styles.synopsis}>
-              <TextField multiline label="Кадр своими словами" placeholder="Alexander стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, John встаёт в стойку, начинается спарринг…" value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper="Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий." />
+              <TextField multiline label="Кадр своими словами" placeholder="Саша стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, Женя встаёт в стойку, начинается спарринг…" value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper="Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий." />
               <div className={styles.row}>
                 <Text variant="caption" tone="tertiary">{shot.segments.some((s) => s.beatsRu.trim() !== '' || s.text.en.trim() !== '') ? 'Текущие отрезки будут заменены.' : ''}</Text>
                 <Button variant="soft" size="s" icon={<Icon name="layers" />} loading={store.planning} disabled={shot.synopsisRu.trim() === ''} onClick={() => void store.planShot()}>
@@ -337,58 +372,38 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 </div>
               )}
             </div>
-            {shot.segments.map((segment, index) => (
-              <div key={segment.id} className={styles.segment}>
-                <div className={styles.segmentHead}>
-                  <Text variant="label" medium>Отрезок {index + 1}</Text>
-                  <Tag tone={segment.text.en.trim() === '' ? 'outline' : segment.text.source === 'llm' ? 'accent' : 'neutral'}>{segment.text.en.trim() === '' ? 'пусто' : segment.text.source === 'llm' ? 'агент' : 'вручную'}</Tag>
-                  {segment.text.locked && segment.text.en.trim() !== '' && (
-                    <Button variant="ghost" size="xs" icon={<Icon name="lock" size={0.875} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, text: { ...x.text, locked: false } } : x)) }))}>
-                      защищён от агента — снять
-                    </Button>
-                  )}
-                  <span className={styles.spacer} />
-                  <Button variant="ghost" size="xs" iconOnly aria-label="Удалить отрезок" icon={<Icon name="bin" size={1} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.filter((x) => x.id !== segment.id) }))} />
-                </div>
-                <TextField multiline label="Что происходит (по-русски — вход для писателя)" value={segment.beatsRu} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, beatsRu: event.target.value } : x)) }))} />
-                <TextField multiline label="Абзац промпта (английский)" value={segment.text.en} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, text: { ...x.text, en: event.target.value, source: 'manual', locked: true } } : x)) }))} onFocus={(event) => areas.current.set(segment.id, event.target as HTMLTextAreaElement)} helper="Номера и реплики не пиши руками — вставляй кнопками ниже." />
-                {store.writeReport?.notes[segment.id] !== undefined && store.writeReport.notes[segment.id] !== '' && (
-                  <div className={styles.agentNote}>
-                    <Icon name="sparkles" size={1} />
-                    <Text variant="label" tone="secondary">{store.writeReport.notes[segment.id]}</Text>
+            {shot.segments.map((segment, index) => {
+              const status = segmentStatus(segment);
+              const note = store.writeReport?.notes[segment.id];
+              return (
+                <div key={segment.id} className={styles.segment}>
+                  <div className={styles.segmentHead}>
+                    <Text variant="label" medium>Отрезок {index + 1}</Text>
+                    <Tag tone={status.tone}>{status.label}</Tag>
+                    <span className={styles.spacer} />
+                    {segment.text.en.trim() !== '' && <Button variant="ghost" size="xs" icon={<Icon name="arrow-forward" size={0.875} />} onClick={() => scrollToParagraph(segment.id)}>в промпте</Button>}
+                    <Button variant="ghost" size="xs" iconOnly aria-label="Удалить отрезок" icon={<Icon name="bin" size={1} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.filter((x) => x.id !== segment.id) }))} />
                   </div>
-                )}
-                <div className={styles.tokens}>
-                  {project.entities.map((entity) => <Button key={entity.key} variant="soft" size="xs" onClick={() => insert(segment.id, `{{intro:${entity.key}}}`)}>{entity.name}</Button>)}
-                  {shot.panel.map((key, i) => <Button key={key} variant="border" size="xs" onClick={() => insert(segment.id, `{{ref:${key}}}`)}>№{i + 1} {refByKey.get(key)?.label}</Button>)}
-                  {project.lines.map((line) => <Button key={line.id} variant="secondary" size="xs" icon={<Icon name="mic" size={0.875} />} onClick={() => insert(segment.id, `{{line:${line.id}}}`)}>{line.id}</Button>)}
-                  {incoming.map((state) => <Button key={state.id} variant="danger" size="xs" icon={<Icon name="pin" size={0.875} />} onClick={() => insert(segment.id, `{{state:${state.id}}}`)}>{state.id} {state.titleRu}</Button>)}
+                  <TextField multiline label="Что происходит" value={segment.beatsRu} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, beatsRu: event.target.value } : x)) }))} />
+                  {note !== undefined && note !== '' && (
+                    <div className={styles.agentNote}>
+                      <Icon name="sparkles" size={1} />
+                      <Text variant="label" tone="secondary">{note}</Text>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div className={styles.row}>
               <Button variant="secondary" size="s" icon={<Icon name="plus" />} onClick={() => store.updateShot((s) => ({ ...s, segments: [...s.segments, { id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: emptyUnit() }] }))}>Отрезок</Button>
-              <div className={styles.writeRow}>
-                {store.writing && <Button variant="ghost" size="s" onClick={store.cancelWrite}>Отмена</Button>}
-                <Button variant="primary" size="s" icon={<Icon name="sparkles" variant="filled" />} loading={store.writing} disabled={!shot.segments.some((s) => !s.text.locked && s.beatsRu.trim() !== '')} onClick={() => void store.writeShot()}>
-                  {store.writing ? 'Агент пишет… до пары минут' : 'Написать кадр'}
-                </Button>
-              </div>
             </div>
-            <Text variant="caption" tone="tertiary">Агент пишет только отрезки с русским описанием, не защищённые от него. Реплики упоминай в описании как L1, L2 — он поставит их в этом порядке.</Text>
-            {store.writeReport !== null && (
-              <div className={`${styles.report} ${store.writeReport.ok ? '' : styles.reportBad}`}>
-                <Text variant="label" medium>{store.writeReport.messageRu}</Text>
-                {store.writeReport.warningsRu.map((w, i) => <Text key={`w${i}`} variant="label" tone="secondary">{w}</Text>)}
-                {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">Осталось после ремонта: {store.writeReport.remainingRu.join(' · ')}</Text>}
-              </div>
-            )}
+            <Text variant="caption" tone="tertiary">Реплики упоминай в отрезке как L1, L2 — агент поставит их в этом порядке. Номера картинок, реплики и последствия прошлых кадров он вставит сам; английский текст — в превью справа.</Text>
           </Section>
 
-          <Section n="07" title="Память между кадрами" note="Что случилось в кадре N, должно быть видно в кадре N+1. Пиши сторону, степень и ограничитель — иначе модель нарисует разбитое лицо не с той стороны.">
+          <Section n="07" title="Память между кадрами" note="Что случилось в этом кадре, должно быть видно в следующих. Агент вставит это в них сам.">
             {incoming.length > 0 && (
               <div className={styles.incoming}>
-                <Text variant="caption" tone="secondary">Пришло из прошлых кадров — обязано стоять в сценарии</Text>
+                <Text variant="caption" tone="secondary">Пришло из прошлых кадров — агент обязан показать это здесь</Text>
                 {incoming.map((state) => (
                   <div key={state.id} className={styles.stateRow}>
                     <Tag tone={shot.segments.some((s) => s.text.en.includes(`{{state:${state.id}}}`)) ? 'success' : 'danger'} dot>{state.id}</Tag>
@@ -405,8 +420,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                   <span className={styles.spacer} />
                   <Button variant="ghost" size="xs" iconOnly aria-label="Удалить последствие" icon={<Icon name="bin" size={1} />} onClick={() => store.update((p) => ({ ...p, states: p.states.filter((s) => s.id !== state.id) }))} />
                 </div>
-                <TextField label="Что случилось (по-русски, для себя)" placeholder="Синяк на правой щеке после удара ногой" value={state.titleRu} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, titleRu: event.target.value } : s)) }))} />
-                <TextField multiline label="Каноническая фраза для следующих кадров (английский)" placeholder="Alexander's face shows a slight redness and a small scrape on the right side only — a mark from a recent hit, no blood, no cut, just a light bruise forming under the skin." value={state.en} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, en: event.target.value } : s)) }))} helper="Агент вставляет эту фразу буква в букву и не перефразирует: сторона, степень, «no blood, no cut»." />
+                <TextField multiline label="Что осталось после кадра" placeholder="Лёгкий синяк на правой щеке у Саши, без крови и порезов" value={state.titleRu} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, titleRu: event.target.value } : s)) }))} helper="Сторона, насколько сильно и чего нет — иначе модель нарисует разбитое лицо не с той стороны." />
+                <Derived label="в следующих кадрах" en={state.en} pending={needsAgent(state.titleRu, state.en, state.enFor)} />
               </div>
             ))}
             <div className={styles.row}>
@@ -437,6 +452,15 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 </Text>
               )}
             </div>
+
+            {store.writeReport !== null && (
+              <div className={`${styles.report} ${store.writeReport.ok ? '' : styles.reportBad}`}>
+                <Text variant="label" medium>{store.writeReport.messageRu}</Text>
+                {store.writeReport.fieldsNoteRu !== '' && <Text variant="label" tone="secondary">{store.writeReport.fieldsNoteRu}</Text>}
+                {store.writeReport.warningsRu.map((w, i) => <Text key={`w${i}`} variant="label" tone="secondary">{w}</Text>)}
+                {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">Осталось после ремонта: {store.writeReport.remainingRu.join(' · ')}</Text>}
+              </div>
+            )}
           </Card>
 
           <ExportCard open={exportOpen} onOpenChange={setExportOpen} project={project} shot={shot} shotIndex={project.shots.findIndex((s) => s.id === shot.id)} build={build} durationSec={duration} warnings={warnings} />
@@ -456,13 +480,13 @@ export function Workspace({ pack }: { pack: PackBundle }) {
           />
 
           <Card padding="l" className={styles.previewCard}>
-            <Text variant="caption" tone="secondary">Промпт</Text>
+            <Text variant="caption" tone="secondary">Промпт — его пишут агенты из твоих полей</Text>
             {build.paragraphs.map((paragraph, i) => (
               <div key={i} id={`p-${i}`} className={styles.paragraph}>
                 <div className={styles.paragraphHead}>
                   <Text variant="caption" tone="tertiary" mono>{String(i + 1).padStart(2, '0')}</Text>
                   <Text variant="caption" tone="secondary">{BLOCK_RU[paragraph.kind] ?? paragraph.kind}</Text>
-                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? 'формула гайда · техника не из гайда' : 'дословно из гайда') : paragraph.origin === 'template' ? 'шаблон' : 'твой текст'}</Tag>
+                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? 'формула гайда · техника не из гайда' : 'дословно из гайда') : paragraph.origin === 'template' ? 'формула гайда + твои поля' : 'агент по твоим битам'}</Tag>
                 </div>
                 <PromptText text={build.resolvedParagraphs[i] ?? ''} />
               </div>

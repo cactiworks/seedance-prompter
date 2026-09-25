@@ -6,6 +6,8 @@ interface Option<T extends string> {
   value: T;
   label: ReactNode;
   disabled?: boolean;
+  /** Имя для скринридера и подсказка, когда label — иконка. */
+  title?: string;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -28,7 +30,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options, s
       aria-label={rest['aria-label']}
     >
       {options.map((option) => (
-        <ToggleGroup.Item key={option.value} value={option.value} disabled={option.disabled} className={styles.item}>
+        <ToggleGroup.Item key={option.value} value={option.value} disabled={option.disabled} className={styles.item} aria-label={option.title} title={option.title}>
           {option.label}
         </ToggleGroup.Item>
       ))}

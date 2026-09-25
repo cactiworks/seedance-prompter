@@ -18,5 +18,24 @@
     "object": "{NAME} from {REF}",
     "studioBackdropClause": " — take only the person's appearance and clothing from {REF}, do not take the background"
   },
-  "languageNames": { "ru": "Russian", "en": "English" }
+  "languageNames": { "ru": "Russian", "en": "English" },
+  "aspect": {
+    "$note": "Формула формата гайда написана под «Vertical 9:16». При другом формате компилятор меняет в ней только эту пару слов; при 9:16 текст байт в байт.",
+    "phrases": {
+      "9:16": "Vertical 9:16",
+      "3:4": "Vertical 3:4",
+      "1:1": "Square 1:1",
+      "4:3": "Horizontal 4:3",
+      "16:9": "Horizontal 16:9",
+      "21:9": "Widescreen 21:9"
+    },
+    "labelsRu": {
+      "9:16": "вертикаль, рилс",
+      "3:4": "вертикаль, пост",
+      "1:1": "квадрат",
+      "4:3": "горизонталь, ТВ",
+      "16:9": "горизонталь, YouTube",
+      "21:9": "широкий, кино"
+    }
+  }
 }

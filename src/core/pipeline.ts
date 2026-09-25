@@ -1,5 +1,6 @@
 import { compileShot, joinParagraphs, type CompiledParagraph, type CompileIssue, type Kit, type VerbatimPack } from './compile/compile.ts';
 import { resolve, type DialectPack, type ResolveIssue } from './compile/dialect.ts';
+import { pendingLabels, staleFields } from './compose.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
 import { activeStates, durationOf, type Project, type Shot } from './model/project.ts';
@@ -28,14 +29,19 @@ export interface ShotBuild {
 }
 
 export const CUSTOM_KIT = 'custom';
+/** Список «что брать с референса локации» из удачных промптов гайда. */
+export const DEFAULT_USE_ONLY = 'the space, architecture, ground, water, sky, and weather';
 const CUSTOM_DEFECTS = ['ae-jumps', 'focus-hunting', 'af-breathes', 'horizon-slight', 'hand-repositioning', 'breathing'];
 
 /** Своя камера собирается той же формулой стиль-блока, что комплекты гайда. */
-function customKit(shot: Shot, blockers: ShotBuild['blockers']): Kit {
+function customKit(shot: Shot, blockers: ShotBuild['blockers'], pending: boolean): Kit {
   const clean = (text: string): string => text.trim().replace(/[.\s]+$/, '');
   const { camera, lens, look, lensNote } = shot.customKit;
-  if (clean(camera) === '') blockers.push({ code: 'CUSTOM_KIT_NO_CAMERA', messageRu: 'Своя камера: не названа модель. Приём 01 — реальное название техники, а не «cinematic camera».' });
-  if (clean(look) === '') blockers.push({ code: 'CUSTOM_KIT_NO_LOOK', messageRu: 'Своя камера: нет характера картинки. Одного названия мало — рядом нужно описать зерно, цвет, боке, блики.' });
+  const described = (shot.customKit.ru ?? '').trim() !== '';
+  // Пока агент не перевёл описание, о пустых английских полях говорит один блокер NEEDS_COMPOSE.
+  if (!described && clean(camera) === '') blockers.push({ code: 'CUSTOM_KIT_EMPTY', messageRu: 'Своя камера: опиши технику и картинку в секции «Как снято» — модель камеры, объектив, какое зерно, цвет, блики.' });
+  else if (!pending && clean(camera) === '') blockers.push({ code: 'CUSTOM_KIT_NO_CAMERA', messageRu: 'Своя камера: агент не понял, какая это модель. Приём 01 — реальное название техники, а не «кинокамера»: допиши модель в описание.' });
+  else if (!pending && clean(look) === '') blockers.push({ code: 'CUSTOM_KIT_NO_LOOK', messageRu: 'Своя камера: нет характера картинки. Одного названия мало — допиши в описание зерно, цвет, контраст, блики.' });
   // Кириллицу в полях ловит линтер (HYG_CYRILLIC_OUTSIDE_QUOTES) — с абзацем и самим словом; второй раз не называем.
   return {
     id: CUSTOM_KIT,
@@ -52,7 +58,13 @@ function customKit(shot: Shot, blockers: ShotBuild['blockers']): Kit {
 
 /** Комплект кадра — из pack или свой. Нужен и конвейеру, и агенту-писателю. */
 export function kitOf(shot: Shot, pack: PackBundle): Kit | undefined {
-  return shot.kitId === CUSTOM_KIT ? customKit(shot, []) : pack.kits[shot.kitId];
+  return shot.kitId === CUSTOM_KIT ? customKit(shot, [], true) : pack.kits[shot.kitId];
+}
+
+/** Кто держит технику-реквизит: имя героя по ключу; строка — из проектов до 25.09. */
+export function holderName(project: Project, key: string | undefined, legacy: string): string {
+  const entity = key === undefined || key === '' ? undefined : project.entities.find((e) => e.key === key);
+  return entity === undefined ? legacy.trim() : entity.name.trim();
 }
 
 const blocker = (issue: CompileIssue | ResolveIssue): { code: string; messageRu: string } => ({ code: issue.code, messageRu: issue.messageRu });
@@ -67,32 +79,37 @@ type StructuralDraft = Pick<Finding, 'ruleId' | 'severity' | 'family' | 'message
 /** Проект + кадр → промпт, находки линтера, метрики. Чистая функция: работает в браузере на каждое нажатие. */
 export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotBuild {
   const blockers: ShotBuild['blockers'] = [];
-  const kit = shot.kitId === CUSTOM_KIT ? customKit(shot, blockers) : pack.kits[shot.kitId];
+  // Всё, что владелец написал по-русски, а агенты ещё не перевели, — одним блокером: одна причина, одна кнопка.
+  const pending = pendingLabels(project, shot);
+  const fieldsPending = new Set(staleFields(project, shot).map((item) => item.id));
+  if (pending.length > 0) blockers.push({ code: 'NEEDS_COMPOSE', messageRu: `Изменено после сборки: ${pending.join(', ')}. Нажми «Собрать промпт» — агент перепишет это в промпт.` });
+
+  const kit = shot.kitId === CUSTOM_KIT ? customKit(shot, blockers, fieldsPending.has('kit')) : pack.kits[shot.kitId];
   if (kit === undefined) {
     return { paragraphs: [], prompt: '', resolvedParagraphs: [], blockers: [{ code: 'UNKNOWN_KIT', messageRu: `В pack нет комплекта «${shot.kitId}».` }], findings: [], metrics: { chars: 0, words: 0, speechWords: 0, speechCapacity: 0, refsInPanel: shot.panel.length, refsUsed: 0 } };
   }
 
   const [ref1, ref2] = shot.locationRefs;
   if (ref1 === undefined) blockers.push({ code: 'NO_LOCATION_REF', messageRu: 'Не выбран референс локации. Гайд: «текст не заменяет референс».' });
-  if (project.world.place.en.trim() === '') blockers.push({ code: 'NO_PLACE', messageRu: 'Локация не описана по-английски (поле «Место»).' });
-  if (project.world.useOnlyEn.trim() === '') blockers.push({ code: 'NO_USE_ONLY', messageRu: 'Поле «Что брать с референса» пустое — формула локации оборвётся на «Use only». Верни список: the space, architecture, ground, water, sky, and weather.' });
+  if (project.world.place.ru.trim() === '' && project.world.place.en.trim() === '') blockers.push({ code: 'NO_PLACE', messageRu: 'Не описано место: заполни «Место» в секции «Локация и погода».' });
+  for (const entity of project.entities) {
+    if ((entity.nameRu ?? '').trim() === '' && entity.name.trim() === '') blockers.push({ code: 'ENTITY_NO_NAME', messageRu: `В «Герои и предметы» есть ${entity.kind === 'character' ? 'герой' : 'предмет'} без имени — назови или удали.` });
+  }
 
   // Разделение ролей идёт в промпт шаблоном: пустое поле даст «This is not the camera held by .»
   const role = kit.layout === 'split' ? shot.roleSplit : null;
+  const cameraHolder = role === null ? '' : holderName(project, role.cameraHolderKey, role.cameraHolder);
+  const lensHolder = role === null ? '' : holderName(project, role.lensHolderKey, role.lensHolder);
   if (role !== null) {
-    const missing = [role.cameraHolder.trim() === '' && 'кто держит камеру', role.lensHolder.trim() === '' && 'кто показывает объектив', role.propsEn.trim() === '' && 'описание реквизита'].filter(Boolean);
+    const propsDescribed = (role.propsRu ?? '').trim() !== '' || role.propsEn.trim() !== '';
+    const missing = [cameraHolder === '' && 'кто держит камеру', lensHolder === '' && 'кто показывает объектив', !propsDescribed && 'что за реквизит'].filter(Boolean);
     if (missing.length > 0) blockers.push({ code: 'ROLE_SPLIT_INCOMPLETE', messageRu: `Разделение ролей включено, но не заполнено: ${missing.join(', ')}. Заполни в секции «Как снято» или выключи переключатель.` });
   }
 
   const hasScenario = shot.segments.some((segment) => segment.text.en.trim() !== '');
-  if (!hasScenario) {
-    blockers.push({ code: 'NO_SCENARIO', messageRu: 'Сценарий не написан: в промпте пока только «как снято» и локация. Опиши кадр и нажми «Написать кадр» или заполни абзац вручную.' });
-  } else {
-    shot.segments.forEach((segment, index) => {
-      if (segment.text.en.trim() === '' && segment.beatsRu.trim() !== '') {
-        blockers.push({ code: 'SEGMENT_NOT_WRITTEN', messageRu: `Отрезок ${index + 1} описан по-русски, но английского абзаца нет — в промпт он не попадёт. Напиши его или удали отрезок.` });
-      }
-    });
+  const described = shot.segments.some((segment) => segment.beatsRu.trim() !== '');
+  if (!hasScenario && !described) {
+    blockers.push({ code: 'NO_SCENARIO', messageRu: 'Сценария нет: в промпте пока только «как снято» и локация. Опиши кадр своими словами и нажми «Разложить по отрезкам» или впиши, что происходит, прямо в отрезок.' });
   }
 
   const durationSec = durationOf(project, shot);
@@ -100,14 +117,16 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     {
       kit,
       durationSec,
+      aspectPhrase: pack.dialects.aspect?.phrases[project.aspectRatio],
       defects: shot.defects ?? undefined,
       behavior: shot.behavior,
       operatorRule: shot.operatorRule,
       locationRule: shot.locationRule,
       locationRefs: [ref1 ?? 'missing-location-ref', ref2 ?? ref1 ?? 'missing-location-ref'],
-      world: { placeEn: project.world.place.en.trim(), useOnlyEn: project.world.useOnlyEn, weatherEn: project.world.weather.en.trim() },
+      // «Что брать с референса» — формула гайда; в интерфейсе её нет, поэтому пустое значение не ломает промпт.
+      world: { placeEn: project.world.place.en.trim(), useOnlyEn: project.world.useOnlyEn.trim() === '' ? DEFAULT_USE_ONLY : project.world.useOnlyEn, weatherEn: project.world.weather.en.trim() },
       languageName: pack.dialects.languageNames[project.language] ?? project.language,
-      roleSplit: shot.roleSplit ?? undefined,
+      roleSplit: role === null ? undefined : { cameraRef: role.cameraRef, lensRef: role.lensRef, cameraHolder, lensHolder, propsEn: role.propsEn.trim().replace(/[.\s]+$/, '') },
       segments: shot.segments.map((segment) => ({ id: segment.id, en: segment.text.en })),
     },
     pack.verbatim,
@@ -215,14 +234,18 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     if (hasScenario && !placedAnywhere.has(line.id) && line.ru.trim() !== '') structural.push({ id: line.id, ruleId: 'LINE_UNUSED', family: 'lines', severity: 'warning', evidence: line.ru.slice(0, 80), messageRu: `Реплика ${line.id} не стоит ни в одном кадре — в озвучку она не попадёт.`, fixHintRu: `Вставь её кнопкой ${line.id} в нужный абзац или удали из списка реплик.` });
   }
 
-  if (project.world.weather.en.trim() === '') {
-    structural.push({ id: 'weather', ruleId: 'NO_WEATHER', family: 'light', severity: 'warning', evidence: '', messageRu: 'Погода и базовый свет не описаны — модель выберет их сама, обычно ровный полдень без физики.', fixHintRu: 'Секция «Локация и погода»: мокрый асфальт, отражения, пар, ветер. Свет — событие, а не состояние.' });
+  // Погода описана по-русски, но ещё не переведена — об этом уже говорит NEEDS_COMPOSE.
+  if (project.world.weather.en.trim() === '' && project.world.weather.ru.trim() === '') {
+    structural.push({ id: 'weather', ruleId: 'NO_WEATHER', family: 'light', severity: 'warning', evidence: '', messageRu: 'Погода и базовый свет не описаны — модель выберет их сама, обычно ровный полдень без физики.', fixHintRu: 'Секция «Локация и погода», тезисно: мокрый асфальт, лужи, пар, ветер; какое солнце. Свет — событие, а не состояние.' });
   }
 
   const order = { error: 0, warning: 1, info: 2 } as const;
   const drop = project.world.weather.en.trim() === '' ? new Set(['WEATHER_PHYSICS']) : new Set<string>();
+  // Своя камера ещё не собрана — стиль-блок заведомо с дырой («shot on , .»), и блокер уже назвал причину.
+  const styleIndex = compiled.paragraphs.findIndex((p) => p.kind === 'style' || p.kind === 'format');
+  const kitHole = shot.kitId === CUSTOM_KIT && shot.customKit.camera.trim() === '';
   const all = [
-    ...findings.filter((f) => !drop.has(f.ruleId)),
+    ...findings.filter((f) => !drop.has(f.ruleId) && !(kitHole && f.paragraph === styleIndex)),
     ...structural
       .map(({ id, paragraph, ...draft }): Finding => ({ ...draft, paragraph: paragraph ?? null, range: null, fingerprint: `${draft.ruleId}:${id}` }))
       .filter((f) => !suppressed.has(f.fingerprint)),

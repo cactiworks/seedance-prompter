@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { applyFields, applyWrite, staleFields, staleSegments, type FieldItem, type FieldsOutput } from '../core/compose.ts';
 import type { Attempt, Critique, Project, Shot } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
 
@@ -40,11 +41,14 @@ interface State {
   update: (recipe: (project: Project) => Project) => void;
   updateShot: (recipe: (shot: Shot) => Shot) => void;
   uploadRef: (file: File, fileName: string) => Promise<void>;
-  /** Писатель: запускается только по клику. */
-  writing: boolean;
+  /**
+   * «Собрать промпт», только по клику: агент полей переводит изменённые тезисы (место, погода, имена,
+   * последствия, своя камера, реквизит), потом писатель пишет изменённые отрезки. `all` — переписать все.
+   */
+  composing: 'fields' | 'writing' | null;
   writeReport: WriteReport | null;
-  writeShot: () => Promise<void>;
-  cancelWrite: () => void;
+  composeShot: (all?: boolean) => Promise<void>;
+  cancelCompose: () => void;
   /** Планировщик: синопсис кадра → отрезки. Непустые отрезки заменяются только с согласия владельца. */
   planning: boolean;
   planReport: { ok: boolean; messageRu: string } | null;
@@ -106,8 +110,15 @@ export interface SymptomCatalog {
   symptoms: { id: string; group: string; titleRu: string; causeRu: string; checkRu: string; fixEn: string; guide: string }[];
 }
 
+interface FieldsResponse {
+  items: FieldItem[];
+  output: FieldsOutput | null;
+  problems: string[];
+  meta: { durationMs: number; model: string | null } | null;
+}
+
 interface PlanResponse {
-  plan: { segments: { titleRu: string; beatsRu: string }[]; placeEn: string; weatherEn: string; notesRu: string };
+  plan: { segments: { titleRu: string; beatsRu: string }[]; notesRu: string };
   newLines: { id: string; ru: string }[];
   problems: string[];
   meta: { durationMs: number; model: string | null };
@@ -117,6 +128,8 @@ export interface WriteReport {
   ok: boolean;
   messageRu: string;
   notes: Record<string, string>;
+  /** Заметки агента полей: чего не хватило в тезисах, что он решил сам. */
+  fieldsNoteRu: string;
   warningsRu: string[];
   remainingRu: string[];
 }
@@ -242,39 +255,66 @@ export const useStore = create<State>((set, get) => {
       get().update((project) => ({ ...project, shots: project.shots.map((shot) => (shot.id === shotId ? recipe(shot) : shot)) }));
     },
 
-    writing: false,
+    composing: null,
     writeReport: null,
 
-    writeShot: async () => {
+    composeShot: async (all = false) => {
       const { project, shotId } = get();
-      if (project === null || shotId === null || get().writing) return;
+      const start = project?.shots.find((s) => s.id === shotId);
+      if (project === null || shotId === null || start === undefined || get().composing !== null) return;
       writeAbort = new AbortController();
-      set({ writing: true, writeReport: null });
+      const { signal } = writeAbort;
+      // Правки применяются к кадру, для которого запускали, даже если владелец переключился на другой.
+      const onShot = (recipe: (shot: Shot) => Shot): void => get().update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId ? recipe(s) : s)) }));
+      const done: string[] = [];
+      const report: WriteReport = { ok: true, messageRu: '', notes: {}, fieldsNoteRu: '', warningsRu: [], remainingRu: [] };
+      set({ composing: 'fields', writeReport: null });
       try {
-        const res = await fetch('/api/llm/write', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId }), signal: writeAbort.signal });
-        const result = await json<WriteResponse>(res);
-        const byId = new Map(result.blocks.map((b) => [b.segmentId, b]));
-        // Текст агента не блокируется: его можно перегенерировать. Любая ручная правка заблокирует отрезок.
-        get().updateShot((shot) => ({ ...shot, segments: shot.segments.map((s) => (byId.has(s.id) && !s.text.locked ? { ...s, text: { ...s.text, en: byId.get(s.id)?.en ?? s.text.en, source: 'llm' } } : s)) }));
-        set({
-          writeReport: {
-            ok: true,
-            messageRu: `Написано отрезков: ${result.blocks.length} · кругов: ${result.rounds} · ${Math.round(result.meta.durationMs / 1000)} с · ${result.meta.model ?? ''}`,
-            notes: Object.fromEntries(result.blocks.map((b) => [b.segmentId, b.notesRu])),
-            warningsRu: result.warningsRu,
-            remainingRu: [...result.remaining.violations.map((v) => `${v.segmentId}: ${v.messageEn}`), ...result.remaining.lintRu],
-          },
-        });
+        // 1. Поля: место, погода, имена, последствия, своя камера, реквизит. Очищенные стираются без агента.
+        const stale = staleFields(project, start, 'compose');
+        if (stale.length > 0) {
+          let answer: { items: FieldItem[]; output: FieldsOutput | null } = { items: stale, output: null };
+          if (stale.some((item) => item.ru !== '')) {
+            const result = await json<FieldsResponse>(await fetch('/api/llm/fields', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId }), signal }));
+            answer = { items: result.items, output: result.output };
+            report.fieldsNoteRu = result.output?.notesRu ?? '';
+            if (result.problems.length > 0) report.remainingRu.push(...result.problems.map((p) => `поля: ${p}`));
+            done.push(`полей ${result.items.filter((item) => item.ru !== '').length}${result.meta === null ? '' : ` за ${Math.round(result.meta.durationMs / 1000)} с`}`);
+          }
+          get().update((p) => applyFields(p, shotId, answer.items, answer.output));
+        }
+
+        // 2. Отрезки: изменённые (или все — «переписать кадр»). С пустыми битами абзац просто стирается.
+        const snapshot = get().project;
+        const shot = snapshot?.shots.find((s) => s.id === shotId);
+        if (snapshot === null || shot === undefined) return;
+        const described = shot.segments.filter((s) => s.beatsRu.trim() !== '').map((s) => s.id);
+        const stalled = new Set(staleSegments(shot));
+        const segmentIds = all ? described : described.filter((id) => stalled.has(id));
+        if (segmentIds.length > 0) {
+          set({ composing: 'writing' });
+          const beats = Object.fromEntries(shot.segments.map((s) => [s.id, s.beatsRu]));
+          const result = await json<WriteResponse>(await fetch('/api/llm/write', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project: snapshot, shotId, segmentIds }), signal }));
+          onShot((s) => applyWrite(s, result.blocks, beats));
+          report.notes = Object.fromEntries(result.blocks.map((b) => [b.segmentId, b.notesRu]));
+          report.warningsRu = result.warningsRu;
+          report.remainingRu.push(...result.remaining.violations.map((v) => `${v.segmentId}: ${v.messageEn}`), ...result.remaining.lintRu);
+          done.push(`отрезков ${result.blocks.length} за ${Math.round(result.meta.durationMs / 1000)} с${result.rounds > 1 ? ', с ремонтным кругом' : ''}`);
+        } else {
+          onShot((s) => applyWrite(s, [], {}));
+        }
+        report.messageRu = done.length === 0 ? 'Всё уже собрано — агентам нечего переписывать.' : `Собрано: ${done.join(' · ')}.`;
+        set({ writeReport: report });
       } catch (cause) {
         const aborted = cause instanceof DOMException && cause.name === 'AbortError';
-        set({ writeReport: { ok: false, messageRu: aborted ? 'Отменено.' : cause instanceof Error ? cause.message : String(cause), notes: {}, warningsRu: [], remainingRu: [] } });
+        set({ writeReport: { ...report, ok: false, messageRu: aborted ? 'Отменено.' : cause instanceof Error ? cause.message : String(cause) } });
       } finally {
         writeAbort = null;
-        set({ writing: false });
+        set({ composing: null });
       }
     },
 
-    cancelWrite: () => writeAbort?.abort(),
+    cancelCompose: () => writeAbort?.abort(),
 
     symptoms: null,
     loadSymptoms: async () => set({ symptoms: await json<SymptomCatalog>(await fetch('/api/packs/cinema-doc/symptoms')) }),
@@ -417,14 +457,9 @@ export const useStore = create<State>((set, get) => {
           ...p,
           // Реплики из «ёлочек» синопсиса — буква в букву, невычитанные: галочку ставит владелец.
           lines: [...p.lines, ...newLines.map((l) => ({ id: l.id, speakerKey: null, ru: l.ru, proofread: false }))],
-          world: {
-            ...p.world,
-            place: plan.placeEn.trim() !== '' && p.world.place.en.trim() === '' ? { ...p.world.place, en: plan.placeEn.trim(), source: 'llm' } : p.world.place,
-            weather: plan.weatherEn.trim() !== '' && p.world.weather.en.trim() === '' ? { ...p.world.weather, en: plan.weatherEn.trim(), source: 'llm' } : p.world.weather,
-          },
           shots: p.shots.map((s) => (s.id === shotId ? { ...s, segments: plan.segments.map((seg, i) => ({ id: `seg-${stamp}-${i + 1}`, titleRu: seg.titleRu, beatsRu: seg.beatsRu, text: { ru: '', en: '', source: 'empty' as const, locked: false } })) } : s)),
         }));
-        set({ planReport: { ok: problems.length === 0, messageRu: `Отрезков: ${plan.segments.length} · новых реплик: ${newLines.length} · ${Math.round(meta.durationMs / 1000)} с. ${plan.notesRu}${problems.length > 0 ? ` Осталось: ${problems.join(' ')}` : ''}` } });
+        set({ planReport: { ok: problems.length === 0, messageRu: `Отрезков: ${plan.segments.length} · новых реплик: ${newLines.length} · ${Math.round(meta.durationMs / 1000)} с. ${plan.notesRu}${problems.length > 0 ? ` Осталось: ${problems.join(' ')}` : ''} Проверь биты и нажми «Собрать промпт».` } });
       } catch (cause) {
         set({ planReport: { ok: false, messageRu: cause instanceof Error ? cause.message : String(cause) } });
       } finally {
