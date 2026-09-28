@@ -16,7 +16,11 @@ export type GenParams = Record<string, ParamValue>;
 export interface ParamDef {
   key: string;
   labelRu: string;
-  type: 'enum' | 'int' | 'bool' | 'text';
+  /**
+   * seed — 0 значит «случайный»: сервер подставит число и сохранит его с задачей, чтобы кадр можно было повторить.
+   * style — id готового мудборда провайдера (у Soul 2 — список `soul-styles/v2`); '' — без стиля.
+   */
+  type: 'enum' | 'int' | 'bool' | 'text' | 'seed' | 'style';
   options?: readonly string[];
   /** Подписи вариантов, если значение само по себе непонятно (std → «Стандарт · 720p»). */
   optionLabelsRu?: Readonly<Record<string, string>>;
@@ -100,6 +104,7 @@ function seedanceMedia(refs: readonly SentRef[]): Record<string, unknown> {
 }
 
 const KLING_RATE: Record<string, [number, number]> = { std: [14, 20], pro: [18, 27], '4K': [67, 67] };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ——— модели ———
 
@@ -114,8 +119,10 @@ export const GEN_MODELS: readonly GenModel[] = [
     params: [
       resolution(['720p', '1080p'], '1080p'),
       aspect(['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'], '9:16'),
-      { key: 'soulId', labelRu: 'Soul ID', type: 'text', default: '', pattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, hintRu: 'UUID персонажа из аккаунта API (обучается там же, model_version v2). Пусто — без персонажа.' },
+      { key: 'styleId', labelRu: 'Мудборд', type: 'style', default: '', pattern: UUID_RE, hintRu: 'Готовый мудборд Higgsfield. Свой мудборд через API не создаётся — только в вебе Higgsfield.' },
+      { key: 'soulId', labelRu: 'Soul ID', type: 'text', default: '', pattern: UUID_RE, hintRu: 'UUID персонажа из аккаунта API (обучается там же, model_version v2). Пусто — без персонажа.' },
       { key: 'enhancePrompt', labelRu: 'Улучшать промпт', type: 'bool', default: false },
+      { key: 'seed', labelRu: 'Seed', type: 'seed', min: 0, max: 1_000_000, default: 0, hintRu: 'Тот же seed с тем же промптом — та же композиция, но не те же пиксели. Пусто — случайный.' },
     ],
     refs: { max: 0, roles: [] },
     promptRefs: 'image-n',
@@ -123,13 +130,16 @@ export const GEN_MODELS: readonly GenModel[] = [
     // на цену не влияют, batch_size 4 — ×4). Страница модели пишет $0.0032 / $0.0057 — это без округления вверх.
     credits: (p) => priceOf({ '720p': 0.004, '1080p': 0.006 }, str(p, 'resolution')),
     target: () => 'higgsfield-ai/soul/v2/standard',
-    // Seed не передаём: явный null API не принимает. Поля с расходящимися умолчаниями — явно.
+    // Seed к моменту отправки уже конкретный (resolveSeeds); явный null API не принимает, 0 не отправляем.
+    // Поля с расходящимися умолчаниями — явно.
     input: (prompt, p) => ({
       prompt,
       aspect_ratio: str(p, 'aspectRatio'),
       resolution: str(p, 'resolution'),
       enhance_prompt: p.enhancePrompt === true,
       batch_size: 1,
+      ...(num(p, 'seed') > 0 ? { seed: num(p, 'seed') } : {}),
+      ...(str(p, 'styleId') !== '' ? { style_id: str(p, 'styleId') } : {}),
       ...(str(p, 'soulId') !== '' ? { custom_reference_id: str(p, 'soulId'), custom_reference_strength: 1 } : {}),
     }),
   },
@@ -227,7 +237,8 @@ const fits = (def: ParamDef, value: ParamValue | undefined): boolean =>
   ((def.type === 'enum' && typeof value === 'string' && (def.options ?? []).includes(value)) ||
     (def.type === 'int' && typeof value === 'number' && Number.isInteger(value) && value >= (def.min ?? -Infinity) && value <= (def.max ?? Infinity)) ||
     (def.type === 'bool' && typeof value === 'boolean') ||
-    (def.type === 'text' && typeof value === 'string'));
+    ((def.type === 'text' || def.type === 'style') && typeof value === 'string') ||
+    (def.type === 'seed' && typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= (def.max ?? 1_000_000)));
 
 /**
  * Параметры поверх умолчаний модели. Чужие для модели ключи отбрасываются; значения, которых у новой
@@ -269,9 +280,10 @@ export function validateGen(model: GenModel, prompt: string, params: GenParams, 
     const value = params[def.key];
     if (!fits(def, value)) {
       if (def.type === 'int') problems.push(`${def.labelRu} — целое число от ${def.min ?? '…'} до ${def.max ?? '…'}.`);
+      else if (def.type === 'seed') problems.push(`${def.labelRu} — целое число от 1 до ${def.max ?? 1_000_000} или пусто (случайный).`);
       else if (def.type === 'bool') problems.push(`${def.labelRu}: нужно да или нет.`);
       else problems.push(`${def.labelRu}: «${String(value)}» недоступно для ${model.titleRu}.`);
-    } else if (def.type === 'text' && def.pattern !== undefined && value !== '' && !def.pattern.test(String(value))) {
+    } else if ((def.type === 'text' || def.type === 'style') && def.pattern !== undefined && value !== '' && !def.pattern.test(String(value))) {
       problems.push(`${def.labelRu}: неверный формат. ${def.hintRu ?? ''}`.trim());
     }
   }
@@ -284,6 +296,19 @@ export function validateGen(model: GenModel, prompt: string, params: GenParams, 
   if (model.refs.framesExclusive === true && count('ref') > 0 && count('start') + count('end') > 0) problems.push('Кадры (старт / финал) и референсы нельзя смешивать в одной задаче — выбери что-то одно.');
   if (model.promptRefs === 'at-image' && maxRef > count('ref')) problems.push(`В промпте есть ссылка на картинку ${maxRef}, а референсов прикреплено ${count('ref')}.`);
   return problems;
+}
+
+/**
+ * Конкретные seed для каждой из `count` задач. 0 («случайный») — своё случайное число на задачу; фиксированный —
+ * seed, seed+1, … (как раннер: одинаковые вызовы с одним seed дали бы почти одинаковые кадры за деньги).
+ * `random` — источник чисел 1…max (в тестах подменяется). У моделей без seed параметры не меняются.
+ */
+export function resolveSeeds(model: GenModel, params: GenParams, count: number, random: (max: number) => number): GenParams[] {
+  const def = model.params.find((d) => d.type === 'seed');
+  if (def === undefined) return Array.from({ length: count }, () => params);
+  const max = def.max ?? 1_000_000;
+  const base = typeof params[def.key] === 'number' ? Number(params[def.key]) : 0;
+  return Array.from({ length: count }, (_, i) => ({ ...params, [def.key]: base > 0 ? ((base - 1 + i) % max) + 1 : random(max) }));
 }
 
 export interface Estimate {

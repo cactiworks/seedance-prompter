@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimate, findModel, formatCost, forProvider, GEN_MODELS, modelsOf, paramsFor, validateGen, type GenModel, type SentRef } from '../../src/core/gen/models.ts';
+import { estimate, findModel, formatCost, forProvider, GEN_MODELS, modelsOf, paramsFor, resolveSeeds, validateGen, type GenModel, type SentRef } from '../../src/core/gen/models.ts';
 
 const model = (id: string): GenModel => {
   const found = findModel(id);
@@ -124,5 +124,33 @@ describe('проверки ролей и параметров', () => {
     const bad = validateGen(seedance, '  ', { resolution: '4K', aspectRatio: '2:3', durationSec: 31, audio: true }, []);
     expect(bad).toHaveLength(4);
     expect(validateGen(seedance, 'ok', { ...defaults(seedance), durationSec: 4.5 }, [])).toHaveLength(1);
+  });
+});
+
+describe('Soul 2: seed и мудборд (решение 27)', () => {
+  const STYLE = '7ee16ff3-c0b0-4f5f-a0e1-e7fc46144230';
+
+  it('seed 0 — случайный на каждую задачу; фиксированный — seed, seed+1, …, с переносом через максимум', () => {
+    const rnd = [111, 222, 333];
+    let i = 0;
+    const random = () => rnd[i++] ?? 1;
+    expect(resolveSeeds(soul, defaults(soul), 3, random).map((p) => p.seed)).toEqual([111, 222, 333]);
+    expect(resolveSeeds(soul, paramsFor(soul, { seed: 500 }), 3, random).map((p) => p.seed)).toEqual([500, 501, 502]);
+    expect(resolveSeeds(soul, paramsFor(soul, { seed: 1_000_000 }), 2, random).map((p) => p.seed)).toEqual([1_000_000, 1]);
+    expect(resolveSeeds(gpt, defaults(gpt), 2, random)).toEqual([defaults(gpt), defaults(gpt)]);
+  });
+
+  it('в тело уходят seed и style_id; 0 и пустой стиль не отправляются', () => {
+    expect(soul.input('x', paramsFor(soul, { seed: 42, styleId: STYLE }), [])).toMatchObject({ seed: 42, style_id: STYLE });
+    const plain = soul.input('x', defaults(soul), []);
+    expect(plain).not.toHaveProperty('seed');
+    expect(plain).not.toHaveProperty('style_id');
+  });
+
+  it('проверки: seed — целое 0…1 000 000, мудборд — UUID', () => {
+    expect(paramsFor(soul, { seed: -5 }).seed).toBe(0);
+    expect(validateGen(soul, 'x', { ...defaults(soul), seed: 2_000_000 }, []).join(' ')).toContain('Seed — целое число');
+    expect(validateGen(soul, 'x', { ...defaults(soul), styleId: 'retro' }, []).join(' ')).toContain('Мудборд: неверный формат');
+    expect(validateGen(soul, 'x', { ...defaults(soul), styleId: STYLE, seed: 7 }, [])).toEqual([]);
   });
 });

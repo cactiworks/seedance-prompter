@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { estimate, findModel, formatCost, forProvider, paramsFor, validateGen, type Estimate, type ProviderId, type SentRef } from '../../core/gen/models.ts';
+import { randomInt } from 'node:crypto';
+import { estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type ProviderId, type SentRef } from '../../core/gen/models.ts';
 import { GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJobStore, newJobId } from '../storage/jobStore.ts';
@@ -8,7 +9,7 @@ import { createSessions } from '../storage/sessions.ts';
 import { createUploads } from '../storage/uploads.ts';
 import { createHiggsfieldProvider } from './higgsfield.ts';
 import { createKieProvider } from './kie.ts';
-import { GenError, type GenProvider } from './provider.ts';
+import { GenError, type GenProvider, type ProviderStyle } from './provider.ts';
 
 /** Не больше задач за один запуск без отдельного решения владельца (правило объёмов). */
 export const MAX_JOBS_PER_REQUEST = 4;
@@ -135,8 +136,12 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const files = await Promise.all(refs.map((r) => readRef(r.source)));
     const sentPrompt = forProvider(model, request.prompt).prompt;
 
+    // Конкретный seed у каждой задачи сохраняется в её параметрах — кадр можно повторить (решение 27).
+    const perJob = resolveSeeds(model, params, count, (max) => randomInt(1, max + 1));
+
     const created: GenJob[] = [];
     for (let i = 0; i < count; i += 1) {
+      const jobParams = perJob[i] ?? params;
       created.push(
         await jobs.put({
           id: newJobId(),
@@ -144,10 +149,10 @@ export function createGenRuntime(options: GenRuntimeOptions) {
           updatedAt: iso(),
           modelId: model.id,
           provider: model.provider,
-          providerModel: model.target(params, roles),
+          providerModel: model.target(jobParams, roles),
           kind: model.kind,
           prompt: sentPrompt,
-          params,
+          params: jobParams,
           refs,
           origin,
           sessionId: session?.id ?? null,
@@ -194,7 +199,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
         continue;
       }
       try {
-        const taskId = await provider.submit(job.providerModel, model.input(sentPrompt, params, sent));
+        const taskId = await provider.submit(job.providerModel, model.input(sentPrompt, job.params, sent));
         // taskId пишется сразу: по нему задача найдётся и после остановки сервера.
         out.push(await update(job, { status: 'queued', taskId, pollingSince: now(), nextCheckAt: now() + pollDelay(job) }));
       } catch (error) {
@@ -320,6 +325,18 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     throw new SubmitError('NOT_RETRYABLE', 409, 'Эту задачу не повторить без новой генерации — запусти заново (это новые кредиты).');
   }
 
+  // Готовые мудборды меняются редко — кеш на час, чтобы не дёргать провайдера при каждом открытии панели.
+  const styleCache = new Map<string, { at: number; list: ProviderStyle[] }>();
+  async function styles(id: ProviderId): Promise<ProviderStyle[]> {
+    const provider = providers[id];
+    if (provider?.listStyles === undefined || !provider.hasKey()) return [];
+    const hit = styleCache.get(id);
+    if (hit !== undefined && now() - hit.at < 60 * 60_000) return hit.list;
+    const list = await provider.listStyles();
+    styleCache.set(id, { at: now(), list });
+    return list;
+  }
+
   type Status = { hasKey: boolean; keyProblem?: string; balance?: number; balanceError?: string };
   async function status(withBalance: boolean): Promise<Record<string, Status>> {
     const out: Record<string, Status> = {};
@@ -343,6 +360,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     library,
     uploads,
     sessions,
+    styles,
     submit,
     retry,
     status,

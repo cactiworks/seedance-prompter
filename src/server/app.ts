@@ -301,6 +301,8 @@ export function createApp(options: AppOptions) {
     })
     // Генерация (решения 21–22): ключ провайдера и баланс; баланс — только по запросу, это обращение наружу.
     .get('/api/gen/status', async (c) => c.json(await gen.status(c.req.query('balance') === '1')))
+    // Готовые мудборды провайдера (Soul 2 — Higgsfield). Нет ключа — пустой список, форма работает без стиля.
+    .get('/api/gen/styles', async (c) => c.json(await gen.styles(c.req.query('provider') === 'higgsfield' ? 'higgsfield' : 'kie')))
     // Только по клику: сервер сверяет подтверждённую сумму с оценкой и согласие на отправку рефов.
     .post('/api/gen/jobs', async (c) => c.json(await gen.submit(await c.req.json()), 202))
     .get('/api/gen/jobs', async (c) => {

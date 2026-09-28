@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { estimate, findModel, modelsOf, paramsFor, validateGen, type GenParams, type MediaKind, type ParamValue, type RefRole } from '../../core/gen/models.ts';
+import { estimate, findModel, modelsOf, paramsFor, validateGen, type GenParams, type MediaKind, type ParamValue, type ProviderId, type RefRole } from '../../core/gen/models.ts';
 import type { Folder, GenJob, MediaItem, RefSource, StudioSession } from '../../core/model/media.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
@@ -31,6 +31,14 @@ export interface Composer {
   count: number;
   error: string | null;
   sending: boolean;
+}
+
+/** Готовый мудборд провайдера (Soul 2 — стиль Higgsfield). */
+export interface StyleOption {
+  id: string;
+  name: string;
+  description: string;
+  previewUrl: string | null;
 }
 
 export interface ProviderStatus {
@@ -101,6 +109,9 @@ interface GenState {
   library: MediaItem[];
   favorites: string[];
   folders: Folder[];
+  /** Мудборды по провайдеру; undefined — ещё не загружены. */
+  styles: Partial<Record<ProviderId, StyleOption[]>>;
+  loadStyles: (provider: ProviderId) => Promise<void>;
   composer: Record<MediaKind, Composer>;
 
   loadStatus: (withBalance?: boolean) => Promise<void>;
@@ -173,6 +184,15 @@ export const useGen = create<GenState>((set, get) => {
     library: [],
     favorites: [],
     folders: [],
+    styles: {},
+    loadStyles: async (provider) => {
+      try {
+        const list = await json<StyleOption[]>(await fetch(`/api/gen/styles?provider=${provider}`));
+        set((s) => ({ styles: { ...s.styles, [provider]: list } }));
+      } catch {
+        set((s) => ({ styles: { ...s.styles, [provider]: [] } }));
+      }
+    },
     composer: { image: emptyComposer('image'), video: emptyComposer('video') },
 
     loadStatus: async (withBalance = false) => {
@@ -337,7 +357,10 @@ export const useGen = create<GenState>((set, get) => {
     regenerate: async (job) => {
       const model = findModel(job.modelId);
       if (model === undefined) return;
-      const params = paramsFor(model, job.params);
+      // «Ещё раз» — новый вариант: seed случайный (тот же seed дал бы почти тот же кадр за деньги).
+      // Повторить кадр — «Использовать настройки»: remix переносит seed как есть.
+      const seedKey = model.params.find((d) => d.type === 'seed')?.key;
+      const params = paramsFor(model, seedKey === undefined ? job.params : { ...job.params, [seedKey]: 0 });
       const result = await post<{ jobs: GenJob[] }>('/api/gen/jobs', {
         modelId: model.id,
         prompt: job.prompt,

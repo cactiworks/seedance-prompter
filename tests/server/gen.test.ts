@@ -421,3 +421,39 @@ describe('кадр из видео (ffmpeg)', () => {
     expect((await app.request(`/api/library/${frame.id}/frame`, { method: 'POST', headers, body: JSON.stringify({ which: 'first' }) })).status).toBe(422);
   });
 });
+
+describe('Soul 2: seed сохраняется с задачей, мудборды кешируются', () => {
+  const soulSetup = (listStyles?: () => Promise<{ id: string; name: string; description: string; previewUrl: string | null }[]>) => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-seed-'));
+    const hf = mockProvider({ id: 'higgsfield', balance: undefined, ...(listStyles === undefined ? {} : { listStyles }) });
+    const gen = createGenRuntime({ dataDir, providers: { higgsfield: hf.provider }, fetch: mediaServer().fetch, now: () => Date.parse('2026-09-28T10:00:00Z') });
+    const app = createApp({ rootDir: ROOT, dataDir, gen });
+    const post = (body: unknown) => app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify(body) });
+    return { app, hf, post };
+  };
+
+  it('случайный seed — конкретное число в параметрах задачи и в теле запроса; фиксированный ×2 — seed и seed+1', async () => {
+    const { hf, post } = soulSetup();
+    const random = (await (await post({ modelId: 'higgsfield/soul-2', prompt: 'Portrait', params: { resolution: '720p' }, count: 2, confirmCredits: 0.008 })).json()) as { jobs: GenJob[] };
+    const seeds = random.jobs.map((j) => j.params.seed as number);
+    expect(seeds.every((s) => Number.isInteger(s) && s >= 1 && s <= 1_000_000)).toBe(true);
+    expect(hf.calls.submit.map((c) => c.input.seed)).toEqual(seeds);
+
+    const locked = (await (await post({ modelId: 'higgsfield/soul-2', prompt: 'Portrait', params: { resolution: '720p', seed: 4242 }, count: 2, confirmCredits: 0.008 })).json()) as { jobs: GenJob[] };
+    expect(locked.jobs.map((j) => j.params.seed)).toEqual([4242, 4243]);
+    expect(hf.calls.submit.slice(2).map((c) => c.input.seed)).toEqual([4242, 4243]);
+  });
+
+  it('GET /api/gen/styles — список провайдера, второй запрос из кеша; у KIE мудбордов нет', async () => {
+    let calls = 0;
+    const { app } = soulSetup(async () => {
+      calls += 1;
+      return [{ id: 's1', name: 'Old smartphone', description: '', previewUrl: null }];
+    });
+    const first = await (await app.request('/api/gen/styles?provider=higgsfield', { headers: { host } })).json();
+    await app.request('/api/gen/styles?provider=higgsfield', { headers: { host } });
+    expect(first).toEqual([{ id: 's1', name: 'Old smartphone', description: '', previewUrl: null }]);
+    expect(calls).toBe(1);
+    expect(await (await app.request('/api/gen/styles?provider=kie', { headers: { host } })).json()).toEqual([]);
+  });
+});

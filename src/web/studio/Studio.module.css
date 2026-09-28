@@ -519,3 +519,88 @@
   opacity: 0.35;
   cursor: default;
 }
+
+/* ——— мудборд и seed ——— */
+.styleGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lab-space-3);
+  max-height: 22rem;
+  overflow-y: auto;
+  padding: var(--lab-space-1);
+}
+
+.styleItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-1);
+  border: 1px solid transparent;
+  border-radius: var(--lab-radius-m);
+  background: none;
+  color: var(--lab-text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.styleItem:hover {
+  background: var(--lab-fill-4);
+}
+
+.styleOn {
+  border-color: var(--lab-accent);
+  background: var(--lab-accent-softer);
+  color: var(--lab-text-primary);
+}
+
+.stylePreview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--lab-radius-s);
+  object-fit: cover;
+  background: var(--lab-bg-sunken);
+}
+
+.styleSelect {
+  width: 100%;
+  padding: var(--lab-space-3) var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
+}
+
+.seedRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--lab-space-2);
+}
+
+.seedRow > :first-child {
+  flex: 1;
+}
+
+.seedButton {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.75rem;
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-secondary);
+  cursor: pointer;
+}
+
+.seedButton:hover:not(:disabled) {
+  color: var(--lab-accent);
+  border-color: var(--lab-accent-muted);
+}
+
+.seedButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

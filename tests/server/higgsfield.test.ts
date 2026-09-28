@@ -71,3 +71,21 @@ describe('формат ключа: запись с текстом команды
     expect(createHiggsfieldProvider({ apiKey: () => 'abc:def', fetch: fakeFetch().fetch }).keyProblem?.()).toBeNull();
   });
 });
+
+describe('готовые мудборды Soul 2', () => {
+  it('GET /v1/text2image/soul-styles/v2 → id, имя, превью; мусор отбрасывается', async () => {
+    const { fetch, seen } = fakeFetch(
+      json([
+        { id: 's1', name: 'Old smartphone', description: '', preview_url: 'https://cdn.higgsfield.ai/a.webp' },
+        { id: 's2', name: 'BW film', preview_url: null },
+        { name: 'без id' },
+      ]),
+    );
+    const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch });
+    expect(await hf.listStyles?.()).toEqual([
+      { id: 's1', name: 'Old smartphone', description: '', previewUrl: 'https://cdn.higgsfield.ai/a.webp' },
+      { id: 's2', name: 'BW film', description: '', previewUrl: null },
+    ]);
+    expect(seen[0]).toMatchObject({ url: 'https://api.higgsfield.ai/v1/text2image/soul-styles/v2', method: 'GET', auth: `Key ${KEY}` });
+  });
+});

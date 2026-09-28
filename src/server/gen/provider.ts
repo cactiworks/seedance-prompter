@@ -27,6 +27,15 @@ export interface GenProvider {
   freshUrl(url: string): Promise<string | null>;
   /** Баланс в единицах провайдера; у Higgsfield API такого запроса нет. */
   balance?(): Promise<number>;
+  /** Готовые мудборды (стили) модели; есть у Higgsfield для Soul 2. */
+  listStyles?(): Promise<ProviderStyle[]>;
+}
+
+export interface ProviderStyle {
+  id: string;
+  name: string;
+  description: string;
+  previewUrl: string | null;
 }
 
 export type GenErrorCode = 'NO_KEY' | 'NO_CREDITS' | 'RATE_LIMIT' | 'AUTH' | 'INVALID' | 'NOT_FOUND' | 'PROVIDER' | 'NETWORK';

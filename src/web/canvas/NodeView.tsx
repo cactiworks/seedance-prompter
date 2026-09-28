@@ -209,7 +209,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             {model !== undefined && (
               <div className={styles.nodeParams}>
                 {model.params.map((def) => (
-                  <ParamField key={def.key} def={def} value={paramsFor(model, node.params)[def.key]} onChange={(v) => patchNode(node.id, { params: { ...paramsFor(model, node.params), [def.key]: v } }, `params:${node.id}`)} />
+                  <ParamField key={def.key} def={def} compact provider={model.provider} value={paramsFor(model, node.params)[def.key]} onChange={(v) => patchNode(node.id, { params: { ...paramsFor(model, node.params), [def.key]: v } }, `params:${node.id}`)} />
                 ))}
               </div>
             )}

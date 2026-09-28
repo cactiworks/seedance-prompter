@@ -82,5 +82,15 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
 
     // Ссылки Higgsfield живут не меньше 7 дней; запасного способа получить новую нет.
     freshUrl: async () => null,
+
+    // Готовые мудборды Soul 2 (33 на 28.09.2026). Свой мудборд через API не создаётся — только в вебе Higgsfield.
+    async listStyles() {
+      const body = (await call('/v1/text2image/soul-styles/v2')) as unknown;
+      const list = Array.isArray(body) ? body : Array.isArray((body as { items?: unknown }).items) ? (body as { items: unknown[] }).items : [];
+      return list
+        .map((s) => s as { id?: unknown; name?: unknown; description?: unknown; preview_url?: unknown })
+        .filter((s): s is { id: string; name: string; description?: unknown; preview_url?: unknown } => typeof s.id === 'string' && typeof s.name === 'string')
+        .map((s) => ({ id: s.id, name: s.name, description: typeof s.description === 'string' ? s.description : '', previewUrl: isUrl(s.preview_url) ? s.preview_url : null }));
+    },
   };
 }

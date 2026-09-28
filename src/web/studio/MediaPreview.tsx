@@ -7,7 +7,7 @@ import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts'
 import styles from './MediaPreview.module.css';
 
 const formatDate = (iso: string): string => new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта' };
+const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта', styleId: 'Мудборд', seed: 'Seed' };
 const showValue = (v: unknown): string => (v === true ? 'да' : v === false ? 'нет' : v === '' ? '—' : String(v));
 
 /** Модели, которыми можно править картинку: принимают референсы. */
@@ -32,6 +32,7 @@ interface PreviewProps {
  */
 export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: PreviewProps) {
   const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, run, fileTo, loadLibrary } = useGen();
+  const styleNames = new Map((useGen((s) => s.styles.higgsfield) ?? []).map((s) => [s.id, s.name]));
   const [current, setCurrent] = useState<MediaItem | null>(opened);
   const [tab, setTab] = useState<'info' | 'edit'>('info');
   const [copied, setCopied] = useState(false);
@@ -111,7 +112,10 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
 
   const facts: [string, string][] = [
     ['Модель', model?.titleRu ?? item.modelId],
-    ...Object.entries(item.params).map(([k, v]): [string, string] => [PARAM_RU[k] ?? k, k === 'durationSec' ? `${String(v)} с` : showValue(v)]),
+    ...Object.entries(item.params).map(([k, v]): [string, string] => [
+      PARAM_RU[k] ?? k,
+      k === 'durationSec' ? `${String(v)} с` : k === 'styleId' ? (v === '' ? 'нет' : (styleNames.get(String(v)) ?? String(v))) : k === 'seed' && v === 0 ? 'случайный' : showValue(v),
+    ]),
     ['Списано', item.creditsConsumed === null ? '—' : `${item.creditsConsumed} ${item.provider === 'higgsfield' ? '$' : 'кр'}`],
     ['Референсы', item.refs.length === 0 ? 'нет' : String(item.refs.length)],
     ['Создано', formatDate(item.savedAt)],
