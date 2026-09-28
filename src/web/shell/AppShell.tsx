@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { MediaKind } from '../../core/gen/models.ts';
 import { ThemeSwitch } from '../features/ThemeSwitch.tsx';
 import { useGen } from '../gen/genStore.ts';
+import { usePrompter } from '../prompter/prompterStore.ts';
 import { useStore } from '../store.ts';
 import { Button, Icon, Text } from '../ui/components/index.ts';
 import styles from './AppShell.module.css';
@@ -78,6 +79,38 @@ function SessionList({ kind }: { kind: MediaKind }) {
                 <Icon name="pin" size={0.875} />
               </button>
               <button type="button" className={styles.iconButton} title="Удалить сессию (файлы останутся в библиотеке)" onClick={() => void deleteSession(kind, session.id)}>
+                <Icon name="bin" size={0.875} />
+              </button>
+            </span>
+          </div>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+/** История промптера: последние 20 попыток, клик — открыть, корзина — забыть. */
+function PrompterHistory() {
+  const { history, currentId, open, remove } = usePrompter();
+  return (
+    <>
+      <Text variant="caption" tone="tertiary" className={styles.listTitle}>
+        История
+      </Text>
+      <nav className={styles.list}>
+        {history.length === 0 && (
+          <Text variant="caption" tone="tertiary" className={styles.listEmpty}>
+            Здесь будут прошлые промпты.
+          </Text>
+        )}
+        {history.map((entry) => (
+          <div key={entry.id} className={`${styles.item} ${entry.id === currentId ? styles.itemActive : ''}`}>
+            <button type="button" className={styles.itemLabel} title={entry.commentRu !== '' ? `Правка: ${entry.commentRu}` : entry.ideaRu} onClick={() => open(entry.id)}>
+              {entry.commentRu !== '' && <Icon name="arrow-redo" size={0.875} />}
+              <span>{entry.ideaRu}</span>
+            </button>
+            <span className={styles.itemActions}>
+              <button type="button" className={styles.iconButton} title="Убрать из истории" onClick={() => remove(entry.id)}>
                 <Icon name="bin" size={0.875} />
               </button>
             </span>
@@ -174,7 +207,7 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
           </button>
         </div>
         <div className={styles.sidebarBody}>
-          {sidebar ?? (route === 'images' ? <SessionList kind="image" /> : route === 'video' ? <SessionList kind="video" /> : route === 'shots' ? <ProjectList /> : null)}
+          {sidebar ?? (route === 'images' ? <SessionList kind="image" /> : route === 'video' ? <SessionList kind="video" /> : route === 'shots' ? <ProjectList /> : route === 'prompter' ? <PrompterHistory /> : null)}
         </div>
         <div className={styles.sidebarFoot}>
           <ProviderCards />

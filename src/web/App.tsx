@@ -3,6 +3,7 @@ import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace } from './features/Workspace.tsx';
 import { Library } from './library/Library.tsx';
+import { Prompter } from './prompter/Prompter.tsx';
 import { AppShell } from './shell/AppShell.tsx';
 import { useRoute } from './shell/route.ts';
 import { useStore } from './store.ts';
@@ -31,6 +32,7 @@ export function App() {
 
   return (
     <AppShell route={route} onRoute={setRoute} sidebar={route === 'canvas' ? <FlowList /> : undefined}>
+      {route === 'prompter' && <Prompter />}
       {route === 'images' && <Studio kind="image" />}
       {route === 'video' && <Studio kind="video" />}
       {route === 'canvas' && <Canvas />}

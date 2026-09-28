@@ -345,7 +345,6 @@ export function createGenRuntime(options: GenRuntimeOptions) {
       const problem = provider.keyProblem?.() ?? null;
       out[id] = problem === null ? { hasKey } : { hasKey, keyProblem: problem };
       if (!withBalance || !hasKey || provider.balance === undefined) continue;
-      if (!withBalance || !hasKey || provider.balance === undefined) continue;
       try {
         out[id] = { hasKey, balance: await provider.balance() };
       } catch (error) {

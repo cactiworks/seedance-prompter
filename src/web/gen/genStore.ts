@@ -145,6 +145,11 @@ interface GenState {
   /** Remix: промпт, модель, параметры и картинки задачи — обратно в форму. */
   remix: (job: GenJob) => void;
   /**
+   * Промпт из «Промптера» — в форму. `params` — только то, что выбрал агент: seed и Soul ID владельца в форме
+   * не трогаются; картинки остаются.
+   */
+  applyPrompt: (kind: MediaKind, modelId: string, params: GenParams, prompt: string) => void;
+  /**
    * Запуск по клику. `consent` — владелец подтвердил отправку картинок в этом окне. Возвращает
    * 'needs-consent', если картинки есть, а согласия ещё не было.
    */
@@ -309,6 +314,12 @@ export const useGen = create<GenState>((set, get) => {
         refs: job.refs.map((r) => ({ key: nextKey(), label: r.label, source: r.source, role: r.role, thumb: thumbOf(r.source) })),
         error: null,
       });
+    },
+
+    applyPrompt: (kind, modelId, params, prompt) => {
+      const model = findModel(modelId);
+      if (model === undefined) return;
+      patchComposer(kind, (c) => ({ modelId: model.id, params: paramsFor(model, { ...c.params, ...params }), prompt, error: null }));
     },
 
     submit: async (kind, consent = false) => {

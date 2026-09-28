@@ -1,0 +1,176 @@
+/* Промптер: слева идея и выбор модели, справа результат агента. */
+.prompter {
+  display: grid;
+  grid-template-columns: 24rem minmax(0, 1fr);
+  height: 100%;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-8);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lab-space-12) var(--lab-space-10);
+  border-right: 1px solid var(--lab-border-subtle);
+  background: var(--lab-bg-surface);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+}
+
+.error {
+  color: var(--lab-danger);
+}
+
+.output {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-3);
+  height: 100%;
+  padding: var(--lab-space-16);
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: var(--lab-space-4);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  color: var(--lab-accent);
+  box-shadow: var(--lab-shadow-s);
+}
+
+/* ——— результат ——— */
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-10);
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: var(--lab-space-16) var(--lab-space-12);
+}
+
+.resultHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--lab-space-8);
+}
+
+.modelLine {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+}
+
+.costBox {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-4);
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.prompt {
+  margin: 0;
+  padding: var(--lab-space-8);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-sunken);
+  color: var(--lab-text-primary);
+  font-family: var(--lab-font-mono);
+  font-size: var(--lab-type-label-size);
+  line-height: var(--lab-type-body-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-3);
+}
+
+.mood {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-6);
+}
+
+.moodPreview {
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: none;
+  border-radius: var(--lab-radius-m);
+  object-fit: cover;
+}
+
+.spots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lab-space-4);
+}
+
+.spotIcon {
+  display: flex;
+  flex: none;
+  padding-top: var(--lab-space-1);
+  color: var(--lab-warning);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-6);
+  padding-top: var(--lab-space-4);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.rewrite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--lab-space-4);
+}
+
+.rewrite > button {
+  margin-top: var(--lab-space-4);
+}

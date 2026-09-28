@@ -7,7 +7,9 @@ import { staleFields, type FieldsOutput } from '../core/compose.ts';
 import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
 import { buildFieldsUser, FIELDS_SCHEMA, normalizeFields, validateFields } from '../core/llm/buildFields.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
+import { buildPrompterSystem, buildPrompterUser, cardFile, hasStyles, normalizePrompter, PROMPTER_SCHEMA, validatePrompter, type PrompterOutput, type PrompterRequest } from '../core/llm/buildPrompter.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
+import { modelsOf } from '../core/gen/models.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
 import { buildShot, type PackBundle } from '../core/pipeline.ts';
@@ -289,6 +291,44 @@ export function createApp(options: AppOptions) {
           problems = validatePlan(result.data, lineIds, durationSec);
         }
         return c.json({ plan: result.data, newLines, problems, meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        throw error;
+      }
+    })
+    // Промптер (решение 28): идея по-русски → промпт под модель. Только по клику; генерацию не запускает.
+    .post('/api/llm/prompter', async (c) => {
+      const body = (await c.req.json()) as Partial<PrompterRequest>;
+      const kind = body.kind === 'video' ? 'video' : 'image';
+      const ideaRu = typeof body.ideaRu === 'string' ? body.ideaRu.trim() : '';
+      if (ideaRu === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши идею по-русски — хотя бы одним предложением.' }, 422);
+      const modelId = typeof body.modelId === 'string' ? body.modelId : 'auto';
+      const candidates = modelId === 'auto' ? modelsOf(kind) : modelsOf(kind).filter((m) => m.id === modelId);
+      if (candidates.length === 0) return c.json({ error: 'NO_MODEL', messageRu: 'Такой модели нет в студии.' }, 422);
+      const prev = body.previous;
+      const previous = prev !== undefined && typeof prev.prompt === 'string' && typeof prev.modelId === 'string' ? { modelId: prev.modelId, prompt: prev.prompt, params: prev.params, styleName: typeof prev.styleName === 'string' ? prev.styleName : '' } : undefined;
+      const request: PrompterRequest = { ideaRu, kind, modelId, commentRu: typeof body.commentRu === 'string' ? body.commentRu : undefined, previous };
+      const dir = path.join(options.rootDir, 'packs', 'prompter');
+      const system = buildPrompterSystem(
+        readFileSync(path.join(dir, 'system.md'), 'utf8'),
+        readFileSync(path.join(dir, 'routing.md'), 'utf8'),
+        candidates.map((m) => ({ modelId: m.id, text: readFileSync(path.join(dir, 'models', cardFile(m.id)), 'utf8') })),
+      );
+      // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
+      const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
+      const run = options.runLlm ?? runClaude;
+      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
+      try {
+        const user = buildPrompterUser(request, candidates, styles);
+        let result = await run<PrompterOutput>({ ...llm, user });
+        let problems = validatePrompter(result.data, candidates, styles);
+        if (problems.length > 0) {
+          result = await run<PrompterOutput>({ ...llm, user: `${user}\n\nYour previous answer was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious answer:\n${JSON.stringify(result.data)}` });
+          problems = validatePrompter(result.data, candidates, styles);
+        }
+        const output = normalizePrompter(result.data, styles);
+        if (output === null) return c.json({ error: 'BAD_MODEL', messageRu: 'Агент выбрал модель, которой нет в студии. Попробуй ещё раз.' }, 422);
+        return c.json({ result: output, problems, meta: result.meta });
       } catch (error) {
         if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
         throw error;
