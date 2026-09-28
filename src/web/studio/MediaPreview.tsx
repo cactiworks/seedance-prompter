@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { estimate, findModel, formatCost, modelsOf, paramsFor, type GenModel } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, paramsFor } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
-import { hasRefsConsent, isActive, mediaUrl, useGen } from '../gen/genStore.ts';
+import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
+import { VerdictBar } from '../calibration/VerdictBar.tsx';
+import { CropEditor } from './CropEditor.tsx';
+import { EditPanel, type StageMode } from './EditPanel.tsx';
+import { MaskEditor } from './MaskEditor.tsx';
 import styles from './MediaPreview.module.css';
 
 const formatDate = (iso: string): string => new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта', styleId: 'Мудборд', seed: 'Seed' };
+const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта', styleId: 'Мудборд', seed: 'Seed', upscaleFactor: 'Увеличение', sourceSize: 'Исходник, px' };
 const showValue = (v: unknown): string => (v === true ? 'да' : v === false ? 'нет' : v === '' ? '—' : String(v));
-
-/** Модели, которыми можно править картинку: принимают референсы. */
-const editModels = (): GenModel[] => modelsOf('image').filter((m) => m.refs.roles.includes('ref'));
 
 const parentOf = (item: MediaItem): string | null => {
   const ref = item.refs.find((r) => r.source.type === 'media');
@@ -28,25 +29,22 @@ interface PreviewProps {
 
 /**
  * Просмотр работы по образцу карточки Higgsfield: на весь экран, фон — сама работа размытая, слева версии,
- * справа «Инфо» (промпт, параметры, действия) и «Правка» (описать изменение — модель правит по этой картинке).
+ * справа «Инфо» (промпт, параметры, действия) и «Правка» (рецепт починки или своё описание — `EditPanel`).
  */
 export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: PreviewProps) {
-  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, run, fileTo, loadLibrary } = useGen();
+  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo } = useGen();
   const styleNames = new Map((useGen((s) => s.styles.higgsfield) ?? []).map((s) => [s.id, s.name]));
   const [current, setCurrent] = useState<MediaItem | null>(opened);
   const [tab, setTab] = useState<'info' | 'edit'>('info');
   const [copied, setCopied] = useState(false);
-  const [editModel, setEditModel] = useState(editModels()[0]?.id ?? '');
-  const [editRes, setEditRes] = useState('');
-  const [editText, setEditText] = useState('');
-  const [consent, setConsent] = useState(false);
-  const [editState, setEditState] = useState<{ busy: boolean; messageRu: string | null }>({ busy: false, messageRu: null });
   const [folderMenu, setFolderMenu] = useState(false);
+  /** Что поверх картинки: просмотр, кисть (как Edit у Higgsfield — режим «Правки» по умолчанию) или рамка обрезки. */
+  const [mode, setMode] = useState<StageMode>('view');
 
   useEffect(() => {
     setCurrent(opened);
     setTab('info');
-    setEditState({ busy: false, messageRu: null });
+    setMode('view');
   }, [opened]);
 
   const item = current;
@@ -82,34 +80,6 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
   const again = model === undefined ? null : estimate(model, paramsFor(model, item.params), 1, item.refs.length);
   const favorite = favorites.includes(item.id);
 
-  const edit = findModel(editModel);
-  const editParams = edit === undefined ? {} : paramsFor(edit, { ...item.params, ...(editRes !== '' ? { resolution: editRes } : {}) });
-  const editCost = edit === undefined ? null : estimate(edit, editParams, 1, 1);
-  const needConsent = !hasRefsConsent() && !consent;
-
-  const startEdit = async (): Promise<void> => {
-    if (edit === undefined || editCost === null || editText.trim() === '') return;
-    setEditState({ busy: true, messageRu: null });
-    try {
-      const created = await run({
-        modelId: edit.id,
-        prompt: editText.trim(),
-        params: editParams,
-        refs: [{ label: 'Правка работы', source: { type: 'media', mediaId: item.id }, role: 'ref' }],
-        count: 1,
-        confirmCredits: editCost.credits,
-        refsConsent: true,
-        sessionId: item.sessionId ?? undefined,
-      });
-      const failed = created.find((j) => j.status === 'failed');
-      setEditState({ busy: false, messageRu: failed?.error?.messageRu ?? 'Правка запущена — новая версия появится в ленте слева, файл сразу на диске.' });
-      if (failed === undefined) setEditText('');
-      void loadLibrary();
-    } catch (error) {
-      setEditState({ busy: false, messageRu: error instanceof Error ? error.message : 'Правка не запустилась.' });
-    }
-  };
-
   const facts: [string, string][] = [
     ['Модель', model?.titleRu ?? item.modelId],
     ...Object.entries(item.params).map(([k, v]): [string, string] => [
@@ -139,6 +109,11 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
         </nav>
       )}
 
+      {mode !== 'view' && tab === 'edit' && item.kind === 'image' ? (
+        <div className={styles.stage}>
+          {mode === 'brush' ? <MaskEditor key={item.id} item={item} onExit={() => setMode('view')} /> : <CropEditor key={item.id} item={item} onExit={() => setMode('view')} />}
+        </div>
+      ) : (
       <div className={styles.stage} onClick={(event) => event.target === event.currentTarget && onClose()}>
         {index > 0 && (
           <button type="button" className={`${styles.nav} ${styles.navPrev}`} onClick={() => setCurrent(siblings[index - 1] ?? item)} aria-label="Предыдущая">
@@ -152,6 +127,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
           </button>
         )}
       </div>
+      )}
 
       <aside className={styles.panel}>
         <header className={styles.panelHead}>
@@ -173,7 +149,10 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
             aria-label="Вкладка"
             size="s"
             value={tab}
-            onChange={setTab}
+            onChange={(next) => {
+              setTab(next);
+              setMode(next === 'edit' ? 'brush' : 'view');
+            }}
             options={[
               { value: 'info', label: 'Инфо' },
               { value: 'edit', label: 'Правка' },
@@ -183,6 +162,12 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
 
         {tab === 'info' && (
           <div className={styles.panelBody}>
+            <section className={styles.block}>
+              <Text variant="caption" tone="tertiary" medium>
+                ОЦЕНКА
+              </Text>
+              <VerdictBar mediaId={item.id} />
+            </section>
             <section className={styles.block}>
               <div className={styles.blockHead}>
                 <Text variant="caption" tone="tertiary" medium>
@@ -280,52 +265,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
           </div>
         )}
 
-        {tab === 'edit' && item.kind === 'image' && (
-          <div className={styles.panelBody}>
-            <section className={styles.block}>
-              <Text variant="caption" tone="tertiary" medium>
-                ПРАВКА ПО ОПИСАНИЮ
-              </Text>
-              <Text variant="caption" tone="secondary">
-                Эта картинка уйдёт референсом, модель сделает новую версию по твоему описанию. Исходник не меняется.
-              </Text>
-              <select className={styles.select} value={editModel} onChange={(event) => setEditModel(event.target.value)} aria-label="Модель правки">
-                {editModels().map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.titleRu}
-                  </option>
-                ))}
-              </select>
-              {edit !== undefined && (
-                <SegmentedControl<string>
-                  aria-label="Разрешение"
-                  size="s"
-                  value={String(editParams.resolution)}
-                  onChange={setEditRes}
-                  options={(edit.params.find((p) => p.key === 'resolution')?.options ?? []).map((o) => ({ value: o, label: o }))}
-                />
-              )}
-              <textarea className={styles.editText} rows={4} value={editText} onChange={(event) => setEditText(event.target.value)} placeholder="Опиши, как изменить: «сделай фон ночным, добавь неоновые отражения на асфальте»" />
-              {needConsent && (
-                <label className={styles.consent}>
-                  <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-                  <Text variant="caption">Картинка уйдёт в KIE, а оттуда исполнителю модели. Если на ней лицо — оно тоже уйдёт.</Text>
-                </label>
-              )}
-              <Button variant="dark" size="m" icon={<Icon name="sparkle" size={1} />} loading={editState.busy} disabled={editText.trim() === '' || needConsent || editCost === null} onClick={() => void startEdit()}>
-                Изменить{editCost === null ? '' : ` · ${formatCost(editCost)}`}
-              </Button>
-              {editState.messageRu !== null && (
-                <Text variant="caption" tone="secondary">
-                  {editState.messageRu}
-                </Text>
-              )}
-            </section>
-            <Text variant="caption" tone="tertiary">
-              Upscale, удаление фона, relight и другие инструменты Higgsfield — отдельными моделями, когда решишь их подключить.
-            </Text>
-          </div>
-        )}
+        {tab === 'edit' && item.kind === 'image' && <EditPanel key={item.id} item={item} mode={mode} onMode={setMode} />}
       </aside>
     </div>,
     document.body,

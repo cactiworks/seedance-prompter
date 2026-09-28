@@ -457,3 +457,96 @@ describe('Soul 2: seed сохраняется с задачей, мудборд�
     expect(await (await app.request('/api/gen/styles?provider=kie', { headers: { host } })).json()).toEqual([]);
   });
 });
+
+describe('инструменты: обрезка (ffmpeg) и апскейл Topaz', () => {
+  /** PNG-заголовок нужного размера — серверу для цены Topaz нужен только он. */
+  const png = (width: number, height: number): Uint8Array => {
+    const b = Buffer.alloc(33);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+    b.writeUInt32BE(13, 8);
+    b.write('IHDR', 12, 'ascii');
+    b.writeUInt32BE(width, 16);
+    b.writeUInt32BE(height, 20);
+    return new Uint8Array(b);
+  };
+
+  it('обрезка — новая версия со ссылкой на исходник; Topaz: сервер меряет исходник, цена по результату, гейт держит', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-tools-'));
+    let t = Date.parse('2026-09-28T10:00:00Z');
+    const mock = mockProvider();
+    const cdn = mediaServer();
+    const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: () => t });
+    const calls: string[][] = [];
+    const app = createApp({
+      rootDir: ROOT,
+      dataDir,
+      gen,
+      ffmpeg: async (args) => {
+        calls.push(args);
+        writeFileSync(args.at(-1) as string, png(1086, 1448));
+      },
+    });
+    const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    await post('/api/gen/jobs', { modelId: 'kie/seedance-2-5', prompt: 'x', params: { resolution: '480p', durationSec: 4 }, confirmCredits: 112 });
+    cdn.files.set('https://cdn.example/v.mp4', { bytes: new Uint8Array([1, 2, 3]), type: 'video/mp4' });
+    mock.queue.push(success(['https://cdn.example/v.mp4'], 112));
+    t += 10_000;
+    await gen.tick();
+    const [video] = await gen.library.list();
+    const image = (await (await post(`/api/library/${video!.id}/frame`, { which: 'first' })).json()) as MediaItem;
+
+    const cropped = await post(`/api/library/${image.id}/crop`, { x: 0.1, y: 0.2, w: 0.5, h: 0.4, labelRu: '1:1' });
+    expect(cropped.status).toBe(201);
+    expect((await cropped.json()) as MediaItem).toMatchObject({ modelId: 'local/crop', prompt: 'Обрезка · 1:1', creditsConsumed: 0, refs: [{ source: { type: 'media', mediaId: image.id } }] });
+    expect(calls.at(-1)).toContain('crop=trunc(iw*0.5):trunc(ih*0.4):trunc(iw*0.1):trunc(ih*0.2)');
+    expect((await post(`/api/library/${image.id}/crop`, { x: 0.6, y: 0, w: 0.5, h: 0.5 })).status).toBe(422);
+
+    // Клиент ошибся в размере (999) — сервер перемерит: 1448 × 2 = 2896 px → 20 кр, а не 10.
+    const upscale = (confirmCredits: number) => post('/api/gen/jobs', { modelId: 'kie/topaz-upscale', prompt: '', params: { upscaleFactor: '2', sourceSize: 999 }, refs: [{ source: { type: 'media', mediaId: image.id } }], confirmCredits, refsConsent: true });
+    expect((await upscale(10)).status).toBe(409);
+    const ok = await upscale(20);
+    expect(ok.status).toBe(202);
+    const job = ((await ok.json()) as { jobs: GenJob[] }).jobs[0];
+    expect(job?.params).toMatchObject({ upscaleFactor: '2', sourceSize: 1448 });
+    expect(mock.calls.submit.at(-1)).toEqual({ model: 'topaz/image-upscale', input: { image_url: expect.stringContaining('https://up.example/') as unknown, upscale_factor: '2' } });
+  });
+});
+
+describe('обрезка видео по времени (ffmpeg)', () => {
+  it('отрезок → новое видео со ссылкой на исходник; тот же отрезок — тот же файл; неверный отрезок и картинка — 422', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-trim-'));
+    let t = Date.parse('2026-09-28T10:00:00Z');
+    const mock = mockProvider();
+    const cdn = mediaServer();
+    const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: () => t });
+    const calls: string[][] = [];
+    const app = createApp({
+      rootDir: ROOT,
+      dataDir,
+      gen,
+      ffmpeg: async (args) => {
+        calls.push(args);
+        writeFileSync(args.at(-1) as string, new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]));
+      },
+    });
+    const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    await post('/api/gen/jobs', { modelId: 'kie/seedance-2-5', prompt: 'x', params: { resolution: '480p', durationSec: 4 }, confirmCredits: 112 });
+    cdn.files.set('https://cdn.example/v.mp4', { bytes: new Uint8Array([1, 2, 3]), type: 'video/mp4' });
+    mock.queue.push(success(['https://cdn.example/v.mp4'], 112));
+    t += 10_000;
+    await gen.tick();
+    const [video] = await gen.library.list();
+
+    const res = await post(`/api/library/${video!.id}/trim`, { start: 0.5, end: 3 });
+    expect(res.status).toBe(201);
+    const cut = (await res.json()) as MediaItem;
+    expect(cut).toMatchObject({ kind: 'video', modelId: 'local/trim', prompt: 'Обрезка 0.5–3.0 с', creditsConsumed: 0, refs: [{ source: { type: 'media', mediaId: video!.id } }] });
+    expect(calls[0]).toEqual(expect.arrayContaining(['-ss', '0.50', '-to', '3.00', 'libx264']));
+    expect(((await (await post(`/api/library/${video!.id}/trim`, { start: 0.5, end: 3 })).json()) as MediaItem).id).toBe(cut.id);
+    expect(calls).toHaveLength(1);
+
+    expect((await post(`/api/library/${video!.id}/trim`, { start: 2, end: 1 })).status).toBe(422);
+    const frame = (await (await post(`/api/library/${video!.id}/frame`, { which: 'first' })).json()) as MediaItem;
+    expect((await post(`/api/library/${frame.id}/trim`, { start: 0, end: 1 })).status).toBe(422);
+  });
+});

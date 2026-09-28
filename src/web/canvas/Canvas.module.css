@@ -198,7 +198,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--lab-space-4);
-  max-width: 30rem;
+  width: min(42rem, 90%);
   text-align: center;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -318,6 +318,88 @@
 
 .linkMenu button:hover {
   background: var(--lab-fill-4);
+}
+
+/* ——— выделение группы ——— */
+.marquee {
+  position: absolute;
+  z-index: 5;
+  border: 1px dashed var(--lab-accent);
+  border-radius: var(--lab-radius-xs);
+  background: var(--lab-accent-softer);
+  pointer-events: none;
+}
+
+.selectionBar {
+  position: absolute;
+  top: var(--lab-space-6);
+  left: 50%;
+  z-index: 4;
+  padding: var(--lab-space-2) var(--lab-space-6);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-s);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ——— шаблоны ——— */
+.emptyTemplates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lab-space-4);
+  width: 100%;
+  max-width: 42rem;
+  pointer-events: auto;
+}
+
+.templateCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-6);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-xl);
+  background: var(--lab-bg-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.templateCard:hover {
+  border-color: var(--lab-accent-muted);
+}
+
+/* ——— нода «Обрезка видео» ——— */
+.nodeVideo {
+  display: block;
+  width: 100%;
+  max-height: 14rem;
+  object-fit: contain;
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-static-dark);
+}
+
+.trimRow {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--lab-space-3);
+}
+
+.trimLabel {
+  white-space: nowrap;
+}
+
+.trimInput {
+  min-width: 0;
+  padding: var(--lab-space-2) var(--lab-space-3);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-s);
+  background: var(--lab-bg-sunken);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
 }
 
 .pickerGrid {

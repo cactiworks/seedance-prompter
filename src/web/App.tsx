@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Calibration, CalibrationList } from './calibration/Calibration.tsx';
 import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace } from './features/Workspace.tsx';
@@ -31,12 +32,13 @@ export function App() {
   if (project !== null) return <Workspace pack={pack} />;
 
   return (
-    <AppShell route={route} onRoute={setRoute} sidebar={route === 'canvas' ? <FlowList /> : undefined}>
+    <AppShell route={route} onRoute={setRoute} sidebar={route === 'canvas' ? <FlowList /> : route === 'calibration' ? <CalibrationList /> : undefined}>
       {route === 'prompter' && <Prompter />}
       {route === 'images' && <Studio kind="image" />}
       {route === 'video' && <Studio kind="video" />}
       {route === 'canvas' && <Canvas />}
       {route === 'library' && <Library />}
+      {route === 'calibration' && <Calibration />}
       {route === 'shots' && (
         <div style={{ height: '100%', overflowY: 'auto' }}>
           <Home />

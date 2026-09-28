@@ -14,6 +14,9 @@
   display: flex;
   flex-direction: column;
   width: min(100vw - var(--lab-space-8) * 2, 52rem);
+
+  /* Без явной высоты inset: 0 растягивает окно на весь экран; fit-content + margin: auto — по центру по содержимому. */
+  height: fit-content;
   max-height: calc(100vh - var(--lab-space-12) * 2);
   margin: auto;
   overflow: hidden;

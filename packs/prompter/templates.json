@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "sourceRu": "Официального шаблона character sheet / product sheet нет ни у одного вендора (ресёрч 003, Ф0). Раскладка собрана из ближайшего официального: Google — «front, side, and rear views», сториборд / sprite sheet сеткой; OpenAI — называть вход по номеру и назначению, «same … in every view». Маршрут — официальный роутинг Higgsfield (лист персонажа → Seedream 5 Pro) и арены (продукт → GPT Image 2.5).",
+  "templates": [
+    {
+      "id": "character-sheet",
+      "titleRu": "Лист персонажа",
+      "kind": "image",
+      "noteRu": "Прикрепи фото человека ролью «Персонаж» — иначе внешность агент придумает по идее. В идее — одежда и характер.",
+      "aspectRatio": "16:9",
+      "mustMention": ["front", "profile|side", "back", "close-up"],
+      "instructions": "Character reference sheet. One horizontal canvas on a plain light-grey seamless background with even, soft studio light. Top row: four full-body views of the same person — front, three-quarter, side profile, back. Below or to the right: two head-and-shoulders close-ups — front and profile. The same face, hairstyle, body proportions and outfit in every view; a neutral relaxed standing pose with the arms slightly away from the body; no props unless the idea asks for them; no text, labels, numbers or captions. If a `character` ref reaches the model, keep the face and identity from it in every view; if it does not reach the model, describe the person from the idea and say in weakSpotsRu that the face will be invented. Routing: Seedream 5 Pro first — Higgsfield routes character sheets to it [official]; GPT Image 2.5 sunburst second — #1 in identity-preserving edits [arena]. Soul 2 has no data on multi-view sheets [not found] and looser adherence [single] — use it only when the owner fixed it."
+    },
+    {
+      "id": "product-sheet",
+      "titleRu": "Лист предмета",
+      "kind": "image",
+      "noteRu": "Прикрепи фото предмета ролью «Предмет»; надпись на нём впиши в «Текст в кадре» — она пройдёт буква в букву.",
+      "aspectRatio": "16:9",
+      "mustMention": ["front", "back", "side", "top", "close-up"],
+      "instructions": "Product / object reference sheet. One horizontal canvas on a seamless white background with soft, even studio light and gentle contact shadows. The same object shown from the front, back, side, three-quarter and top, plus one close-up of its key detail — texture, material or label. Identical shape, proportions, colors, materials and label text in every view; nothing else in the frame; no text, labels or captions except the product's own label. If an `object` ref reaches the model, reproduce that exact object and spell its label text inside quotes. Routing: GPT Image 2.5 first — #1 in Product/Branding [arena]; Seedream 5 Pro second."
+    }
+  ]
+}

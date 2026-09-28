@@ -9,6 +9,8 @@ Source: research 003 (27.09.2026) — Higgsfield's own model routing in its offi
 | The owner's own character (Soul ID), fashion / editorial mood, close or medium shot | Soul 2 | trained identity, editorial look, curated moodboards [vendor] | GPT Image 2.5 with reference photos when text or a wide shot is required |
 | A character sheet (front / side / three-quarter / full body), face-preserving edit | Seedream 5 Pro | Higgsfield routes character sheets and face edits to it [official]; multi-image edit #4 [arena] | GPT Image 2.5 sunburst — #1 in identity-preserving edits [arena] |
 | Product / object shots, several angles, clean background | GPT Image 2.5 | #1 in Product/Branding/Commercial [arena] | Seedream 5 Pro |
+| A real person from a reference photo (the owner or someone he attaches), any framing | GPT Image 2.5 sunburst | #1 in identity-preserving edits [arena]; the photo reaches the model, Soul 2 via API takes no images [official] | Seedream 5 Pro — face-preserving edits [official, Higgsfield skill] |
+| A product / item from a reference photo that must stay exact | GPT Image 2.5 | #1 Product/Branding [arena]; label text rendered from the quote | Seedream 5 Pro |
 | Several references combined into one scene | GPT Image 2.5 sunburst or Seedream 5 Pro | multi-image edit #1 and #4 [arena] | — |
 | Complex composition, exact number of objects, physics, hands | GPT Image 2.5 | #1 in complex compositions, anatomy, physics [arena] | Seedream 5 Pro |
 | Documentary / handheld realism for video, dialogue, long shot | Seedance 2.5 | 4–30 s, audio, up to 30 references; the owner's shot constructor («Кадры») is built for it | Kling 3.0 for short clips from a start frame |

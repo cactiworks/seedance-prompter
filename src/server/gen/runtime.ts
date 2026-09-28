@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
-import { estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type ProviderId, type SentRef } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenParams, type ProviderId, type SentRef } from '../../core/gen/models.ts';
 import { GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJobStore, newJobId } from '../storage/jobStore.ts';
@@ -9,6 +9,7 @@ import { createSessions } from '../storage/sessions.ts';
 import { createUploads } from '../storage/uploads.ts';
 import { createHiggsfieldProvider } from './higgsfield.ts';
 import { createKieProvider } from './kie.ts';
+import { imageSize } from './imageSize.ts';
 import { GenError, type GenProvider, type ProviderStyle } from './provider.ts';
 
 /** Не больше задач за один запуск без отдельного решения владельца (правило объёмов). */
@@ -32,6 +33,8 @@ export const SubmitRequestSchema = z.object({
   refsConsent: z.boolean().optional(),
   origin: OriginSchema.optional(),
   sessionId: z.string().optional(),
+  /** Метка запуска (калибровка). */
+  tag: z.string().max(160).optional(),
 });
 export type SubmitRequest = z.infer<typeof SubmitRequestSchema>;
 
@@ -116,7 +119,21 @@ export function createGenRuntime(options: GenRuntimeOptions) {
 
     const count = request.count ?? 1;
     if (!Number.isInteger(count) || count < 1 || count > MAX_JOBS_PER_REQUEST) throw new SubmitError('BAD_COUNT', 422, `За один запуск — от 1 до ${MAX_JOBS_PER_REQUEST} генераций.`);
-    const params = paramsFor(model, request.params ?? {});
+    // Параметры, которые меряет сервер (длинная сторона исходника у апскейла): цена считается по ним, а не по словам клиента.
+    const measured: GenParams = {};
+    const derived = model.params.filter((d) => d.fromRef !== undefined);
+    const first = request.refs?.[0];
+    if (first !== undefined && (derived.length > 0 || model.refs.maxBytes !== undefined)) {
+      const file = await readRef(first.source);
+      const limit = model.refs.maxBytes;
+      if (limit !== undefined && file.bytes.byteLength > limit) throw new SubmitError('REF_TOO_LARGE', 422, `Картинка ${(file.bytes.byteLength / 1024 / 1024).toFixed(1)} МБ — ${model.titleRu} принимает до ${limit / 1024 / 1024} МБ.`);
+      if (derived.length > 0) {
+        const size = imageSize(file.bytes);
+        if (size === null) throw new SubmitError('BAD_IMAGE', 422, 'Не удалось прочитать размер картинки — нужен PNG, JPEG или WebP.');
+        for (const d of derived) measured[d.key] = Math.max(size.width, size.height);
+      }
+    }
+    const params = paramsFor(model, { ...(request.params ?? {}), ...measured });
     const refs: JobRef[] = (request.refs ?? []).map((r) => ({ label: r.label ?? '', source: r.source, role: r.role ?? 'ref' }));
     const roles = refs.map((r) => r.role);
     const problems = validateGen(model, request.prompt, params, roles);
@@ -156,6 +173,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
           refs,
           origin,
           sessionId: session?.id ?? null,
+          tag: request.tag ?? null,
           estimateCredits: cost.credits / count,
           estimateUsd: cost.usd / count,
           status: 'submitting',

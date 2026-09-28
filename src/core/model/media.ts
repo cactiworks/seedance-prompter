@@ -45,6 +45,8 @@ export const GenJobSchema = z.object({
   origin: OriginSchema,
   /** Сессия студии (Картинки / Видео), из которой запущено; null — запуск из кадра или canvas. */
   sessionId: z.string().nullable().default(null),
+  /** Метка запуска: `cal:<запуск>:<набор>:<случай>:<модель>` у калибровки; null — обычная генерация. */
+  tag: z.string().nullable().default(null),
   estimateCredits: z.number(),
   estimateUsd: z.number(),
   status: z.enum(JOB_STATUSES),
@@ -101,6 +103,36 @@ export const FolderSchema = z.object({
   createdAt: z.string(),
 });
 export type Folder = z.infer<typeof FolderSchema>;
+
+/**
+ * Свой мудборд (этап 3): именованный набор картинок стиля — с диска или из библиотеки. В промптере добавляется
+ * референсами «Стиль» одним кликом. Мудборд Higgsfield через API не создаётся — это его замена внутри системы.
+ */
+export const MoodboardSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1).max(80),
+  images: z.array(z.object({ label: z.string(), source: RefSourceSchema })).max(8),
+  createdAt: z.string(),
+});
+export type Moodboard = z.infer<typeof MoodboardSchema>;
+
+/** Оценка владельца по готовому файлу (решение 33): журнал, из которого растут правила промптера. */
+export const VerdictSchema = z.object({
+  mediaId: z.string(),
+  verdict: z.enum(['good', 'almost', 'bad']),
+  symptoms: z.array(z.string()).max(12),
+  noteRu: z.string().max(500),
+  at: z.string(),
+});
+
+/** Правило владельца для модели — дописывается в её карточку промптера. */
+export const LearningSchema = z.object({
+  id: z.string(),
+  modelId: z.string(),
+  textRu: z.string().min(1).max(400),
+  evidence: z.array(z.string()),
+  at: z.string(),
+});
 
 /** Сессия студии — лента генераций одного типа, как чат в connxn. Удаление сессии не трогает файлы библиотеки. */
 export const StudioSessionSchema = z.object({

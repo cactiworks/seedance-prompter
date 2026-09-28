@@ -1,8 +1,8 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { frameInput, planRun, nodeTitle } from '../../core/canvas/plan.ts';
+import { frameInput, planRun, nodeTitle, trimProblems } from '../../core/canvas/plan.ts';
 import { findModel, formatCost, modelsOf, paramsFor } from '../../core/gen/models.ts';
 import { inputsOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
-import { extractFrame, hasRefsConsent, isActive, mediaUrl, thumbOf, uploadImage, useGen } from '../gen/genStore.ts';
+import { extractFrame, hasRefsConsent, isActive, mediaUrl, thumbOf, trimVideo, uploadImage, useGen } from '../gen/genStore.ts';
 import { ParamField } from '../studio/Controls.tsx';
 import { STATUS_RU } from '../studio/JobTile.tsx';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
@@ -14,6 +14,80 @@ export const PORT_RU: Record<InputPort, string> = { prompt: 'Промпт', ref:
 /** Входы ноды с учётом ролей выбранной модели. */
 export function portsOf(node: CanvasNode): InputPort[] {
   return inputsOf(node, findModel(node.modelId)?.refs.roles ?? []);
+}
+
+const round1 = (v: number): number => Math.round(v * 10) / 10;
+
+/**
+ * Обрезка видео (решение 35): начало и конец в секундах, «сейчас» берёт позицию плеера. Правка отрезка сбрасывает
+ * прежний результат — он уже не соответствует. Обрезает ffmpeg на этом компьютере, бесплатно.
+ */
+function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: string | null; problemRu: string | null }) {
+  const { patchNode } = useCanvas();
+  const loadLibrary = useGen((s) => s.loadLibrary);
+  const player = useRef<HTMLVideoElement>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const problems = trimProblems(node.start, node.end, duration);
+  const length = duration === null ? null : (node.end === 0 ? duration : node.end) - node.start;
+  const setRange = (patch: { start?: number; end?: number }): void => patchNode(node.id, { ...patch, mediaId: null }, `trim:${node.id}`);
+
+  const cut = async (): Promise<void> => {
+    if (sourceId === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const item = await trimVideo(sourceId, node.start, node.end);
+      patchNode(node.id, { mediaId: item.id });
+      void loadLibrary();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Видео не обрезалось.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (sourceId === null) {
+    return (
+      <div className={`${styles.nodeDrop} lab-hatch`}>
+        <Text variant="caption" tone="tertiary">
+          {problemRu ?? 'Подключи ко входу «Видео» генератор видео.'}
+        </Text>
+      </div>
+    );
+  }
+  return (
+    <>
+      <video ref={player} className={styles.nodeVideo} src={mediaUrl(sourceId)} controls muted playsInline onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)} />
+      {(['start', 'end'] as const).map((key) => (
+        <div key={key} className={styles.trimRow}>
+          <Text as="span" variant="caption" tone="secondary" className={styles.trimLabel}>
+            {key === 'start' ? 'Начало, с' : 'Конец, с'}
+          </Text>
+          <input className={styles.trimInput} type="number" min={0} step={0.1} value={node[key]} aria-label={key === 'start' ? 'Начало, секунды' : 'Конец, секунды (0 — до конца)'} onChange={(event) => setRange({ [key]: Math.max(0, Number(event.target.value) || 0) })} />
+          <Button variant="ghost" size="xs" title="Взять текущую позицию плеера" onClick={() => setRange({ [key]: round1(player.current?.currentTime ?? 0) })}>
+            сейчас
+          </Button>
+        </div>
+      ))}
+      <Text variant="caption" tone={problems.length > 0 ? 'accent' : 'tertiary'}>
+        {problems[0] ?? `${node.end === 0 ? 'Конец 0 — до конца видео. ' : ''}${length === null ? '' : `Отрезок: ${length.toFixed(1)} с`}`}
+      </Text>
+      {node.mediaId !== null && <video className={styles.nodeVideo} src={mediaUrl(node.mediaId)} controls muted playsInline loop />}
+      <Button variant="border" size="s" icon={<Icon name="time" size={0.875} />} loading={busy} disabled={problems.length > 0} onClick={() => void cut()}>
+        {node.mediaId === null ? 'Обрезать · бесплатно' : 'Обрезать заново'}
+      </Button>
+      <Text variant="caption" tone="tertiary">
+        Выход — видео: тяни в «Кадр из видео» или в следующую обрезку.
+      </Text>
+      {error !== null && (
+        <Text variant="caption" tone="accent">
+          {error}
+        </Text>
+      )}
+    </>
+  );
 }
 
 interface NodeViewProps {
@@ -74,8 +148,8 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     else void start(plan !== null && plan.refs.length > 0);
   };
 
-  // Кадр из видео: локально через ffmpeg, бесплатно — отдельный клик, без гейта стоимости.
-  const frameIn = flow === null || node.type !== 'frame' ? null : frameInput(flow, node.id, mediaOf);
+  // Кадр из видео и обрезка: локально через ffmpeg, бесплатно — отдельный клик, без гейта стоимости.
+  const frameIn = flow === null || (node.type !== 'frame' && node.type !== 'trim') ? null : frameInput(flow, node.id, mediaOf);
   const extract = async (): Promise<void> => {
     if (frameIn?.mediaId === null || frameIn === null) return;
     setBusy(true);
@@ -95,9 +169,10 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
 
   return (
     <div
+      data-node-id={node.id}
       className={`${styles.node} ${selected ? styles.nodeSelected : ''}`}
       style={{ left: node.x, top: node.y, width: NODE_WIDTH[node.type] }}
-      onPointerDown={() => select(node.id)}
+      onPointerDown={(event) => select(node.id, event.shiftKey)}
       onDragOver={(event) => node.type === 'image' && event.preventDefault()}
       onDrop={(event) => {
         if (node.type !== 'image') return;
@@ -108,7 +183,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       }}
     >
       <header className={styles.nodeHead} onPointerDown={(event) => onHeaderDown(event, node)}>
-        <Icon name={node.type === 'prompt' ? 'pencil' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
+        <Icon name={node.type === 'prompt' ? 'pencil' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
         <Text variant="label" medium className={styles.nodeTitle}>
           {nodeTitle(node)}
         </Text>
@@ -188,6 +263,8 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             </Text>
           </>
         )}
+
+        {node.type === 'trim' && <TrimBody node={node} sourceId={frameIn?.mediaId ?? null} problemRu={frameIn?.problemRu ?? null} />}
 
         {node.type === 'generator' && (
           <>

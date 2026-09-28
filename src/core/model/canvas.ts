@@ -6,7 +6,7 @@ import { GenParamsSchema, RefSourceSchema } from './media.ts';
  * картинки или видео. Рёбра идут из выхода ноды во вход генератора: prompt, ref, start, end.
  * Запуск — только выбранного генератора; ниже по графу ничего само не запускается (это деньги).
  */
-export const CANVAS_NODE_TYPES = ['prompt', 'image', 'generator', 'frame'] as const;
+export const CANVAS_NODE_TYPES = ['prompt', 'image', 'generator', 'frame', 'trim'] as const;
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[number];
 
 /** video — вход ноды «Кадр из видео»: принимает результат генератора видео. */
@@ -32,7 +32,11 @@ export const CanvasNodeSchema = z.object({
   selected: z.number().int().default(0),
   /** frame: какой кадр взять из видео и извлечённый файл библиотеки. Локально через ffmpeg, бесплатно. */
   which: z.enum(['first', 'last']).default('last'),
+  /** frame и trim: готовый файл библиотеки (кадр или обрезанное видео). */
   mediaId: z.string().nullable().default(null),
+  /** trim: отрезок в секундах от начала; end 0 — до конца. */
+  start: z.number().min(0).default(0),
+  end: z.number().min(0).default(0),
 });
 export type CanvasNode = z.infer<typeof CanvasNodeSchema>;
 
@@ -52,13 +56,13 @@ export type Flow = z.infer<typeof FlowSchema>;
 
 /** Какие входы принимает нода. Промпт и картинка входов не имеют. */
 export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[] {
-  if (node.type === 'frame') return ['video'];
+  if (node.type === 'frame' || node.type === 'trim') return ['video'];
   if (node.type !== 'generator') return [];
   return ['prompt', ...INPUT_PORTS.filter((p) => p !== 'prompt' && p !== 'video' && roles.includes(p))];
 }
 
-/** Что отдаёт нода: текст, картинку или видео. */
-export const outputOf = (node: CanvasNode): 'text' | 'image' | 'video' => (node.type === 'prompt' ? 'text' : node.type === 'generator' && node.kind === 'video' ? 'video' : 'image');
+/** Что отдаёт нода: текст, картинку или видео. Обрезка отдаёт видео — его можно резать дальше и брать из него кадр. */
+export const outputOf = (node: CanvasNode): 'text' | 'image' | 'video' => (node.type === 'prompt' ? 'text' : node.type === 'trim' || (node.type === 'generator' && node.kind === 'video') ? 'video' : 'image');
 
 /** Промпт — только во вход prompt, видео — только во вход video, картинки — в ref / start / end. */
 export const portAccepts = (port: InputPort, output: 'text' | 'image' | 'video'): boolean => (port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : output === 'image');

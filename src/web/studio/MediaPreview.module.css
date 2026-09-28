@@ -285,6 +285,314 @@
   outline: none;
 }
 
+/* ——— правка кистью (Edit как у Higgsfield) ——— */
+.maskStage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  place-items: center;
+  gap: var(--lab-space-6);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.maskTools {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-2);
+  border: 1px solid var(--lab-glass-edge);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-glass-bg-strong);
+  box-shadow: var(--lab-shadow-m);
+  backdrop-filter: blur(var(--lab-blur-soft));
+}
+
+.maskTool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-3) var(--lab-space-6);
+  border: 0;
+  border-radius: var(--lab-radius-full);
+  background: transparent;
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
+  cursor: pointer;
+}
+
+.maskTool:hover:not(:disabled) {
+  background: var(--lab-fill-4);
+}
+
+.maskTool:disabled {
+  color: var(--lab-text-disabled);
+  cursor: default;
+}
+
+.maskToolOn,
+.maskToolOn:hover:not(:disabled) {
+  background: var(--lab-accent-softer);
+  color: var(--lab-accent);
+}
+
+.maskDivider {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--lab-border);
+}
+
+.maskSize {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+  padding: 0 var(--lab-space-4);
+}
+
+.maskSize input {
+  width: 7rem;
+  accent-color: var(--lab-accent);
+}
+
+.maskSizeDot {
+  flex: none;
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-text-primary);
+}
+
+.maskFrame {
+  position: relative;
+  align-self: center;
+  overflow: hidden;
+  border-radius: var(--lab-radius-xl);
+  line-height: 0;
+  touch-action: none;
+}
+
+.maskImage {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 14rem);
+  border-radius: var(--lab-radius-xl);
+  box-shadow: var(--lab-shadow-xl);
+  user-select: none;
+}
+
+/* Маска — акцент на 50 %: сразу видно, что закрашено, и картинка под ней читается. */
+.maskCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--lab-radius-xl);
+  color: var(--lab-accent);
+  opacity: 0.5;
+}
+
+.maskBox {
+  position: absolute;
+  border: 1px dashed var(--lab-static-white);
+  border-radius: var(--lab-radius-xs);
+  box-shadow: 0 0 0 1px var(--lab-scrim);
+  pointer-events: none;
+}
+
+.maskCursor {
+  position: absolute;
+  border: 2px solid var(--lab-static-white);
+  border-radius: var(--lab-radius-full);
+  box-shadow: 0 0 0 1px var(--lab-scrim);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.maskCursorErase {
+  border-style: dashed;
+}
+
+/* Рамка обрезки: всё вне рамки затемнено огромной тенью — без лишних слоёв. */
+.cropRect {
+  position: absolute;
+  border: 1px solid var(--lab-static-white);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--lab-static-dark) 55%, transparent);
+  cursor: move;
+  touch-action: none;
+}
+
+.cropHandle {
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--lab-static-white);
+  border-radius: var(--lab-radius-xs);
+  background: var(--lab-accent);
+}
+
+.crop_nw {
+  top: -2px;
+  left: -2px;
+  cursor: nwse-resize;
+}
+
+.crop_ne {
+  top: -2px;
+  right: -2px;
+  cursor: nesw-resize;
+}
+
+.crop_sw {
+  bottom: -2px;
+  left: -2px;
+  cursor: nesw-resize;
+}
+
+.crop_se {
+  right: -2px;
+  bottom: -2px;
+  cursor: nwse-resize;
+}
+
+.maskBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--lab-space-4);
+  width: min(100%, 52rem);
+  padding: var(--lab-space-4);
+  border: 1px solid var(--lab-glass-edge);
+  border-radius: var(--lab-radius-2xl);
+  background: var(--lab-glass-bg-strong);
+  box-shadow: var(--lab-shadow-l);
+  backdrop-filter: blur(var(--lab-blur-soft));
+}
+
+.maskInput {
+  min-width: 0;
+  padding: var(--lab-space-4) var(--lab-space-6);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-body-size);
+}
+
+.maskInput:focus {
+  border-color: var(--lab-accent-muted);
+  outline: none;
+}
+
+.maskNote {
+  min-height: var(--lab-type-caption-line);
+  padding: 0 var(--lab-space-4);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-glass-bg);
+}
+
+/* ——— рецепты починки ——— */
+.fixChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-3);
+}
+
+.fixChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-2) var(--lab-space-6);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+  line-height: var(--lab-type-caption-line);
+  cursor: pointer;
+}
+
+.fixChip:hover {
+  background: var(--lab-fill-4);
+}
+
+.fixChipOn,
+.fixChipOn:hover {
+  border-color: var(--lab-accent);
+  background: var(--lab-accent-softer);
+  color: var(--lab-accent);
+}
+
+.fixField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+}
+
+.fixInput {
+  padding: var(--lab-space-3) var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-sunken);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
+}
+
+.fixInput:focus {
+  border-color: var(--lab-accent-muted);
+  outline: none;
+}
+
+.fixExtra {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-3);
+}
+
+.fixThumb {
+  flex: none;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-m);
+  object-fit: cover;
+}
+
+.fixPick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--lab-space-2);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.fixPick button {
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-s);
+  background: var(--lab-bg-sunken);
+  cursor: pointer;
+}
+
+.fixPick button:hover {
+  border-color: var(--lab-accent);
+}
+
+.fixPick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fixDetails summary {
+  color: var(--lab-text-secondary);
+  font-size: var(--lab-type-caption-size);
+  cursor: pointer;
+}
+
 .consent {
   display: flex;
   align-items: flex-start;

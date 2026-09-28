@@ -30,6 +30,11 @@ export interface ParamDef {
   pattern?: RegExp;
   hintRu?: string;
   default: ParamValue;
+  /**
+   * Значение берёт сервер из первой входной картинки (длинная сторона в пикселях) — владелец его не вводит, форма не
+   * показывает. Клиент присылает своё измерение для оценки цены; не совпало — гейт цены вернёт 409.
+   */
+  fromRef?: 'longSide';
 }
 
 /** ref — референс; start / end — первый и последний кадр видео. */
@@ -42,6 +47,10 @@ export interface RefSpec {
   roles: readonly RefRole[];
   /** Кадры (start/end) и референсы нельзя смешивать в одной задаче. */
   framesExclusive?: boolean;
+  /** Минимум картинок (апскейлу без картинки нечего делать). */
+  min?: number;
+  /** Предел размера одного файла у провайдера, байт. */
+  maxBytes?: number;
 }
 
 export interface SentRef {
@@ -68,6 +77,12 @@ export interface GenModel {
   target: (p: GenParams, roles: readonly RefRole[]) => string;
   /** Тело запроса. Промпт уже в диалекте провайдера (`forProvider`). */
   input: (prompt: string, p: GenParams, refs: readonly SentRef[]) => Record<string, unknown>;
+  /** Инструмент (апскейл), а не генератор: в выборе моделей студии, canvas и промптера его нет — только в «Правке». */
+  tool?: boolean;
+  /** Промпт не нужен (апскейл работает по картинке). */
+  promptless?: boolean;
+  /** Свои ограничения модели сверх общих — сообщения по-русски. */
+  limits?: (p: GenParams) => string[];
 }
 
 /** Сколько стоит единица провайдера в долларах и как её писать. */
@@ -108,7 +123,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // ——— модели ———
 
-export const GEN_MODELS: readonly GenModel[] = [
+const GENERATORS: readonly GenModel[] = [
   {
     id: 'higgsfield/soul-2',
     provider: 'higgsfield',
@@ -229,8 +244,46 @@ export const GEN_MODELS: readonly GenModel[] = [
   },
 ];
 
+/** Длинная сторона результата апскейла, px. */
+export const upscaledSide = (p: GenParams): number => num(p, 'sourceSize') * num(p, 'upscaleFactor');
+/**
+ * Прайс KIE, 28.09.2026: 10 кр за результат до 2K, 20 кр до 4K; «~$0.18 за 8K» с бонусом пополнения — значит 40 кр
+ * без бонуса. Границы 2K / 4K / 8K по длинной стороне — наше прочтение прайса; списанное придёт с результатом.
+ */
+const TOPAZ_TIERS: readonly [number, number][] = [
+  [2048, 10],
+  [4096, 20],
+  [8192, 40],
+];
+
+/** Апскейл Topaz — выбор владельца 28.09 («для апскейла — Topaz, найди на KIE»). Схема: docs.kie.ai/market/topaz/image-upscale. */
+const TOPAZ: GenModel = {
+  id: 'kie/topaz-upscale',
+  provider: 'kie',
+  kind: 'image',
+  titleRu: 'Topaz Upscale',
+  noteRu: 'Topaz Labs · апскейл 2× / 4× без перерисовки',
+  maxPromptChars: 0,
+  params: [
+    enumParam('upscaleFactor', 'Увеличение', ['2', '4', '1'], '2', { '1': '1× — только чистка', '2': '2×', '4': '4×' }),
+    { key: 'sourceSize', labelRu: 'Исходник, px', type: 'int', min: 1, max: 20_000, default: 1024, fromRef: 'longSide', hintRu: 'Длинная сторона исходника — сервер меряет сам.' },
+  ],
+  refs: { max: 1, min: 1, roles: ['ref'], maxBytes: 10 * 1024 * 1024 },
+  promptRefs: 'image-n',
+  credits: (p) => TOPAZ_TIERS.find(([side]) => upscaledSide(p) <= side)?.[1] ?? 40,
+  target: () => 'topaz/image-upscale',
+  input: (_prompt, p, refs) => ({ image_url: refs[0]?.url ?? '', upscale_factor: str(p, 'upscaleFactor') }),
+  tool: true,
+  promptless: true,
+  limits: (p) => (upscaledSide(p) > 8192 ? [`Результат ${upscaledSide(p)} px по длинной стороне — больше 8K; выбери меньшее увеличение.`] : []),
+};
+
+/** Всё, что можно запустить: генераторы и инструменты. */
+export const GEN_MODELS: readonly GenModel[] = [...GENERATORS, TOPAZ];
+
 export const findModel = (id: string): GenModel | undefined => GEN_MODELS.find((m) => m.id === id);
-export const modelsOf = (kind: MediaKind): GenModel[] => GEN_MODELS.filter((m) => m.kind === kind);
+/** Генераторы вида — для выбора модели; инструменты (апскейл) сюда не входят. */
+export const modelsOf = (kind: MediaKind): GenModel[] => GEN_MODELS.filter((m) => m.kind === kind && m.tool !== true);
 
 const fits = (def: ParamDef, value: ParamValue | undefined): boolean =>
   value !== undefined &&
@@ -274,7 +327,7 @@ export function forProvider(model: GenModel, prompt: string): { prompt: string; 
 export function validateGen(model: GenModel, prompt: string, params: GenParams, roles: readonly RefRole[]): string[] {
   const problems: string[] = [];
   const { prompt: sent, maxRef } = forProvider(model, prompt);
-  if (sent.trim() === '') problems.push('Пустой промпт.');
+  if (sent.trim() === '' && model.promptless !== true) problems.push('Пустой промпт.');
   if (sent.length > model.maxPromptChars) problems.push(`Промпт длиннее ${model.maxPromptChars} знаков — ${model.titleRu} его не примет.`);
   for (const def of model.params) {
     const value = params[def.key];
@@ -289,6 +342,8 @@ export function validateGen(model: GenModel, prompt: string, params: GenParams, 
   }
 
   const count = (role: RefRole): number => roles.filter((r) => r === role).length;
+  if (roles.length < (model.refs.min ?? 0)) problems.push(`${model.titleRu} нужна входная картинка.`);
+  problems.push(...(model.limits?.(params) ?? []));
   if (roles.length > model.refs.max) problems.push(model.refs.max === 0 ? `${model.titleRu} не принимает картинки.` : `Картинок ${roles.length}, а ${model.titleRu} принимает не больше ${model.refs.max}.`);
   for (const role of new Set(roles)) if (!model.refs.roles.includes(role)) problems.push(`Роль «${REF_ROLE_RU[role]}» не поддерживается ${model.titleRu}.`);
   if (count('start') > 1 || count('end') > 1) problems.push('Стартовый и финальный кадр — не больше одного каждый.');

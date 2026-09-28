@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "sourceRu": "Наборы проверяют то, чего нет в открытых данных (ресёрч 003, «не найдено»): кириллицу в цифрах, поведение seed и длину промпта у Soul 2. Одинаковый промпт на все модели — чтобы сравнивать модели, а не промпты. Параметры зафиксированы, цена видна до запуска.",
+  "suites": [
+    {
+      "id": "cyrillic",
+      "titleRu": "Кириллица в кадре",
+      "questionRu": "Какая модель пишет русский текст без ошибок — короткий, длинный, мелкий?",
+      "whyRu": "Цифр по кириллице нет ни у одной модели (ресёрч 003, Ф0). Маршрут «текст → GPT Image 2.5» держится на одном прогоне 28.09 (короткая рукописная записка).",
+      "cases": [
+        {
+          "id": "short",
+          "labelRu": "Короткий заголовок",
+          "prompt": "A minimalist poster on a light grey wall, photographed straight on. One large bold black sans-serif headline in the center that reads exactly \"Без воды\". No other text, no watermarks, no logos.",
+          "params": {}
+        },
+        {
+          "id": "long",
+          "labelRu": "Длинная фраза",
+          "prompt": "A minimalist poster on a light grey wall, photographed straight on. A bold black sans-serif headline across the upper half that reads exactly \"Как сдать анатомию с первого раза — пять правил\". No other text, no watermarks, no logos.",
+          "params": {}
+        },
+        {
+          "id": "small",
+          "labelRu": "Мелкий текст",
+          "prompt": "A close-up photograph of a white price tag on a pharmacy shelf, realistic retail lighting, sharp focus. The tag has small printed text that reads exactly \"Зубная паста мятная, 75 мл — 249 ₽\". No other text, no watermarks, no logos.",
+          "params": {}
+        }
+      ],
+      "models": [
+        { "key": "flare", "labelRu": "GPT Image 2.5 Flare", "modelId": "kie/gpt-image-2-5", "params": { "variant": "flare", "resolution": "1K", "aspectRatio": "3:4" } },
+        { "key": "sunburst", "labelRu": "GPT Image 2.5 Sunburst", "modelId": "kie/gpt-image-2-5", "params": { "variant": "sunburst", "resolution": "1K", "aspectRatio": "3:4" } },
+        { "key": "seedream", "labelRu": "Seedream 5 Pro", "modelId": "kie/seedream-5-pro", "params": { "resolution": "1K", "aspectRatio": "3:4" } },
+        { "key": "soul", "labelRu": "Soul 2", "modelId": "higgsfield/soul-2", "params": { "resolution": "720p", "aspectRatio": "3:4" } }
+      ]
+    },
+    {
+      "id": "soul-seed",
+      "titleRu": "Seed в Soul 2",
+      "questionRu": "Один seed и один промпт через API дают ту же композицию или тот же кадр?",
+      "whyRu": "Тест владельца 21.08 в CLI: композиция держится, пиксели — нет. Через официальный API не проверялось; от ответа зависит, как повторять удачный кадр.",
+      "cases": [
+        { "id": "a", "labelRu": "seed 4242", "prompt": "Candid street photo at golden hour: a young man in a black puffer jacket crossing a wet crosswalk, city lights starting to glow behind him, medium shot, natural colors.", "params": { "seed": 4242 } },
+        { "id": "b", "labelRu": "seed 4242 ещё раз", "prompt": "Candid street photo at golden hour: a young man in a black puffer jacket crossing a wet crosswalk, city lights starting to glow behind him, medium shot, natural colors.", "params": { "seed": 4242 } },
+        { "id": "c", "labelRu": "seed 777", "prompt": "Candid street photo at golden hour: a young man in a black puffer jacket crossing a wet crosswalk, city lights starting to glow behind him, medium shot, natural colors.", "params": { "seed": 777 } }
+      ],
+      "models": [{ "key": "soul", "labelRu": "Soul 2", "modelId": "higgsfield/soul-2", "params": { "resolution": "720p", "aspectRatio": "3:4" } }]
+    },
+    {
+      "id": "soul-length",
+      "titleRu": "Длина промпта Soul 2",
+      "questionRu": "Короткий промпт (~40 слов) против длинного (~170) на одну идею — что точнее держит кадр?",
+      "whyRu": "Официального гайда по Soul нет; общий совет Higgsfield — до ~200 токенов, «длинные промпты искажают». Seed один — разница только в тексте.",
+      "cases": [
+        {
+          "id": "short",
+          "labelRu": "~40 слов",
+          "prompt": "Editorial night portrait on a rooftop, phone-flash look. A young man in an oversized grey hoodie leans on the railing, looking into the camera, city lights blurred far below. Medium close-up, hard flash, deep shadows, slight grain.",
+          "params": { "seed": 5151 }
+        },
+        {
+          "id": "long",
+          "labelRu": "~170 слов",
+          "prompt": "Editorial night portrait on the flat rooftop of an old apartment block, shot like a candid phone photo with the built-in flash. A young man of about twenty in an oversized light grey hoodie with the hood down leans with both forearms on a rusty metal railing, his body turned slightly to the left while his face turns back toward the camera with a calm, slightly tired look. His dark hair is messy from the wind. Far below and behind him the city spreads out as soft, blurred points of orange and white light, with a few lit windows in the nearest buildings. The flash lights his face and hoodie hard and flat, leaving the rooftop floor and the edges of the frame in deep, almost black shadow. A thin haze hangs in the air after rain, and the railing still has drops of water on it. Medium close-up, slightly high angle, the railing crossing the lower third of the frame. Natural skin texture, fine film-like grain, muted colors with a cool tint in the shadows.",
+          "params": { "seed": 5151 }
+        }
+      ],
+      "models": [{ "key": "soul", "labelRu": "Soul 2", "modelId": "higgsfield/soul-2", "params": { "resolution": "720p", "aspectRatio": "3:4" } }]
+    }
+  ]
+}

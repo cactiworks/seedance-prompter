@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findModel, modelsOf, type GenModel } from '../../src/core/gen/models.ts';
-import { agentParams, buildPrompterUser, cardFile, normalizePrompter, validatePrompter, type PrompterOutput } from '../../src/core/llm/buildPrompter.ts';
+import { agentParams, buildPrompterUser, cardFile, EMPTY_SHOT, normalizePrompter, routeRefs, validatePrompter, type PrompterOutput, type PrompterRef } from '../../src/core/llm/buildPrompter.ts';
 
 const soul = findModel('higgsfield/soul-2') as GenModel;
 const gpt = findModel('kie/gpt-image-2-5') as GenModel;
@@ -81,7 +81,7 @@ describe('промптер: проверка и нормализация отв�
       images,
       styles,
     ).join('\n');
-    expect(problems).toContain('no images are attached');
+    expect(problems).toContain('no images reach kie/gpt-image-2-5');
     expect(problems).toContain('"seed" is not a parameter');
     expect(problems).toContain('"8K" is not allowed (options: 1K, 2K, 4K)');
     expect(problems).toContain('has no moodboards');
@@ -103,5 +103,93 @@ describe('промптер: проверка и нормализация отв�
     const out = answer({ modelId: 'kie/seedance-2-5', styleName: '', params: [{ key: 'durationSec', value: '8s' }, { key: 'audio', value: 'false' }, { key: 'resolution', value: '720p' }] });
     expect(validatePrompter(out, video, [])).toEqual([]);
     expect(normalizePrompter(out, [])?.params).toMatchObject({ durationSec: 8, audio: false, resolution: '720p' });
+  });
+});
+
+describe('промптер: референсы владельца', () => {
+  const seedance = findModel('kie/seedance-2-5') as GenModel;
+  const kling = findModel('kie/kling-3') as GenModel;
+  const me: PrompterRef = { role: 'character', commentRu: 'это я' };
+  const look: PrompterRef = { role: 'style', commentRu: 'взять свет' };
+  const start: PrompterRef = { role: 'start', commentRu: '' };
+  const end: PrompterRef = { role: 'end', commentRu: '' };
+  const sent = (model: GenModel, refs: PrompterRef[]) => routeRefs(model, refs).map((r) => (r.sentAs === null ? 'words' : r.sentAs === 'ref' ? `ref${r.n}` : r.sentAs));
+
+  it('маршрут картинок детерминирован: Soul 2 — словами, GPT — по номерам, Kling — только кадры, Seedance — кадры вытесняют рефы', () => {
+    expect(sent(soul, [me, look])).toEqual(['words', 'words']);
+    expect(sent(gpt, [me, look])).toEqual(['ref1', 'ref2']);
+    expect(sent(kling, [start, me, end])).toEqual(['start', 'words', 'end']);
+    expect(sent(kling, [end, me])).toEqual(['words', 'words']);
+    expect(sent(seedance, [me, look])).toEqual(['ref1', 'ref2']);
+    expect(sent(seedance, [me, start])).toEqual(['words', 'start']);
+  });
+
+  it('агент получает роли, комментарии и для каждого кандидата — как дойдёт каждая картинка', () => {
+    const user = buildPrompterUser({ ideaRu: 'я на крыше', kind: 'image', modelId: 'auto', refs: [me, look] }, images, styles);
+    expect(user).toContain('attached after this message');
+    expect(user).toContain('"commentRu": "это я"');
+    expect(user).toContain('call it image 1 in the prompt');
+    expect(user).toContain('NOT sent to this model');
+  });
+
+  it('отправленная картинка обязана быть названа в промпте; лишние номера и чужая запись — на ремонт', () => {
+    const base = answer({ modelId: gpt.id, params: [], styleName: '' });
+    expect(validatePrompter({ ...base, prompt: 'Keep the face of the person in image 1. Apply the lighting style of image 2.' }, images, styles, [me, look])).toEqual([]);
+    const missing = validatePrompter({ ...base, prompt: 'Keep the face of the person in image 1. Image 3 shows the sky.' }, images, styles, [me, look]).join('\n');
+    expect(missing).toContain('prompt mentions image 3');
+    expect(missing).toContain('image 2 (ref 2, style) is sent to the model, but the prompt never says');
+    const video = modelsOf('video');
+    const plain = validatePrompter(answer({ modelId: 'kie/seedance-2-5', styleName: '', params: [], prompt: 'The person from image 1 walks; light as in image 2.' }), video, [], [me, look]).join('\n');
+    expect(plain).toContain('@Image1, @Image2');
+  });
+
+  it('«В студию» получает картинки в порядке номеров и с ролями модели', () => {
+    expect(normalizePrompter(answer({ modelId: kling.id, styleName: '', params: [] }), [], [start, me, end])?.refs).toEqual([
+      { index: 0, role: 'start' },
+      { index: 2, role: 'end' },
+    ]);
+  });
+});
+
+describe('промптер: секции «как снято», место, текст', () => {
+  const camera = { titleRu: 'Видеокамера MiniDV', anchor: 'Sony Handycam MiniDV camcorder', look: 'early-2000s home video look' };
+
+  it('агенту уходят только заполненные поля; комплект камеры раскрыт; надпись без внешних кавычек', () => {
+    const user = buildPrompterUser({ ideaRu: 'я на крыше', kind: 'image', modelId: 'auto', shot: { ...EMPTY_SHOT, cameraKitId: 'camcorder-sony-minidv', placeRu: 'крыша', textRu: '«Стоматология без воды»' } }, images, styles, camera);
+    expect(user).toContain('"anchor": "Sony Handycam MiniDV camcorder"');
+    expect(user).toContain('"placeRu": "крыша"');
+    expect(user).toContain('"textInImage": "Стоматология без воды"');
+    expect(user).not.toContain('lightRu');
+    expect(buildPrompterUser({ ideaRu: 'x', kind: 'image', modelId: 'auto', shot: EMPTY_SHOT }, images, styles)).not.toContain('"shot"');
+  });
+
+  it('надпись — буква в букву (кроме Soul 2); формат владельца главнее агента', () => {
+    const shot = { ...EMPTY_SHOT, textRu: 'Стоматология без воды', aspectRatio: '3:4' };
+    const gptAnswer = answer({ modelId: gpt.id, styleName: '', params: [{ key: 'aspectRatio', value: '9:16' }], prompt: 'A poster with the headline "Стоматология без води" on top.' });
+    const problems = validatePrompter(gptAnswer, images, styles, [], shot).join('\n');
+    expect(problems).toContain('letter for letter');
+    expect(problems).toContain('the owner chose 3:4');
+    expect(normalizePrompter(gptAnswer, styles, [], shot)?.params.aspectRatio).toBe('3:4');
+    expect(validatePrompter(answer(), images, styles, [], { ...shot, aspectRatio: '' })).toEqual([]);
+  });
+});
+
+describe('промптер: шаблоны и мудборды', () => {
+  const sheet = { id: 'character-sheet', titleRu: 'Лист персонажа', kind: 'image' as const, noteRu: '', aspectRatio: '16:9', mustMention: ['front', 'profile|side', 'back'], instructions: 'Character reference sheet.' };
+
+  it('шаблон уходит агенту; раскладка без нужных видов — на ремонт', () => {
+    expect(buildPrompterUser({ ideaRu: 'я', kind: 'image', modelId: 'auto', template: sheet.id }, images, styles, null, sheet)).toContain('"instructions": "Character reference sheet."');
+    const base = answer({ modelId: 'kie/seedream-5-pro', styleName: '', params: [] });
+    expect(validatePrompter({ ...base, prompt: 'A character sheet: front view and side profile.' }, images, styles, [], EMPTY_SHOT, sheet).join(' ')).toContain('must name these views: back');
+    expect(validatePrompter({ ...base, prompt: 'A character sheet: front, side profile and back views.' }, images, styles, [], EMPTY_SHOT, sheet)).toEqual([]);
+  });
+
+  it('несколько картинок стиля можно назвать одним диапазоном: «images 2–4», «images 2, 3 and 4»', () => {
+    const style: PrompterRef = { role: 'style', commentRu: 'мудборд «Night T»' };
+    const refs: PrompterRef[] = [{ role: 'character', commentRu: 'это я' }, style, style, style];
+    const base = answer({ modelId: gpt.id, params: [], styleName: '' });
+    expect(validatePrompter({ ...base, prompt: 'The person from image 1, in the shared visual style of images 2–4.' }, images, styles, refs)).toEqual([]);
+    expect(validatePrompter({ ...base, prompt: 'The person from image 1, in the style of images 2, 3 and 4.' }, images, styles, refs)).toEqual([]);
+    expect(validatePrompter({ ...base, prompt: 'The person from image 1, 35mm lens, in the style of images 2 to 4.' }, images, styles, refs)).toEqual([]);
   });
 });

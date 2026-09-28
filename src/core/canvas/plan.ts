@@ -18,6 +18,7 @@ export const nodeTitle = (node: CanvasNode): string => {
   if (node.type === 'prompt') return 'Промпт';
   if (node.type === 'image') return node.label !== '' ? node.label : 'Картинка';
   if (node.type === 'frame') return node.which === 'last' ? 'Последний кадр видео' : 'Первый кадр видео';
+  if (node.type === 'trim') return 'Обрезка видео';
   return `${node.kind === 'image' ? 'Картинка' : 'Видео'} · ${findModel(node.modelId)?.titleRu ?? 'модель'}`;
 };
 
@@ -72,14 +73,28 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
   return { modelId: model.id, prompt, params, refs, estimate: estimate(model, params, 1, refs.length), problems };
 }
 
-/** Видео для ноды «Кадр из видео»: выбранный вариант генератора видео на входе или причина, почему его нет. */
+/**
+ * Видео на входе «Видео» (кадр и обрезка): выбранный вариант генератора видео или готовый файл обрезки выше по
+ * графу — либо причина, почему его нет.
+ */
 export function frameInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) => string | null): { mediaId: string | null; problemRu: string | null } {
   const edge = flow.edges.find((e) => e.to === nodeId && e.port === 'video');
   const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
-  if (from === undefined) return { mediaId: null, problemRu: 'Подключи ко входу «Видео» генератор видео.' };
+  if (from === undefined) return { mediaId: null, problemRu: 'Подключи ко входу «Видео» генератор видео или обрезку.' };
+  if (from.type === 'trim') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала обрежь видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
   const jobId = from.jobIds[from.selected];
   const mediaId = jobId === undefined ? null : mediaOf(jobId);
   return mediaId === null ? { mediaId: null, problemRu: `У «${nodeTitle(from)}» ещё нет готового видео.` } : { mediaId, problemRu: null };
+}
+
+/** Отрезок обрезки: конец 0 — до конца видео. Проверки — по-русски, для подписи в ноде. */
+export function trimProblems(start: number, end: number, duration: number | null): string[] {
+  const problems: string[] = [];
+  if (start < 0 || end < 0) problems.push('Время не бывает отрицательным.');
+  if (end !== 0 && end - start < 0.2) problems.push('Конец должен быть позже начала хотя бы на 0.2 с.');
+  if (duration !== null && start >= duration) problems.push(`Начало за концом видео (${duration.toFixed(1)} с).`);
+  if (duration !== null && end > duration + 0.05) problems.push(`Конец за концом видео (${duration.toFixed(1)} с).`);
+  return problems;
 }
 
 /** Стоимость всех генераторов flow по одному запуску — видна в шапке, запускать всё разом нельзя. */

@@ -25,10 +25,10 @@ export interface FlowListItem {
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
 let seq = 0;
-const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
+export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
-export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240 };
+export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280 };
 /** Вертикаль портов: выход и первый вход — под шапкой, остальные входы — шагом PORT_STEP. */
 export const PORT_TOP = 58;
 export const PORT_STEP = 30;
@@ -54,7 +54,10 @@ interface CanvasState {
   flows: FlowListItem[];
   flow: Flow | null;
   save: SaveState;
+  /** Последняя выбранная нода — к ней относятся одиночные действия. */
   selected: string | null;
+  /** Все выделенные ноды: Shift+клик, рамка Shift+протяжкой, ⌘A. Группа двигается, удаляется и копируется вместе. */
+  selection: string[];
   error: string | null;
   past: Flow[];
   future: Flow[];
@@ -73,12 +76,17 @@ interface CanvasState {
   addNode: (type: CanvasNodeType, x: number, y: number, kind?: MediaKind) => string;
   patchNode: (id: string, patch: Partial<CanvasNode>, historyKey?: string | null | false) => void;
   removeNode: (id: string) => void;
-  select: (id: string | null) => void;
+  /** `additive` — Shift: добавить к выделению или убрать из него. */
+  select: (id: string | null, additive?: boolean) => void;
+  selectMany: (ids: string[]) => void;
+  removeSelected: () => void;
+  /** Сдвиг нескольких нод одним шагом истории (перетаскивание группы). */
+  moveNodes: (positions: { id: string; x: number; y: number }[], historyKey: string) => void;
   /** null — связь создана; строка — почему нельзя. */
   connect: (from: string, to: string, port: InputPort) => string | null;
   disconnect: (edgeId: string) => void;
   setViewport: (viewport: Flow['viewport']) => void;
-  /** Копия выбранной ноды (с входящими рёбрами от нод, которые тоже копируются, — пока одна нода). */
+  /** Копия выделенных нод со связями между ними (связи наружу группы не копируются). */
   copySelected: () => string | null;
   /** Вставить ноды из текста буфера `sp-canvas:`; возвращает число вставленных. */
   pasteNodes: (text: string, at: { x: number; y: number }) => number;
@@ -119,11 +127,39 @@ export const useCanvas = create<CanvasState>((set, get) => {
   /** Копия ноды без результатов: запуски принадлежат исходной ноде. */
   const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: null });
 
+  /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
+  const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {
+    const { flow, selection } = get();
+    if (flow === null) return { nodes: [], edges: [] };
+    const ids = new Set(selection);
+    return { nodes: flow.nodes.filter((n) => ids.has(n.id)), edges: flow.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+  };
+
+  /** Вставить копии нод со сдвигом; связи переносятся по новым id. Возвращает id копий. */
+  const insertCopies = (nodes: CanvasNode[], edges: CanvasEdge[], dx: number, dy: number): string[] => {
+    const ids = new Map<string, string>();
+    const copies = nodes.map((n) => {
+      const c = cloneNode(n, dx, dy);
+      ids.set(n.id, c.id);
+      return c;
+    });
+    const copiedEdges = edges.flatMap((e) => {
+      const from = ids.get(e.from);
+      const to = ids.get(e.to);
+      return from === undefined || to === undefined ? [] : [{ ...e, id: newId('e'), from, to }];
+    });
+    get().update((f) => ({ ...f, nodes: [...f.nodes, ...copies], edges: [...f.edges, ...copiedEdges] }));
+    const created = copies.map((c) => c.id);
+    set({ selection: created, selected: created.at(-1) ?? null });
+    return created;
+  };
+
   return {
     flows: [],
     flow: null,
     save: 'saved',
     selected: null,
+    selection: [],
     error: null,
     past: [],
     future: [],
@@ -135,12 +171,12 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     openFlow: async (id) => {
       lastKey = null;
-      set({ flow: await json<Flow>(await fetch(`/api/canvas/flows/${id}`)), selected: null, save: 'saved', past: [], future: [] });
+      set({ flow: await json<Flow>(await fetch(`/api/canvas/flows/${id}`)), selected: null, selection: [], save: 'saved', past: [], future: [] });
     },
     newFlow: async (from) => {
       const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: from?.name ?? '' }) }));
       lastKey = null;
-      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, selected: null, past: [], future: [] });
+      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, selected: null, selection: [], past: [], future: [] });
       if (from !== undefined) persist();
       await get().loadFlows();
     },
@@ -163,7 +199,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (flow === null || prev === undefined) return;
       lastKey = null;
       // Вид холста не откатываем: отмена правит граф, а не то, куда смотрит владелец.
-      set((s) => ({ flow: { ...prev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null }));
+      set((s) => ({ flow: { ...prev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => prev.nodes.some((n) => n.id === id)) }));
       persist();
     },
     redo: () => {
@@ -179,15 +215,33 @@ export const useCanvas = create<CanvasState>((set, get) => {
     addNode: (type, x, y, kind = 'image') => {
       const node = blankNode(type, x, y, kind);
       get().update((f) => ({ ...f, nodes: [...f.nodes, node] }));
-      set({ selected: node.id });
+      set({ selected: node.id, selection: [node.id] });
       return node.id;
     },
     patchNode: (id, patch, historyKey = null) => get().update((f) => ({ ...f, nodes: f.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }), historyKey),
     removeNode: (id) => {
       get().update((f) => ({ ...f, nodes: f.nodes.filter((n) => n.id !== id), edges: f.edges.filter((e) => e.from !== id && e.to !== id) }));
-      if (get().selected === id) set({ selected: null });
+      set((s) => ({ selected: s.selected === id ? null : s.selected, selection: s.selection.filter((x) => x !== id) }));
     },
-    select: (id) => set({ selected: id }),
+    select: (id, additive = false) =>
+      set((s) => {
+        if (id === null) return additive ? {} : { selected: null, selection: [] };
+        if (!additive) return { selected: id, selection: s.selection.includes(id) && s.selection.length > 1 ? s.selection : [id] };
+        const on = s.selection.includes(id);
+        const selection = on ? s.selection.filter((x) => x !== id) : [...s.selection, id];
+        return { selection, selected: on ? (selection.at(-1) ?? null) : id };
+      }),
+    selectMany: (ids) => set({ selection: ids, selected: ids.at(-1) ?? null }),
+    removeSelected: () => {
+      const ids = new Set(get().selection);
+      if (ids.size === 0) return;
+      get().update((f) => ({ ...f, nodes: f.nodes.filter((n) => !ids.has(n.id)), edges: f.edges.filter((e) => !ids.has(e.from) && !ids.has(e.to)) }));
+      set({ selected: null, selection: [] });
+    },
+    moveNodes: (positions, historyKey) => {
+      const at = new Map(positions.map((p) => [p.id, p]));
+      get().update((f) => ({ ...f, nodes: f.nodes.map((n) => (at.has(n.id) ? { ...n, x: at.get(n.id)?.x ?? n.x, y: at.get(n.id)?.y ?? n.y } : n)) }), historyKey);
+    },
 
     connect: (from, to, port) => {
       const flow = get().flow;
@@ -204,10 +258,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
     setViewport: (viewport) => get().update((f) => ({ ...f, viewport }), false),
 
     copySelected: () => {
-      const { flow, selected } = get();
-      const node = flow?.nodes.find((n) => n.id === selected);
-      if (node === undefined) return null;
-      return `${CLIPBOARD_PREFIX}${JSON.stringify({ nodes: [node], edges: [] })}`;
+      const copied = group();
+      return copied.nodes.length === 0 ? null : `${CLIPBOARD_PREFIX}${JSON.stringify(copied)}`;
     },
     pasteNodes: (text, at) => {
       if (!text.startsWith(CLIPBOARD_PREFIX)) return 0;
@@ -218,31 +270,14 @@ export const useCanvas = create<CanvasState>((set, get) => {
         if (nodes.length === 0) return 0;
         const minX = Math.min(...nodes.map((n) => n.x));
         const minY = Math.min(...nodes.map((n) => n.y));
-        const ids = new Map<string, string>();
-        const copies = nodes.map((n) => {
-          const c = cloneNode(n, at.x - minX, at.y - minY);
-          ids.set(n.id, c.id);
-          return c;
-        });
-        const copiedEdges = edges.flatMap((e) => {
-          const from = ids.get(e.from);
-          const to = ids.get(e.to);
-          return from === undefined || to === undefined ? [] : [{ ...e, id: newId('e'), from, to }];
-        });
-        get().update((f) => ({ ...f, nodes: [...f.nodes, ...copies], edges: [...f.edges, ...copiedEdges] }));
-        set({ selected: copies[0]?.id ?? null });
-        return copies.length;
+        return insertCopies(nodes, edges, at.x - minX, at.y - minY).length;
       } catch {
         return 0;
       }
     },
     duplicateSelected: () => {
-      const { flow, selected } = get();
-      const node = flow?.nodes.find((n) => n.id === selected);
-      if (node === undefined) return;
-      const copy = cloneNode(node, 32, 32);
-      get().update((f) => ({ ...f, nodes: [...f.nodes, copy] }));
-      set({ selected: copy.id });
+      const copied = group();
+      if (copied.nodes.length > 0) insertCopies(copied.nodes, copied.edges, 32, 32);
     },
   };
 });

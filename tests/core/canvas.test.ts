@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { flowCost, frameInput, planRun, wouldCycle } from '../../src/core/canvas/plan.ts';
+import { flowCost, frameInput, planRun, trimProblems, wouldCycle } from '../../src/core/canvas/plan.ts';
+import { FLOW_TEMPLATES } from '../../src/core/canvas/templates.ts';
 import { paramsFor, findModel } from '../../src/core/gen/models.ts';
-import { CanvasNodeSchema, inputsOf, portAccepts, type CanvasNode, type Flow } from '../../src/core/model/canvas.ts';
+import { CanvasNodeSchema, inputsOf, outputOf, portAccepts, type CanvasNode, type Flow } from '../../src/core/model/canvas.ts';
 
 const node = (patch: Partial<CanvasNode> & Pick<CanvasNode, 'id' | 'type'>): CanvasNode => CanvasNodeSchema.parse({ x: 0, y: 0, ...patch });
 const gen = (id: string, modelId: string, patch: Partial<CanvasNode> = {}): CanvasNode => {
@@ -95,5 +96,42 @@ describe('canvas: кадр из видео склеивает клипы', () =>
     expect(portAccepts('start', 'image')).toBe(true);
     expect(inputsOf(node({ id: 'f', type: 'frame' }), [])).toEqual(['video']);
     expect(inputsOf(gen('g', 'kie/seedance-2-5'), findModel('kie/seedance-2-5')?.refs.roles ?? [])).toEqual(['prompt', 'ref', 'start', 'end']);
+  });
+});
+
+describe('canvas: обрезка видео и шаблоны (решение 35)', () => {
+  it('обрезка: вход «Видео», выход — видео; кадр берёт видео у обрезки, если она уже сделана', () => {
+    const trim = CanvasNodeSchema.parse({ id: 't', type: 'trim', x: 0, y: 0 });
+    expect(inputsOf(trim, [])).toEqual(['video']);
+    expect(outputOf(trim)).toBe('video');
+    const frame = CanvasNodeSchema.parse({ id: 'f', type: 'frame', x: 0, y: 0 });
+    const flow = { id: 'x', name: 'x', nodes: [trim, frame], edges: [{ id: 'e', from: 't', to: 'f', port: 'video' as const }], viewport: { x: 0, y: 0, zoom: 1 }, createdAt: '', updatedAt: '' };
+    expect(frameInput(flow, 'f', () => null).problemRu).toContain('Сначала обрежь видео');
+    expect(frameInput({ ...flow, nodes: [{ ...trim, mediaId: 'm-cut' }, frame] }, 'f', () => null)).toEqual({ mediaId: 'm-cut', problemRu: null });
+  });
+
+  it('отрезок: конец 0 — до конца; конец раньше начала и выход за видео — сообщения', () => {
+    expect(trimProblems(1, 0, 5)).toEqual([]);
+    expect(trimProblems(2, 1.5, 5)[0]).toContain('позже начала');
+    expect(trimProblems(6, 0, 5)[0]).toContain('Начало за концом');
+    expect(trimProblems(0, 7, 5)[0]).toContain('Конец за концом');
+  });
+
+  it('шаблоны: ноды с моделями по умолчанию, связи проходят проверку портов и циклов', () => {
+    let n = 0;
+    for (const t of FLOW_TEMPLATES) {
+      const { nodes, edges } = t.build((p) => `${p}${(n += 1)}`);
+      const flow = { id: t.id, name: t.titleRu, nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, createdAt: '', updatedAt: '' };
+      for (const e of edges) {
+        const from = nodes.find((x) => x.id === e.from);
+        const to = nodes.find((x) => x.id === e.to);
+        expect(from && to, `${t.id}: связь ${e.id}`).toBeTruthy();
+        if (from === undefined || to === undefined) continue;
+        expect(portAccepts(e.port, outputOf(from)), `${t.id}: ${from.type} → ${e.port}`).toBe(true);
+        expect(inputsOf(to, findModel(to.modelId)?.refs.roles ?? []), `${t.id}: у ${to.type} есть вход ${e.port}`).toContain(e.port);
+        expect(wouldCycle({ ...flow, edges: edges.filter((x) => x.id !== e.id) }, e.from, e.to)).toBe(false);
+      }
+      for (const node of nodes.filter((x) => x.type === 'generator')) expect(findModel(node.modelId), `${t.id}: модель`).toBeDefined();
+    }
   });
 });

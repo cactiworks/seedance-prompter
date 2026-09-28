@@ -69,6 +69,11 @@ export async function extractFrame(videoMediaId: string, which: 'first' | 'last'
   return json<MediaItem>(await fetch(`/api/library/${videoMediaId}/frame`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ which }) }));
 }
 
+/** Отрезок видео библиотеки → новое видео (ffmpeg, локально, бесплатно). `end` 0 — до конца. */
+export async function trimVideo(videoMediaId: string, start: number, end: number): Promise<MediaItem> {
+  return json<MediaItem>(await fetch(`/api/library/${videoMediaId}/trim`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ start, end }) }));
+}
+
 /** Картинка с диска → data/uploads; возвращает источник для задачи. */
 export async function uploadImage(file: File): Promise<RefSource> {
   if (!IMAGE_TYPES.includes(file.type)) throw new Error(`«${file.name}»: подходят только JPG, PNG и WebP.`);
@@ -146,9 +151,9 @@ interface GenState {
   remix: (job: GenJob) => void;
   /**
    * Промпт из «Промптера» — в форму. `params` — только то, что выбрал агент: seed и Soul ID владельца в форме
-   * не трогаются; картинки остаются.
+   * не трогаются. Картинки заменяются целиком: номера image N / @ImageN в промпте — это их порядок.
    */
-  applyPrompt: (kind: MediaKind, modelId: string, params: GenParams, prompt: string) => void;
+  applyPrompt: (kind: MediaKind, modelId: string, params: GenParams, prompt: string, refs: { label: string; source: RefSource; role: RefRole }[]) => void;
   /**
    * Запуск по клику. `consent` — владелец подтвердил отправку картинок в этом окне. Возвращает
    * 'needs-consent', если картинки есть, а согласия ещё не было.
@@ -316,10 +321,10 @@ export const useGen = create<GenState>((set, get) => {
       });
     },
 
-    applyPrompt: (kind, modelId, params, prompt) => {
+    applyPrompt: (kind, modelId, params, prompt, refs) => {
       const model = findModel(modelId);
       if (model === undefined) return;
-      patchComposer(kind, (c) => ({ modelId: model.id, params: paramsFor(model, { ...c.params, ...params }), prompt, error: null }));
+      patchComposer(kind, (c) => ({ modelId: model.id, params: paramsFor(model, { ...c.params, ...params }), prompt, refs: refs.map((r) => ({ ...r, key: nextKey(), thumb: thumbOf(r.source) })), error: null }));
     },
 
     submit: async (kind, consent = false) => {

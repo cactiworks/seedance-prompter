@@ -1,0 +1,299 @@
+/* Калибровка: наборы и журнал — в сайдбаре оболочки, здесь сетка «случай × модель» с оценками. */
+.page {
+  height: 100%;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+}
+
+.listTitle {
+  padding: var(--lab-space-6) var(--lab-space-4) var(--lab-space-2);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-4);
+  border: 0;
+  border-radius: var(--lab-radius-l);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item:hover {
+  background: var(--lab-fill-4);
+}
+
+.itemOn,
+.itemOn:hover {
+  background: var(--lab-accent-softer);
+}
+
+.body {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.suite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-10);
+  padding: var(--lab-space-12);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+}
+
+.suiteHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lab-space-10);
+}
+
+.launch {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--lab-space-2);
+}
+
+.runs {
+  width: 16rem;
+}
+
+/* ——— сетка ——— */
+.grid {
+  display: grid;
+  align-items: start;
+  gap: var(--lab-space-6);
+}
+
+.row {
+  display: contents;
+}
+
+.colHead {
+  padding-bottom: var(--lab-space-2);
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+.rowHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+}
+
+.promptDetails summary {
+  color: var(--lab-text-tertiary);
+  font-size: var(--lab-type-caption-size);
+  cursor: pointer;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.cellImage {
+  display: block;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-sunken);
+  cursor: zoom-in;
+}
+
+.cellImage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cellEmpty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  padding: var(--lab-space-6);
+  border: 1px dashed var(--lab-border);
+  border-radius: var(--lab-radius-l);
+  text-align: center;
+}
+
+.failed {
+  color: var(--lab-danger);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-2);
+}
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+  margin: 0;
+  padding-left: var(--lab-space-8);
+}
+
+/* ——— оценка ——— */
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.verdictButtons {
+  display: flex;
+  gap: var(--lab-space-2);
+}
+
+.verdictButton {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-2) var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-secondary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+  cursor: pointer;
+}
+
+.verdictButton:hover {
+  background: var(--lab-fill-4);
+}
+
+.verdict_good {
+  border-color: var(--lab-success);
+  background: var(--lab-success-softer);
+  color: var(--lab-success);
+}
+
+.verdict_almost {
+  border-color: var(--lab-warning);
+  background: var(--lab-warning-softer);
+  color: var(--lab-warning);
+}
+
+.verdict_bad {
+  border-color: var(--lab-danger);
+  background: var(--lab-danger-softer);
+  color: var(--lab-danger);
+}
+
+.symptoms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-2);
+}
+
+.symptom {
+  padding: var(--lab-space-1) var(--lab-space-4);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-full);
+  background: transparent;
+  color: var(--lab-text-secondary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+  cursor: pointer;
+}
+
+.symptomOn {
+  border-color: var(--lab-danger);
+  background: var(--lab-danger-softer);
+  color: var(--lab-danger);
+}
+
+.verdictCompact .symptom {
+  padding: 0 var(--lab-space-3);
+}
+
+.verdictNote {
+  padding: var(--lab-space-3) var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-sunken);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+}
+
+/* ——— журнал ——— */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--lab-space-6);
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.stat,
+.repeat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+  padding: var(--lab-space-6);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-xl);
+  background: var(--lab-bg-surface);
+}
+
+.repeat {
+  align-items: flex-start;
+}
+
+.ruleText {
+  width: 100%;
+  padding: var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-sunken);
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
+  resize: vertical;
+}
+
+.rule {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--lab-space-4);
+  padding: var(--lab-space-4) 0;
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+.ruleBody {
+  overflow-wrap: anywhere;
+}
+
+.manual {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lab-space-4);
+  max-width: 40rem;
+  padding-top: var(--lab-space-6);
+}

@@ -5,7 +5,8 @@ import { CanvasEdgeSchema, CanvasNodeSchema, portAccepts, outputOf, type CanvasN
 import { uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
-import { NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
+import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
+import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
 import { NodeView, portsOf } from './NodeView.tsx';
 
 const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
@@ -23,6 +24,19 @@ export function FlowList() {
       <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newFlow} onClick={() => void newFlow()}>
         Новый flow
       </Button>
+      <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
+        Шаблоны — откроются новым flow
+      </Text>
+      <nav className={styles.flowList}>
+        {FLOW_TEMPLATES.map((t) => (
+          <div key={t.id} className={styles.flowItem}>
+            <button type="button" className={styles.flowLabel} title={t.descriptionRu} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
+              <span>{t.titleRu}</span>
+              <Icon name="plus" size={0.875} />
+            </button>
+          </div>
+        ))}
+      </nav>
       <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
         Flows
       </Text>
@@ -45,10 +59,31 @@ export function FlowList() {
   );
 }
 
+/** Карточки шаблонов на пустом холсте и на экране без flows. */
+function TemplateCards() {
+  const newFlow = useCanvas((s) => s.newFlow);
+  return (
+    <div className={styles.emptyTemplates}>
+      {FLOW_TEMPLATES.map((t) => (
+        <button key={t.id} type="button" className={styles.templateCard} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
+          <Text variant="label" medium>
+            {t.titleRu}
+          </Text>
+          <Text variant="caption" tone="secondary">
+            {t.descriptionRu}
+          </Text>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 type Interaction =
-  | { type: 'drag'; id: string; startX: number; startY: number; origX: number; origY: number }
+  | { type: 'drag'; id: string; startX: number; startY: number; origins: { id: string; x: number; y: number }[] }
   | { type: 'pan'; startX: number; startY: number; origX: number; origY: number }
-  | { type: 'link'; from: string; x: number; y: number };
+  | { type: 'link'; from: string; x: number; y: number }
+  /** Рамка выделения: Shift + протяжка по пустому холсту; координаты экранные. */
+  | { type: 'marquee'; startX: number; startY: number; x: number; y: number };
 
 const curve = (x1: number, y1: number, x2: number, y2: number): string => {
   const dx = Math.max(48, Math.abs(x2 - x1) / 2);
@@ -57,7 +92,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number): string => {
 
 /** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
 export function Canvas() {
-  const { flow, save, selected, error, past, future, newFlow, rename, addNode, patchNode, removeNode, select, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
+  const { flow, save, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
   const { library, loadJobs, loadLibrary } = useGen();
   const board = useRef<HTMLDivElement>(null);
   const importer = useRef<HTMLInputElement>(null);
@@ -90,11 +125,34 @@ export function Canvas() {
   useEffect(() => {
     if (act === null) return;
     const move = (event: PointerEvent): void => {
-      if (act.type === 'drag') patchNode(act.id, { x: act.origX + (event.clientX - act.startX) / viewport.zoom, y: act.origY + (event.clientY - act.startY) / viewport.zoom }, `move:${act.id}`);
-      else if (act.type === 'pan') setViewport({ ...viewport, x: act.origX + event.clientX - act.startX, y: act.origY + event.clientY - act.startY });
+      if (act.type === 'drag') {
+        const dx = (event.clientX - act.startX) / viewport.zoom;
+        const dy = (event.clientY - act.startY) / viewport.zoom;
+        moveNodes(
+          act.origins.map((o) => ({ id: o.id, x: o.x + dx, y: o.y + dy })),
+          `move:${act.id}`,
+        );
+      } else if (act.type === 'pan') setViewport({ ...viewport, x: act.origX + event.clientX - act.startX, y: act.origY + event.clientY - act.startY });
+      else if (act.type === 'marquee') setAct({ ...act, x: event.clientX, y: event.clientY });
       else setAct({ ...act, ...toWorld(event.clientX, event.clientY) });
     };
     const up = (event: PointerEvent): void => {
+      // Рамка: выделяются ноды, которых она касается (по их настоящим размерам на экране), Shift — к уже выделенным.
+      if (act.type === 'marquee') {
+        const left = Math.min(act.startX, act.x);
+        const right = Math.max(act.startX, act.x);
+        const top = Math.min(act.startY, act.y);
+        const bottom = Math.max(act.startY, act.y);
+        const hit = [...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.left < right && r.right > left && r.top < bottom && r.bottom > top;
+          })
+          .map((el) => el.dataset.nodeId ?? '');
+        selectMany([...new Set([...useCanvas.getState().selection, ...hit])]);
+        setAct(null);
+        return;
+      }
       // Связь отпустили не на входе, а на пустом холсте — меню подходящих нод, как в connxn.
       const target = event.target as Element | null;
       if (act.type === 'link' && !linked.current && target !== null && (target === board.current || target.closest(`.${styles.world}`) === target || target.tagName === 'svg')) {
@@ -142,8 +200,13 @@ export function Canvas() {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
-      if (selected !== null && (event.key === 'Delete' || event.key === 'Backspace')) {
-        removeNode(selected);
+      if (selection.length > 0 && (event.key === 'Delete' || event.key === 'Backspace')) {
+        removeSelected();
+      } else if (mod && key === 'a') {
+        event.preventDefault();
+        selectMany(useCanvas.getState().flow?.nodes.map((n) => n.id) ?? []);
+      } else if (event.key === 'Escape') {
+        select(null);
       } else if (mod && key === 'z' && !event.shiftKey) {
         event.preventDefault();
         undo();
@@ -155,12 +218,13 @@ export function Canvas() {
         duplicateSelected();
       } else if (mod && key === 'c') {
         const text = copySelected();
-        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint('Нода скопирована — ⌘V вставит её сюда или в другой flow.'));
+        const n = useCanvas.getState().selection.length;
+        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? `Скопировано нод: ${n}, со связями между ними — ⌘V вставит сюда или в другой flow.` : 'Нода скопирована — ⌘V вставит её сюда или в другой flow.'));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, removeNode, undo, redo, duplicateSelected, copySelected]);
+  }, [selection, removeSelected, selectMany, select, undo, redo, duplicateSelected, copySelected]);
 
   // Вставка: ноды из буфера, картинка → нода картинки, текст → нода промпта. Как в connxn.
   useEffect(() => {
@@ -198,6 +262,10 @@ export function Canvas() {
         <Button variant="primary" size="m" icon={<Icon name="plus" size={1} />} onClick={() => void newFlow()}>
           Новый flow
         </Button>
+        <Text variant="caption" tone="tertiary">
+          или начни с шаблона
+        </Text>
+        <TemplateCards />
       </div>
     );
   }
@@ -207,10 +275,18 @@ export function Canvas() {
   const outPoint = (node: CanvasNode): { x: number; y: number } => ({ x: node.x + NODE_WIDTH[node.type], y: node.y + PORT_TOP });
   const cost = flowCost(flow);
 
+  // Shift+клик по шапке — добавить в выделение или убрать; протяжка выделенной ноды двигает всю группу.
   const onHeaderDown = (event: ReactPointerEvent, node: CanvasNode): void => {
     event.stopPropagation();
-    select(node.id);
-    setAct({ type: 'drag', id: node.id, startX: event.clientX, startY: event.clientY, origX: node.x, origY: node.y });
+    if (event.shiftKey) {
+      select(node.id, true);
+      return;
+    }
+    const inGroup = selection.includes(node.id) && selection.length > 1;
+    if (!inGroup) select(node.id);
+    const ids = inGroup ? selection : [node.id];
+    const origins = flow.nodes.filter((n) => ids.includes(n.id)).map((n) => ({ id: n.id, x: n.x, y: n.y }));
+    setAct({ type: 'drag', id: node.id, startX: event.clientX, startY: event.clientY, origins });
   };
   const onOutputDown = (event: ReactPointerEvent, node: CanvasNode): void => {
     event.stopPropagation();
@@ -231,7 +307,7 @@ export function Canvas() {
   };
 
   /** Что можно создать на конце связи, отпущенной в пустоту, — по типу выхода. */
-  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame'; kind: 'image' | 'video'; port: InputPort }[] => {
+  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim'; kind: 'image' | 'video'; port: InputPort }[] => {
     const from = nodeById.get(fromId);
     if (from === undefined) return [];
     const out = outputOf(from);
@@ -240,7 +316,11 @@ export function Canvas() {
         { label: 'Генератор картинки', type: 'generator', kind: 'image', port: 'prompt' },
         { label: 'Генератор видео', type: 'generator', kind: 'video', port: 'prompt' },
       ];
-    if (out === 'video') return [{ label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' }];
+    if (out === 'video')
+      return [
+        { label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' },
+        { label: 'Обрезка видео', type: 'trim', kind: 'image', port: 'video' },
+      ];
     return [
       { label: 'Генератор картинки · референс', type: 'generator', kind: 'image', port: 'ref' },
       { label: 'Генератор видео · старт-кадр', type: 'generator', kind: 'video', port: 'start' },
@@ -308,6 +388,9 @@ export function Canvas() {
         <Button variant="soft" size="xs" icon={<Icon name="layers" size={0.875} />} title="Первый / последний кадр видео — старт-кадр следующего клипа" onClick={() => addNode('frame', centerWorld().x, centerWorld().y)}>
           Кадр
         </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="time" size={0.875} />} title="Обрезать видео по времени — бесплатно, локально" onClick={() => addNode('trim', centerWorld().x, centerWorld().y)}>
+          Обрезка
+        </Button>
       </header>
 
       <div
@@ -316,6 +399,11 @@ export function Canvas() {
         style={{ backgroundPosition: `${viewport.x}px ${viewport.y}px`, backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px` }}
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) return;
+          // Shift + протяжка — рамка выделения; просто протяжка — сдвиг холста (как раньше).
+          if (event.shiftKey) {
+            setAct({ type: 'marquee', startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY });
+            return;
+          }
           select(null);
           setAct({ type: 'pan', startX: event.clientX, startY: event.clientY, origX: viewport.x, origY: viewport.y });
         }}
@@ -358,7 +446,7 @@ export function Canvas() {
             {linkFrom !== undefined && act?.type === 'link' && <path d={curve(outPoint(linkFrom).x, outPoint(linkFrom).y, act.x, act.y)} className={styles.edgeDraft} />}
           </svg>
           {flow.nodes.map((node) => (
-            <NodeView key={node.id} node={node} selected={node.id === selected} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
+            <NodeView key={node.id} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
           ))}
         </div>
 
@@ -381,6 +469,28 @@ export function Canvas() {
                 Генератор картинки
               </Button>
             </div>
+            <Text variant="caption" tone="tertiary">
+              или начни с шаблона — он откроется новым flow
+            </Text>
+            <TemplateCards />
+          </div>
+        )}
+        {act?.type === 'marquee' && (
+          <div
+            className={styles.marquee}
+            style={{
+              left: Math.min(act.startX, act.x) - (board.current?.getBoundingClientRect().left ?? 0),
+              top: Math.min(act.startY, act.y) - (board.current?.getBoundingClientRect().top ?? 0),
+              width: Math.abs(act.x - act.startX),
+              height: Math.abs(act.y - act.startY),
+            }}
+          />
+        )}
+        {selection.length > 1 && (
+          <div className={styles.selectionBar}>
+            <Text variant="caption" tone="secondary">
+              Выделено: {selection.length} · перетащи любую — двинется группа · ⌘C / ⌘D / Delete
+            </Text>
           </div>
         )}
         {linkMenu !== null && (
@@ -390,7 +500,7 @@ export function Canvas() {
             </Text>
             {linkOptions(linkMenu.from).map((opt) => (
               <button key={opt.label} type="button" role="menuitem" onClick={() => createLinked(opt)}>
-                <Icon name={opt.type === 'frame' ? 'layers' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
+                <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
                 {opt.label}
               </button>
             ))}

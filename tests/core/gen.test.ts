@@ -20,7 +20,8 @@ describe('каталог: набор владельца 27.09', () => {
   });
 
   it('у каждой модели значения по умолчанию проходят её же проверку', () => {
-    for (const m of GEN_MODELS) expect(validateGen(m, 'A test prompt.', defaults(m), []), m.id).toEqual([]);
+    // Инструменты (апскейл): без промпта и с обязательной картинкой — умолчания проверяются в их условиях.
+    for (const m of GEN_MODELS) expect(validateGen(m, m.promptless === true ? '' : 'A test prompt.', defaults(m), Array.from({ length: m.refs.min ?? 0 }, () => 'ref' as const)), m.id).toEqual([]);
   });
 
   it('смена модели: общие параметры переживают, чужие — на умолчания', () => {

@@ -1,0 +1,415 @@
+{
+  "version": 1,
+  "sourceRu": "Ресёрч 003 (27.09.2026), каталог «ошибка → чем чинить»: модель — по аренам LMArena / Artificial Analysis и официальному роутингу Higgsfield; формулировки — из официальных гайдов OpenAI (image prompting, 2.5), ByteDance (Seedream), BFL (Kontext), Google (Gemini image). Для рук и количеств вендорских формулировок нет — шаблон собран из общих правил правки.",
+  "recipes": [
+    {
+      "id": "text",
+      "titleRu": "Поехал текст",
+      "whenRu": "Буквы кривые, опечатки, каша вместо надписи.",
+      "whyRu": "GPT Image 2.5 Sunburst — №1 в правке текста на обеих аренах. Русский официально заявлен у Seedream 5 Pro — он запасной.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "text",
+          "labelRu": "Какой должен быть текст",
+          "placeholder": "Привет, студия",
+          "required": true
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Fix the lettering in image 1 so it reads exactly \"{{text}}\" — letter for letter, spelled correctly. Keep the same position, size, font style, color and perspective as the original lettering. Change only the text. Keep everything else in image 1 exactly the same: composition, people, faces, objects, lighting and colors. No extra text, no watermarks, no unrelated logos.",
+      "sourceRu": "OpenAI: слова в кавычках + положение и типографика, «change only X», «No extra text, no watermarks»; ByteDance: текст в двойных кавычках; BFL: «Replace '[original text]' with '[new text]'».",
+      "group": "fix"
+    },
+    {
+      "id": "face",
+      "titleRu": "Лицо не похоже",
+      "whenRu": "Персонаж потерял сходство — чаще на общем плане, в профиле, при Soul ID издалека.",
+      "whyRu": "Правка с сохранением личности по фото: GPT Image 2.5 Sunburst — №1 на аренах. Higgsfield сам отдаёт правку лица Seedream 5 Pro — он запасной.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "note",
+          "labelRu": "Уточнение (необязательно)",
+          "placeholder": "причёска как на фото, без бороды",
+          "required": false
+        }
+      ],
+      "extraRef": {
+        "labelRu": "Фото лица",
+        "hintRu": "Чёткое фото этого человека: лицо крупно, анфас, ровный свет."
+      },
+      "prompt": "Image 1 is the scene. Image 2 is a reference photo of the person. Give the person in image 1 the face and identity from image 2: the same face shape, eyes, nose, lips, skin tone and hairline. Keep the pose, body, clothing, framing, facial expression and everything else in image 1 exactly the same. Match the lighting, shadows and color temperature of image 1 so the face looks photographed in that scene.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "OpenAI: «Do not change her face, facial features, skin tone, body shape, pose, or identity», «Identify each input by number and purpose», «Match lighting, shadows, and color temperature to the original photo».",
+      "group": "fix"
+    },
+    {
+      "id": "hands",
+      "titleRu": "Руки",
+      "whenRu": "Лишние или слипшиеся пальцы, вывернутые суставы, рука не держит предмет.",
+      "whyRu": "GPT Image 2.5 Sunburst — №1 в анатомии (Artificial Analysis). Вендорских формулировок для рук нет: правка конкретной инструкцией, а не «почини».",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "note",
+          "labelRu": "Что делают руки (необязательно)",
+          "placeholder": "левая держит кружку за ручку, правая в кармане",
+          "required": false
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Fix the hands in image 1: natural, anatomically correct hands — five fingers on each hand, correct joints and proportions, a believable grip on whatever they hold. Change only the hands. Keep everything else in image 1 exactly the same: pose, face, clothing, objects, lighting and colors.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "OpenAI: «Describe body framing, relative scale, gaze, and interaction with objects»; BFL: «Be specific about what changes and explicit about what should stay the same». Вендорских формулировок для рук — Ф0.",
+      "group": "fix"
+    },
+    {
+      "id": "count",
+      "titleRu": "Не то количество",
+      "whenRu": "Предметов или людей больше или меньше, чем нужно.",
+      "whyRu": "GPT Image 2.5 — №1 в сложных композициях; правка конкретного объекта вместо перегенерации.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "note",
+          "labelRu": "Сколько чего должно быть",
+          "placeholder": "ровно три кружки на столе, четвёртую убрать",
+          "required": true
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Correct the number of objects in image 1 as described in the owner's note. Add or remove only those objects, matching their look, lighting and shadows to the scene. Keep everything else in image 1 exactly the same.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "BFL: «Replace the cherries in the right-most jar… Change nothing else»; Google: сложную сцену — по шагам.",
+      "group": "fix"
+    },
+    {
+      "id": "skin",
+      "titleRu": "Пластиковая кожа",
+      "whenRu": "Глянец, «AI-look», кожа без пор, как после бьюти-фильтра.",
+      "whyRu": "Официальный приём OpenAI для фотореализма: фактура и «без ретуши»; Sunburst держит личность при правке.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [],
+      "extraRef": null,
+      "prompt": "Make image 1 look like a real, unretouched photograph: natural skin texture with visible pores, fine lines and small imperfections, realistic hair strands and fabric wear, natural light falloff. No glamorization, no heavy retouching, no beauty filter. Keep the people, faces, identity, pose, clothing, composition and colors exactly the same.",
+      "sourceRu": "OpenAI: «explicitly ask for real texture (pores, wrinkles, fabric wear, imperfections)», «No glamorization, no heavy retouching».",
+      "group": "fix"
+    },
+    {
+      "id": "physics",
+      "titleRu": "Физика и контакт",
+      "whenRu": "Предмет парит, нет тени, рука проходит сквозь предмет, свет на объекте чужой.",
+      "whyRu": "GPT Image 2.5 Sunburst — №1 в физике (Artificial Analysis); правка контакта, теней и света.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "note",
+          "labelRu": "Что именно не так (необязательно)",
+          "placeholder": "кружка висит над столом, нет тени",
+          "required": false
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Fix the physical contact in image 1: objects rest on surfaces and hands hold objects believably, with correct contact shadows, reflections and occlusion. Match the lighting, shadows and color temperature of the scene. Change only what is physically wrong; keep everything else in image 1 exactly the same.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "OpenAI: «Photorealistic contact shadows and fabric texture», «Match lighting, shadows, and color temperature to the original photo».",
+      "group": "fix"
+    },
+    {
+      "id": "detail",
+      "titleRu": "Поменять одну деталь",
+      "whenRu": "Всё хорошо, кроме одной вещи: цвет куртки, предмет в руке, фон за окном.",
+      "whyRu": "«Change only X» — GPT Image 2.5 Sunburst №1 в точечной правке. Пиксельную сохранность не даёт ни одна модель — для этого только монтаж.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        },
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "note",
+          "labelRu": "Что поменять",
+          "placeholder": "куртка не чёрная, а тёмно-зелёная",
+          "required": true
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Change only one thing in image 1 — the owner's note below. Keep everything else in image 1 exactly the same: composition, people, faces, identity, objects, text, lighting and colors.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "OpenAI: «For edits, say \"change only X\" and list the details to preserve»; ByteDance: «keep the area … unchanged».",
+      "group": "fix"
+    },
+    {
+      "id": "bg",
+      "group": "tool",
+      "titleRu": "Убрать фон",
+      "whenRu": "Вырезать человека или предмет на прозрачный фон — для стикера, коллажа, карточки товара.",
+      "whyRu": "Прозрачный фон — официальный параметр GPT Image 2.5 (background: transparent); Seedream так не умеет.",
+      "models": [
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst",
+            "background": "transparent"
+          }
+        }
+      ],
+      "fields": [],
+      "extraRef": null,
+      "prompt": "Remove the background of image 1 completely. Keep the main subject exactly as it is — its shape, edges, hair, colors and details. Transparent background, no shadow, no new objects.",
+      "sourceRu": "OpenAI: background transparent — параметр модели; «change only X», «keep everything else the same»."
+    },
+    {
+      "id": "expand",
+      "group": "tool",
+      "titleRu": "Расширить кадр",
+      "whenRu": "Нужен другой формат без обрезки: из вертикали — горизонталь, больше воздуха вокруг.",
+      "whyRu": "Модель достраивает сцену за краями. Это перерисовка, а не склейка: исходная часть может чуть измениться.",
+      "models": [
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        },
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "key": "aspect",
+          "labelRu": "Новый формат",
+          "placeholder": "",
+          "required": true,
+          "options": [
+            {
+              "value": "16:9",
+              "labelRu": "16:9 — горизонталь",
+              "params": {
+                "aspectRatio": "16:9"
+              }
+            },
+            {
+              "value": "9:16",
+              "labelRu": "9:16 — вертикаль",
+              "params": {
+                "aspectRatio": "9:16"
+              }
+            },
+            {
+              "value": "1:1",
+              "labelRu": "1:1 — квадрат",
+              "params": {
+                "aspectRatio": "1:1"
+              }
+            },
+            {
+              "value": "4:3",
+              "labelRu": "4:3",
+              "params": {
+                "aspectRatio": "4:3"
+              }
+            },
+            {
+              "value": "3:4",
+              "labelRu": "3:4",
+              "params": {
+                "aspectRatio": "3:4"
+              }
+            },
+            {
+              "value": "21:9",
+              "labelRu": "21:9 — кино",
+              "params": {
+                "aspectRatio": "21:9"
+              }
+            }
+          ]
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Extend image 1 to a {{aspect}} frame: keep the original picture unchanged and continue the scene naturally beyond its edges — the same place, lighting, perspective, style and grain. No new main subjects, no text.",
+      "sourceRu": "ByteDance / OpenAI: сказать, что сохранить, и что меняется; официального шаблона outpaint для этих моделей нет — формулировка из общих правил правки."
+    },
+    {
+      "id": "relight",
+      "group": "tool",
+      "titleRu": "Свет",
+      "whenRu": "Кадр хороший, но свет не тот: хочется заката, пасмурной мягкости, неона или вспышки.",
+      "whyRu": "Правка «меняется только свет» — Seedream 5 Pro и GPT Image 2.5 Sunburst держат людей и композицию.",
+      "models": [
+        {
+          "modelId": "kie/seedream-5-pro",
+          "params": {}
+        },
+        {
+          "modelId": "kie/gpt-image-2-5",
+          "params": {
+            "variant": "sunburst"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "key": "light",
+          "labelRu": "Какой свет",
+          "placeholder": "",
+          "required": true,
+          "options": [
+            {
+              "value": "warm golden-hour sunlight from a low angle on one side, long soft shadows, warm highlights",
+              "labelRu": "Золотой час"
+            },
+            {
+              "value": "soft overcast daylight with no hard shadows, gentle even light, slightly cool tones",
+              "labelRu": "Пасмурно, мягко"
+            },
+            {
+              "value": "night light from colorful neon signs — magenta and cyan reflections on skin and surfaces, deep shadows",
+              "labelRu": "Ночь, неон"
+            },
+            {
+              "value": "a direct on-camera phone flash at night — hard flat light on the subject, dark falloff behind, a slight shine on the skin",
+              "labelRu": "Вспышка телефона"
+            },
+            {
+              "value": "clean studio light — a large soft key light from the front-left, gentle fill, neutral background tones",
+              "labelRu": "Студия, софтбокс"
+            },
+            {
+              "value": "strong backlight from behind the subject — a bright rim of light around the hair and shoulders, the face in soft shadow",
+              "labelRu": "Контровой"
+            }
+          ]
+        },
+        {
+          "key": "note",
+          "labelRu": "Уточнение (необязательно)",
+          "placeholder": "солнце слева, тёплое",
+          "required": false
+        }
+      ],
+      "extraRef": null,
+      "prompt": "Relight image 1 with {{light}}. Change only the lighting, shadows, reflections and color temperature, consistently across the whole scene. Keep the people, faces, identity, pose, clothing, composition and all objects exactly the same.\nOwner's note in Russian — follow it: {{note}}",
+      "sourceRu": "OpenAI: «change only X» + список того, что сохранить; «Match lighting, shadows, and color temperature»."
+    },
+    {
+      "id": "upscale",
+      "group": "tool",
+      "titleRu": "Апскейл",
+      "whenRu": "Увеличить картинку в 2 или 4 раза без перерисовки — для печати, обложки, большого экрана.",
+      "whyRu": "Topaz Labs восстанавливает детали и резкость, не меняя содержимое кадра. Цена — по размеру результата: до 2K — 10 кр, до 4K — 20, до 8K — 40.",
+      "models": [
+        {
+          "modelId": "kie/topaz-upscale",
+          "params": {}
+        }
+      ],
+      "fields": [
+        {
+          "key": "factor",
+          "labelRu": "Увеличение",
+          "placeholder": "",
+          "required": true,
+          "options": [
+            {
+              "value": "2",
+              "labelRu": "2×",
+              "params": {
+                "upscaleFactor": "2"
+              }
+            },
+            {
+              "value": "4",
+              "labelRu": "4×",
+              "params": {
+                "upscaleFactor": "4"
+              }
+            },
+            {
+              "value": "1",
+              "labelRu": "1× — только чистка",
+              "params": {
+                "upscaleFactor": "1"
+              }
+            }
+          ]
+        }
+      ],
+      "extraRef": null,
+      "prompt": "",
+      "sourceRu": "Схема — docs.kie.ai/market/topaz/image-upscale; цена — kie.ai/topaz-image-upscale (28.09.2026). Выбор модели — владелец 28.09."
+    }
+  ]
+}

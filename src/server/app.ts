@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
@@ -7,18 +8,25 @@ import { staleFields, type FieldsOutput } from '../core/compose.ts';
 import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
 import { buildFieldsUser, FIELDS_SCHEMA, normalizeFields, validateFields } from '../core/llm/buildFields.ts';
 import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
-import { buildPrompterSystem, buildPrompterUser, cardFile, hasStyles, normalizePrompter, PROMPTER_SCHEMA, validatePrompter, type PrompterOutput, type PrompterRequest } from '../core/llm/buildPrompter.ts';
+import { buildPrompterSystem, buildPrompterUser, cardFile, EMPTY_SHOT, hasStyles, normalizePrompter, PROMPTER_MAX_REFS, PROMPTER_REF_ROLES, PROMPTER_SCHEMA, validatePrompter, type PrompterOutput, type PrompterRequest, type PrompterShot, type PrompterTemplate } from '../core/llm/buildPrompter.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
-import { modelsOf } from '../core/gen/models.ts';
+import { VERDICT_SYMPTOMS, withLearnings } from '../core/gen/calibration.ts';
+import { findModel, modelsOf } from '../core/gen/models.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
+import { buildRegionPrompt, regionProblems, type Box } from '../core/gen/regionEdit.ts';
+import { buildEditInstructionUser, EDIT_INSTRUCTION_SCHEMA, EDIT_INSTRUCTION_SYSTEM, needsTranslation, validateEditInstruction, type EditInstructionOutput } from '../core/llm/buildEditInstruction.ts';
+import { LearningSchema, MoodboardSchema, VerdictSchema } from '../core/model/media.ts';
 import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
 import { buildShot, type PackBundle } from '../core/pipeline.ts';
-import { frameArgs, runFfmpeg, type FfmpegRunner } from './gen/ffmpeg.ts';
+import { cropArgs, frameArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
 import { GEN_HTTP, GenError } from './gen/provider.ts';
 import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
+import type { ImageInput } from './llm/claudeCli/args.ts';
 import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
 import { createFlows } from './storage/flows.ts';
+import { createJournal } from './storage/journal.ts';
+import { createMoodboards } from './storage/moodboards.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
 
 export const HOST = '127.0.0.1';
@@ -33,6 +41,8 @@ const ALLOWED_ORIGINS = new Set([`http://${HOST}:${PORT}`, `http://localhost:${P
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 const MAX_REF_BYTES = 30 * 1024 * 1024;
+/** Копия для vision ≤1568 px в JPEG — это сотни КБ; 4 млн знаков base64 ≈ 3 МБ — с запасом, но не «что угодно». */
+const MAX_VISION_BASE64 = 4_000_000;
 
 export interface AppOptions {
   /** Корень репозитория: отсюда читается packs/. */
@@ -75,6 +85,8 @@ export function createApp(options: AppOptions) {
   const store = createStore(options.dataDir);
   const gen = options.gen ?? createGenRuntime({ dataDir: options.dataDir });
   const flows = createFlows(options.dataDir);
+  const moodboards = createMoodboards(options.dataDir);
+  const journal = createJournal(options.dataDir);
   const app = new Hono();
 
   // Сервер локальный, но любая веб-страница в браузере владельца может стучаться в localhost.
@@ -296,37 +308,129 @@ export function createApp(options: AppOptions) {
         throw error;
       }
     })
+    // Точечная правка кистью (решение 32): рамки выделения + русская инструкция → английский промпт для Seedream 5 Pro.
+    // Только по клику «Изменить»; генерацию запускает клиент тем же /api/gen/jobs с гейтом цены.
+    .post('/api/llm/region-edit', async (c) => {
+      const body = (await c.req.json()) as { instructionRu?: unknown; boxes?: unknown };
+      const instructionRu = typeof body.instructionRu === 'string' ? body.instructionRu.trim() : '';
+      const isCoord = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 999;
+      const boxes = (Array.isArray(body.boxes) ? body.boxes : []) as Box[];
+      const valid = boxes.every((b) => isCoord(b.x1) && isCoord(b.y1) && isCoord(b.x2) && isCoord(b.y2) && b.x2 > b.x1 && b.y2 > b.y1);
+      const problems = valid ? regionProblems(boxes, instructionRu) : ['Рамки выделения не прочитаны.'];
+      if (problems.length > 0) return c.json({ error: 'BAD_REGION', messageRu: problems.join(' ') }, 422);
+      if (!needsTranslation(instructionRu)) return c.json({ prompt: buildRegionPrompt(boxes, instructionRu), instructionEn: instructionRu, meta: null });
+      const run = options.runLlm ?? runClaude;
+      const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: process.env.SP_EDIT_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'low' as const, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
+      try {
+        const user = buildEditInstructionUser(instructionRu, boxes.length);
+        let result = await run<EditInstructionOutput>({ ...request, user });
+        let issues = validateEditInstruction(result.data);
+        if (issues.length > 0) {
+          result = await run<EditInstructionOutput>({ ...request, user: `${user}\n\nYour previous answer was rejected:\n${issues.map((p) => `- ${p}`).join('\n')}\n\nPrevious answer:\n${JSON.stringify(result.data)}` });
+          issues = validateEditInstruction(result.data);
+        }
+        if (issues.length > 0) return c.json({ error: 'BAD_TRANSLATION', messageRu: 'Инструкция не перевелась чисто — переформулируй короче.' }, 422);
+        const instructionEn = result.data.instructionEn.trim();
+        return c.json({ prompt: buildRegionPrompt(boxes, instructionEn), instructionEn, meta: result.meta });
+      } catch (error) {
+        if (error instanceof LlmError) return c.json({ error: error.code, messageRu: error.messageRu }, error.code === 'USAGE_LIMIT' ? 429 : 502);
+        throw error;
+      }
+    })
+    // Калибровка (этап 4, решение 33): наборы тестов, оценки владельца и его правила для моделей.
+    .get('/api/calibration', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', 'prompter', 'calibration.json'), 'utf8')) as unknown))
+    .get('/api/verdicts', async (c) => c.json(await journal.verdicts.list()))
+    .put('/api/verdicts/:mediaId', async (c) => {
+      const mediaId = c.req.param('mediaId');
+      const body = (await c.req.json()) as { verdict?: unknown; symptoms?: unknown; noteRu?: unknown };
+      const entry = VerdictSchema.safeParse({ mediaId, verdict: body.verdict, symptoms: Array.isArray(body.symptoms) ? body.symptoms.filter((s) => VERDICT_SYMPTOMS.some((v) => v.id === s)) : [], noteRu: typeof body.noteRu === 'string' ? body.noteRu.trim() : '', at: new Date().toISOString() });
+      if (!entry.success) return c.json({ error: 'BAD_VERDICT', messageRu: 'Оценка — годно, почти или мимо.' }, 422);
+      if (!(await gen.library.list()).some((m) => m.id === mediaId)) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+      return c.json(await journal.verdicts.update((list) => [...list.filter((v) => v.mediaId !== mediaId), entry.data]));
+    })
+    .delete('/api/verdicts/:mediaId', async (c) => {
+      const mediaId = c.req.param('mediaId');
+      return c.json(await journal.verdicts.update((list) => list.filter((v) => v.mediaId !== mediaId)));
+    })
+    .get('/api/learnings', async (c) => c.json(await journal.learnings.list()))
+    .post('/api/learnings', async (c) => {
+      const body = (await c.req.json()) as { modelId?: unknown; textRu?: unknown; evidence?: unknown };
+      const learning = LearningSchema.safeParse({ id: `l-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`, modelId: body.modelId, textRu: typeof body.textRu === 'string' ? body.textRu.trim() : '', evidence: Array.isArray(body.evidence) ? body.evidence.filter((e) => typeof e === 'string') : [], at: new Date().toISOString() });
+      if (!learning.success || findModel(learning.data.modelId) === undefined) return c.json({ error: 'BAD_LEARNING', messageRu: 'Правилу нужна модель и текст до 400 знаков.' }, 422);
+      return c.json(await journal.learnings.update((list) => [...list, learning.data]), 201);
+    })
+    .delete('/api/learnings/:id', async (c) => {
+      const id = c.req.param('id');
+      return c.json(await journal.learnings.update((list) => list.filter((l) => l.id !== id)));
+    })
+    // Рецепты починки (этап 2): данные pack — «Правка» в просмотре работы подставляет модель и формулировку.
+    .get('/api/prompter/fixes', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', 'prompter', 'fixes.json'), 'utf8')) as unknown))
+    // Шаблоны промптера (этап 3): лист персонажа, лист предмета — данные pack.
+    .get('/api/prompter/templates', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', 'prompter', 'templates.json'), 'utf8')) as unknown))
+    // Свои мудборды (этап 3): набор картинок стиля под именем; удаление мудборда картинки не трогает.
+    .get('/api/moodboards', async (c) => c.json(await moodboards.list()))
+    .post('/api/moodboards', async (c) => {
+      const body = (await c.req.json()) as { name?: unknown; images?: unknown };
+      const board = MoodboardSchema.safeParse({ id: `mb-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`, name: typeof body.name === 'string' ? body.name.trim() : '', images: body.images, createdAt: new Date().toISOString() });
+      if (!board.success || board.data.images.length === 0) return c.json({ error: 'BAD_MOODBOARD', messageRu: 'Мудборду нужно имя и от 1 до 8 картинок.' }, 422);
+      return c.json(await moodboards.update((list) => [board.data, ...list]), 201);
+    })
+    .delete('/api/moodboards/:id', async (c) => {
+      const id = c.req.param('id');
+      return c.json(await moodboards.update((list) => list.filter((m) => m.id !== id)));
+    })
     // Промптер (решение 28): идея по-русски → промпт под модель. Только по клику; генерацию не запускает.
     .post('/api/llm/prompter', async (c) => {
-      const body = (await c.req.json()) as Partial<PrompterRequest>;
+      const body = (await c.req.json()) as Partial<PrompterRequest> & { images?: unknown };
       const kind = body.kind === 'video' ? 'video' : 'image';
       const ideaRu = typeof body.ideaRu === 'string' ? body.ideaRu.trim() : '';
       if (ideaRu === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши идею по-русски — хотя бы одним предложением.' }, 422);
       const modelId = typeof body.modelId === 'string' ? body.modelId : 'auto';
       const candidates = modelId === 'auto' ? modelsOf(kind) : modelsOf(kind).filter((m) => m.id === modelId);
       if (candidates.length === 0) return c.json({ error: 'NO_MODEL', messageRu: 'Такой модели нет в студии.' }, 422);
+      // Референсы: роль и комментарий владельца + уменьшенная копия (браузер делает JPEG ≤1568 px) в том же порядке.
+      const refs = Array.isArray(body.refs) ? body.refs : [];
+      const images = Array.isArray(body.images) ? (body.images as ImageInput[]) : [];
+      const frameInImage = kind === 'image' && refs.some((r) => r.role === 'start' || r.role === 'end');
+      if (refs.length > PROMPTER_MAX_REFS || images.length !== refs.length || frameInImage || refs.some((r) => !(PROMPTER_REF_ROLES as readonly string[]).includes(r.role) || typeof r.commentRu !== 'string')) {
+        return c.json({ error: 'BAD_REFS', messageRu: `Референсы не прочитаны: до ${PROMPTER_MAX_REFS} картинок, у каждой роль и комментарий; кадры видео — только для видео.` }, 422);
+      }
+      if (images.some((image) => !['image/jpeg', 'image/png', 'image/webp'].includes(image.mediaType) || typeof image.base64 !== 'string' || image.base64.length > MAX_VISION_BASE64)) {
+        return c.json({ error: 'BAD_IMAGE', messageRu: 'Картинка референса не подошла — нужна уменьшенная копия JPEG / PNG / WebP до ~3 МБ.' }, 422);
+      }
       const prev = body.previous;
       const previous = prev !== undefined && typeof prev.prompt === 'string' && typeof prev.modelId === 'string' ? { modelId: prev.modelId, prompt: prev.prompt, params: prev.params, styleName: typeof prev.styleName === 'string' ? prev.styleName : '' } : undefined;
-      const request: PrompterRequest = { ideaRu, kind, modelId, commentRu: typeof body.commentRu === 'string' ? body.commentRu : undefined, previous };
+      const rawShot = (body.shot ?? {}) as Partial<Record<keyof PrompterShot, unknown>>;
+      const shot = Object.fromEntries(Object.keys(EMPTY_SHOT).map((key) => [key, typeof rawShot[key as keyof PrompterShot] === 'string' ? rawShot[key as keyof PrompterShot] : ''])) as unknown as PrompterShot;
+      // Комплект камеры — тот же pack, что у «Кадров»; для картинки агент берёт из него только видимое.
+      const kit = shot.cameraKitId === '' || shot.cameraKitId === 'custom' ? undefined : loadPack(options.rootDir, 'cinema-doc').kits[shot.cameraKitId];
+      if (shot.cameraKitId !== '' && shot.cameraKitId !== 'custom' && kit === undefined) return c.json({ error: 'NO_KIT', messageRu: 'Такого комплекта камеры нет.' }, 422);
+      const camera = kit === undefined ? null : { titleRu: kit.titleRu, anchor: kit.anchor, look: (kit.layout === 'split' ? [kit.cameraSpecs, kit.lensSpecs] : [kit.look, kit.lensNote]).filter((part) => typeof part === 'string' && part !== '').join(' ') };
       const dir = path.join(options.rootDir, 'packs', 'prompter');
+      const templateId = typeof body.template === 'string' ? body.template : '';
+      const template = templateId === '' ? null : ((JSON.parse(readFileSync(path.join(dir, 'templates.json'), 'utf8')) as { templates: PrompterTemplate[] }).templates.find((t) => t.id === templateId && t.kind === kind) ?? null);
+      if (templateId !== '' && template === null) return c.json({ error: 'NO_TEMPLATE', messageRu: 'Такого шаблона нет.' }, 422);
+      const request: PrompterRequest = { ideaRu, kind, modelId, template: templateId, refs, shot, commentRu: typeof body.commentRu === 'string' ? body.commentRu : undefined, previous };
+      const learnings = await journal.learnings.list();
       const system = buildPrompterSystem(
         readFileSync(path.join(dir, 'system.md'), 'utf8'),
         readFileSync(path.join(dir, 'routing.md'), 'utf8'),
-        candidates.map((m) => ({ modelId: m.id, text: readFileSync(path.join(dir, 'models', cardFile(m.id)), 'utf8') })),
+        // Правила владельца из калибровки дописываются в карточку — они главнее заявлений вендора.
+        candidates.map((m) => ({ modelId: m.id, text: withLearnings(readFileSync(path.join(dir, 'models', cardFile(m.id)), 'utf8'), learnings.filter((l) => l.modelId === m.id)) })),
       );
       // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
       const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
       const run = options.runLlm ?? runClaude;
-      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
+      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium' as const, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
       try {
-        const user = buildPrompterUser(request, candidates, styles);
+        const user = buildPrompterUser(request, candidates, styles, camera, template);
         let result = await run<PrompterOutput>({ ...llm, user });
-        let problems = validatePrompter(result.data, candidates, styles);
+        let problems = validatePrompter(result.data, candidates, styles, refs, shot, template);
         if (problems.length > 0) {
           result = await run<PrompterOutput>({ ...llm, user: `${user}\n\nYour previous answer was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious answer:\n${JSON.stringify(result.data)}` });
-          problems = validatePrompter(result.data, candidates, styles);
+          problems = validatePrompter(result.data, candidates, styles, refs, shot, template);
         }
-        const output = normalizePrompter(result.data, styles);
+        const output = normalizePrompter(result.data, styles, refs, shot);
         if (output === null) return c.json({ error: 'BAD_MODEL', messageRu: 'Агент выбрал модель, которой нет в студии. Попробуй ещё раз.' }, 422);
         return c.json({ result: output, problems, meta: result.meta });
       } catch (error) {
@@ -468,6 +572,76 @@ export function createApp(options: AppOptions) {
         return c.json(item, 201);
       } catch (error) {
         return c.json({ error: 'FRAME_FAILED', messageRu: error instanceof Error ? error.message : 'Кадр не извлёкся.' }, 500);
+      }
+    })
+    // Обрезка видео по времени (решение 35): нода canvas «Обрезка», бесплатно, локально ffmpeg; результат — новое видео библиотеки.
+    .post('/api/library/:id/trim', async (c) => {
+      const video = await gen.library.get(c.req.param('id'));
+      if (video === undefined || video.kind !== 'video') return c.json({ error: 'NOT_VIDEO', messageRu: 'Обрезать по времени можно видео из библиотеки.' }, 422);
+      const body = (await c.req.json()) as { start?: unknown; end?: unknown };
+      const start = typeof body.start === 'number' && body.start >= 0 ? Math.round(body.start * 100) / 100 : null;
+      const end = typeof body.end === 'number' && body.end >= 0 ? Math.round(body.end * 100) / 100 : null;
+      if (start === null || end === null || (end !== 0 && end - start < 0.2)) return c.json({ error: 'BAD_TRIM', messageRu: 'Конец должен быть позже начала хотя бы на 0.2 с (0 — до конца).' }, 422);
+      const label = `Обрезка ${start.toFixed(1)}–${end === 0 ? 'конец' : `${end.toFixed(1)} с`}`;
+      // Тот же отрезок того же видео — тот же файл: повторный клик не плодит копии.
+      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/trim' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
+      if (existing !== undefined) return c.json(existing);
+      const out = path.join(gen.library.root, `.trim-${video.id}-${Date.now().toString(36)}.mp4`);
+      try {
+        await (options.ffmpeg ?? runFfmpeg)(trimArgs(gen.library.pathOf(video), out, start, end));
+        const item = await gen.library.importFile(out, 'mp4', {
+          kind: 'video',
+          jobId: 'local-trim',
+          taskId: null,
+          provider: 'local',
+          modelId: 'local/trim',
+          providerModel: 'ffmpeg',
+          prompt: label,
+          params: {},
+          refs: [{ label: 'Видео', source: { type: 'media', mediaId: video.id }, role: 'ref' }],
+          origin: video.origin,
+          sessionId: video.sessionId,
+          index: 0,
+          sourceUrl: '',
+          creditsConsumed: 0,
+          createdAt: new Date().toISOString(),
+        });
+        return c.json(item, 201);
+      } catch (error) {
+        return c.json({ error: 'TRIM_FAILED', messageRu: error instanceof Error ? error.message : 'Видео не обрезалось.' }, 500);
+      }
+    })
+    // Обрезка (решение 34): бесплатно, локально ffmpeg; результат — новая версия (исходник — референс), провайдер не нужен.
+    .post('/api/library/:id/crop', async (c) => {
+      const image = await gen.library.get(c.req.param('id'));
+      if (image === undefined || image.kind !== 'image') return c.json({ error: 'NOT_IMAGE', messageRu: 'Обрезать можно картинку из библиотеки.' }, 422);
+      const body = (await c.req.json()) as { x?: unknown; y?: unknown; w?: unknown; h?: unknown; labelRu?: unknown };
+      const part = (v: unknown): number | null => (typeof v === 'number' && v >= 0 && v <= 1 ? Math.round(v * 10_000) / 10_000 : null);
+      const [x, y, w, h] = [part(body.x), part(body.y), part(body.w), part(body.h)];
+      if (x === null || y === null || w === null || h === null || w < 0.02 || h < 0.02 || x + w > 1.0001 || y + h > 1.0001) return c.json({ error: 'BAD_CROP', messageRu: 'Рамка обрезки вышла за картинку или слишком мала.' }, 422);
+      const out = path.join(gen.library.root, `.crop-${image.id}-${Date.now().toString(36)}.png`);
+      try {
+        await (options.ffmpeg ?? runFfmpeg)(cropArgs(gen.library.pathOf(image), out, { x, y, w, h }));
+        const item = await gen.library.importFile(out, 'png', {
+          kind: 'image',
+          jobId: 'local-crop',
+          taskId: null,
+          provider: 'local',
+          modelId: 'local/crop',
+          providerModel: 'ffmpeg',
+          prompt: typeof body.labelRu === 'string' && body.labelRu.trim() !== '' ? `Обрезка · ${body.labelRu.trim().slice(0, 40)}` : 'Обрезка',
+          params: {},
+          refs: [{ label: 'Исходник', source: { type: 'media', mediaId: image.id }, role: 'ref' }],
+          origin: image.origin,
+          sessionId: image.sessionId,
+          index: 0,
+          sourceUrl: '',
+          creditsConsumed: 0,
+          createdAt: new Date().toISOString(),
+        });
+        return c.json(item, 201);
+      } catch (error) {
+        return c.json({ error: 'CROP_FAILED', messageRu: error instanceof Error ? error.message : 'Обрезка не удалась.' }, 500);
       }
     })
     .post('/api/library/:id/reveal', async (c) => {
