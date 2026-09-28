@@ -5,6 +5,7 @@ import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
 import { createServer as createViteServer } from 'vite';
 import { createApp, HOST, PORT } from './app.ts';
+import { createGenRuntime } from './gen/runtime.ts';
 import { APP_NAME } from '../core/meta.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -34,7 +35,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const app = createApp({ rootDir: ROOT, dataDir: path.join(ROOT, 'data') });
+  const dataDir = process.env.SP_DATA_DIR ?? path.join(ROOT, 'data');
+  // Фоновый опрос задач генерации: продолжает незаконченные после перезапуска и скачивает результаты.
+  const gen = createGenRuntime({ dataDir });
+  await gen.start();
+  const app = createApp({ rootDir: ROOT, dataDir, gen });
   const apiListener = getRequestListener(app.fetch);
 
   const httpServer = createHttpServer();
@@ -53,6 +58,7 @@ async function main(): Promise<void> {
   });
 
   const shutdown = (): void => {
+    gen.stop();
     void vite.close().finally(() => {
       httpServer.close(() => process.exit(0));
       setTimeout(() => process.exit(0), 1500).unref();

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { estimate, findModel, formatCost, paramsFor, validateGen } from '../../core/gen/models.ts';
 import type { Project, Shot } from '../../core/model/project.ts';
 import type { ShotBuild } from '../../core/pipeline.ts';
-import { Button, Dialog, Icon, Tag, Text, type TagTone } from '../ui/components/index.ts';
+import { hasRefsConsent, useGen } from '../gen/genStore.ts';
+import { Button, Dialog, Icon, SegmentedControl, Switch, Tag, Text, type TagTone } from '../ui/components/index.ts';
 import { useStore } from '../store.ts';
 import { PromptText } from './PromptText.tsx';
 import styles from './ExportCard.module.css';
@@ -59,6 +61,57 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const passed = items.every((item) => item.auto === true || ticks.includes(item.id));
   const tick = (id: string, on: boolean): void => setGate({ prompt: build.prompt, ticks: on ? [...ticks, id] : ticks.filter((x) => x !== id) });
 
+  // Генерация отсюда (решения 21–23): Seedance 2.5 через KIE. Формат и длительность — из кадра, картинки — панель по
+  // порядку (@ImageN). Настройки Higgsfield и порядок загрузки сервер выставляет сам — эти пункты чек-листа не нужны.
+  const gen = useGen();
+  const { loadStatus } = gen;
+  const [genRes, setGenRes] = useState('720p');
+  const [genAudio, setGenAudio] = useState(true);
+  const [consent, setConsent] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genState, setGenState] = useState<{ prompt: string; n: number; errorRu?: string } | null>(null);
+  useEffect(() => {
+    if (open) void loadStatus();
+  }, [open, loadStatus]);
+  const seedance = findModel('kie/seedance-2-5');
+  const genParams = seedance === undefined ? {} : paramsFor(seedance, { resolution: genRes, aspectRatio: project.aspectRatio, durationSec, audio: genAudio });
+  const panelFiles = shot.panel.map((key, i) => ({ n: i + 1, label: refByKey.get(key)?.label ?? key, file: refByKey.get(key)?.file ?? null }));
+  const genCost = seedance === undefined ? null : estimate(seedance, genParams, 1, panelFiles.length);
+  const apiPassed = items.filter((item) => item.id !== 'settings' && item.id !== 'panel').every((item) => item.auto === true || ticks.includes(item.id));
+  const needConsent = panelFiles.length > 0 && !hasRefsConsent() && !consent;
+  const genProblems = [
+    ...(gen.status.kie !== undefined && !gen.status.kie.hasKey ? [`KIE: ${gen.status.kie.keyProblem ?? 'нет ключа'}.`] : []),
+    ...panelFiles.filter((f) => f.file === null).map((f) => `У картинки ${f.n} панели нет файла.`),
+    ...(seedance === undefined ? [] : validateGen(seedance, build.prompt, genParams, panelFiles.map(() => 'ref' as const))),
+  ];
+  const generate = async (): Promise<void> => {
+    if (seedance === undefined || genCost === null) return;
+    setGenBusy(true);
+    const n = savedN?.prompt === build.prompt ? savedN.n : nextAttempt;
+    if (savedN?.prompt !== build.prompt) {
+      store.saveAttempt(build.prompt);
+      setSavedN({ prompt: build.prompt, n });
+    }
+    try {
+      const jobs = await gen.run({
+        modelId: seedance.id,
+        prompt: build.prompt,
+        params: genParams,
+        refs: panelFiles.map((f) => ({ label: f.label, source: { type: 'projectRef', slug: project.slug, file: f.file ?? '' }, role: 'ref' })),
+        count: 1,
+        confirmCredits: genCost.credits,
+        refsConsent: panelFiles.length > 0 ? true : undefined,
+        origin: { projectSlug: project.slug, shotId: shot.id, attemptN: n },
+      });
+      setGenState({ prompt: build.prompt, n, errorRu: jobs.find((j) => j.status === 'failed')?.error?.messageRu });
+    } catch (error) {
+      setGenState({ prompt: build.prompt, n, errorRu: error instanceof Error ? error.message : 'Генерация не запустилась.' });
+    } finally {
+      setGenBusy(false);
+    }
+  };
+  const launched = genState?.prompt === build.prompt ? genState : null;
+
   const copy = async (): Promise<void> => {
     await navigator.clipboard.writeText(build.prompt);
     setCopied(build.prompt);
@@ -84,8 +137,47 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={`Кадр ${shotIndex + 1} → Higgsfield`} description="Всё, что нужно перенести, в порядке действий там. Здесь ничего не редактируется." footer={footer}>
+    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={`Кадр ${shotIndex + 1} → генерация`} description="Сгенерировать здесь через KIE — или перенести в Higgsfield вручную по шагам ниже. Здесь ничего не редактируется." footer={footer}>
       <div className={styles.steps}>
+        <section className={styles.step}>
+          <StepHead n="▶" title="Сгенерировать здесь — Seedance 2.5 через KIE" />
+          <div className={styles.row}>
+            <SegmentedControl<string> aria-label="Разрешение" size="s" value={genRes} onChange={setGenRes} options={['480p', '720p', '1080p'].map((r) => ({ value: r, label: r }))} />
+            <Switch checked={genAudio} onChange={setGenAudio} label="Звук" />
+            <div className={styles.chips}>
+              <Tag tone="neutral">{project.aspectRatio}</Tag>
+              <Tag tone="neutral">{durationSec} с</Tag>
+              <Tag tone="outline">картинок: {panelFiles.length} → @Image1…</Tag>
+            </div>
+          </div>
+          {panelFiles.length > 0 && !hasRefsConsent() && (
+            <label className={styles.gateItem}>
+              <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+              <Text variant="label">Картинки панели ({panelFiles.length}) уйдут в KIE, а оттуда — исполнителю модели (fal). Если на них лицо, оно тоже уйдёт.</Text>
+            </label>
+          )}
+          {genProblems.length > 0 && (
+            <Text variant="caption" tone="secondary">
+              {genProblems.join(' ')}
+            </Text>
+          )}
+          {!apiPassed && (
+            <Text variant="caption" tone="secondary">
+              Отметь пункты чек-листа в шаге 5 (кроме настроек Higgsfield и порядка картинок — их сервер выставит сам).
+            </Text>
+          )}
+          <div className={styles.row}>
+            <Button variant="dark" size="m" icon={<Icon name="sparkle" />} loading={genBusy} disabled={!apiPassed || needConsent || genProblems.length > 0 || genCost === null} onClick={() => void generate()}>
+              Сгенерировать{genCost === null ? '' : ` · ${formatCost(genCost)}`}
+            </Button>
+            {launched !== null && (
+              <Text variant="label" tone={launched.errorRu === undefined ? 'secondary' : 'accent'}>
+                {launched.errorRu ?? `Попытка №${launched.n} запущена — результат появится в блоке «Попытки» и в библиотеке, файл сразу на диске.`}
+              </Text>
+            )}
+          </div>
+        </section>
+
         <section className={styles.step}>
           <StepHead n="1" title="Настройки генерации" />
           <div className={styles.chips}>

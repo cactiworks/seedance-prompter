@@ -4,6 +4,7 @@ import type { Attempt } from '../../core/model/project.ts';
 import { Button, Card, Icon, SegmentedControl, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
 import { currentShot, useStore } from '../store.ts';
 import styles from './Attempts.module.css';
+import { ShotGenerations } from './ShotGenerations.tsx';
 
 const VERDICT: Record<Attempt['verdict'], { label: string; tone: TagTone }> = {
   pending: { label: 'жду результат', tone: 'outline' },
@@ -62,6 +63,8 @@ export function Attempts({ prompt, canSave }: { prompt: string; canSave: boolean
               </button>
             ))}
           </div>
+
+          {store.project !== null && <ShotGenerations slug={store.project.slug} shotId={shot.id} attemptN={attempt.n} />}
 
           <div className={styles.row}>
             <Text variant="label" tone="secondary">Итог генерации</Text>

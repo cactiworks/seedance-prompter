@@ -11,12 +11,17 @@ import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type Vi
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
 import { buildShot, type PackBundle } from '../core/pipeline.ts';
+import { frameArgs, runFfmpeg, type FfmpegRunner } from './gen/ffmpeg.ts';
+import { GEN_HTTP, GenError } from './gen/provider.ts';
+import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
 import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
+import { createFlows } from './storage/flows.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
 
 export const HOST = '127.0.0.1';
-export const PORT = 4317;
+/** SP_PORT — второй экземпляр для проверки, пока основной занят (с SP_DATA_DIR, чтобы не делить данные). */
+export const PORT = Number(process.env.SP_PORT ?? 4317);
 
 /** Заголовок, который обязан прислать наш клиент на любой мутации. */
 export const CLIENT_HEADER = 'x-sp-client';
@@ -37,11 +42,17 @@ export interface AppOptions {
   writerModel?: string;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
+  /** Генерация и библиотека. По умолчанию — живые провайдеры, фоновый опрос не запущен (его запускает index.ts). */
+  gen?: GenRuntime;
+  /** ffmpeg для кадра из видео; в тестах — подмена, которая пишет файл сама. */
+  ffmpeg?: FfmpegRunner;
 }
 
-function revealInFinder(dir: string): void {
+function revealInFinder(target: string): void {
   if (process.platform !== 'darwin') return;
-  spawn('open', [dir], { stdio: 'ignore', detached: true }).unref();
+  // Файл — выделить в его папке; папку — открыть.
+  const args = /\.[a-z0-9]{2,4}$/i.test(target) ? ['-R', target] : [target];
+  spawn('open', args, { stdio: 'ignore', detached: true }).unref();
 }
 
 function loadPack(rootDir: string, id: string): PackBundle {
@@ -60,6 +71,8 @@ const STATUS: Record<StoreError['code'], 400 | 404 | 409 | 422> = { BAD_SLUG: 40
 
 export function createApp(options: AppOptions) {
   const store = createStore(options.dataDir);
+  const gen = options.gen ?? createGenRuntime({ dataDir: options.dataDir });
+  const flows = createFlows(options.dataDir);
   const app = new Hono();
 
   // Сервер локальный, но любая веб-страница в браузере владельца может стучаться в localhost.
@@ -80,6 +93,8 @@ export function createApp(options: AppOptions) {
 
   app.onError((error, c) => {
     if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
+    if (error instanceof SubmitError) return c.json({ error: error.code, messageRu: error.messageRu, ...error.details }, error.status);
+    if (error instanceof GenError) return c.json({ error: error.code, messageRu: error.messageRu }, GEN_HTTP[error.code]);
     console.error(error);
     return c.json({ error: 'INTERNAL', messageRu: 'Внутренняя ошибка сервера.' }, 500);
   });
@@ -283,6 +298,153 @@ export function createApp(options: AppOptions) {
       const file = c.req.param('file');
       const bytes = await store.readRef(c.req.param('slug'), file);
       return c.body(bytes as Uint8Array<ArrayBuffer>, 200, { 'content-type': MIME[file.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
+    })
+    // Генерация (решения 21–22): ключ провайдера и баланс; баланс — только по запросу, это обращение наружу.
+    .get('/api/gen/status', async (c) => c.json(await gen.status(c.req.query('balance') === '1')))
+    // Только по клику: сервер сверяет подтверждённую сумму с оценкой и согласие на отправку рефов.
+    .post('/api/gen/jobs', async (c) => c.json(await gen.submit(await c.req.json()), 202))
+    .get('/api/gen/jobs', async (c) => {
+      const { slug, shotId, sessionId, kind } = c.req.query();
+      const all = await gen.jobs.all();
+      return c.json(
+        all
+          .filter((job) => (slug === undefined || job.origin?.projectSlug === slug) && (shotId === undefined || job.origin?.shotId === shotId) && (sessionId === undefined || job.sessionId === sessionId) && (kind === undefined || job.kind === kind))
+          .slice(0, 300),
+      );
+    })
+    // Canvas: flows пишет клиент (автосейв), сервер хранит. Генерации из нод идут тем же /api/gen/jobs.
+    .get('/api/canvas/flows', async (c) => c.json(await flows.list()))
+    .post('/api/canvas/flows', async (c) => {
+      const body = (await c.req.json()) as { name?: string };
+      return c.json(await flows.create(body.name ?? ''), 201);
+    })
+    .get('/api/canvas/flows/:id', async (c) => {
+      const flow = await flows.get(c.req.param('id'));
+      return flow === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Flow не найден.' }, 404) : c.json(flow);
+    })
+    .put('/api/canvas/flows/:id', async (c) => {
+      const saved = await flows.save(c.req.param('id'), await c.req.json());
+      return saved === null ? c.json({ error: 'INVALID', messageRu: 'Flow не сохранён: неверная структура.' }, 422) : c.json(saved);
+    })
+    .delete('/api/canvas/flows/:id', async (c) => ((await flows.remove(c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'NOT_FOUND', messageRu: 'Flow не найден.' }, 404)))
+    // Сессии студии: лента генераций одного типа (Картинки / Видео).
+    .get('/api/studio/sessions', async (c) => {
+      const kind = c.req.query('kind');
+      return c.json(await gen.sessions.list(kind === 'image' || kind === 'video' ? kind : undefined));
+    })
+    .post('/api/studio/sessions', async (c) => {
+      const body = (await c.req.json()) as { kind?: string; title?: string };
+      if (body.kind !== 'image' && body.kind !== 'video') return c.json({ error: 'BAD_KIND', messageRu: 'Тип сессии — image или video.' }, 422);
+      return c.json(await gen.sessions.create(body.kind, body.title ?? ''), 201);
+    })
+    .patch('/api/studio/sessions/:id', async (c) => {
+      const body = (await c.req.json()) as { title?: unknown; pinned?: unknown };
+      const updated = await gen.sessions.update(c.req.param('id'), { ...(typeof body.title === 'string' ? { title: body.title } : {}), ...(typeof body.pinned === 'boolean' ? { pinned: body.pinned } : {}) });
+      return updated === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Сессия не найдена.' }, 404) : c.json(updated);
+    })
+    // Удаляется только сессия; файлы остаются в библиотеке.
+    .delete('/api/studio/sessions/:id', async (c) => ((await gen.sessions.remove(c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'NOT_FOUND', messageRu: 'Сессия не найдена.' }, 404)))
+    .get('/api/gen/jobs/:id', async (c) => {
+      const job = await gen.jobs.get(c.req.param('id'));
+      return job === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Задача не найдена.' }, 404) : c.json(job);
+    })
+    // «Скачать снова» после download_failed и «Проверить снова» после таймаута опроса. Новых кредитов не тратит.
+    .post('/api/gen/jobs/:id/retry', async (c) => c.json(await gen.retry(c.req.param('id'))))
+    .get('/api/library', async (c) => c.json({ items: await gen.library.list(), favorites: await gen.library.favorites(), folders: await gen.library.folders() }))
+    // Папки библиотеки (как проекты в Assets у Higgsfield). Удаление папки файлы не трогает.
+    .post('/api/library/folders', async (c) => {
+      const body = (await c.req.json()) as { name?: unknown };
+      const name = typeof body.name === 'string' && body.name.trim() !== '' ? body.name.trim().slice(0, 80) : 'Новая папка';
+      const folder = { id: `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`, name, mediaIds: [], createdAt: new Date().toISOString() };
+      await gen.library.updateFolders((list) => [...list, folder]);
+      return c.json(folder, 201);
+    })
+    .patch('/api/library/folders/:id', async (c) => {
+      const body = (await c.req.json()) as { name?: unknown };
+      const id = c.req.param('id');
+      if (typeof body.name !== 'string' || body.name.trim() === '') return c.json({ error: 'BAD_NAME', messageRu: 'Пустое имя папки.' }, 422);
+      const name = body.name.trim().slice(0, 80);
+      const folders = await gen.library.updateFolders((list) => list.map((f) => (f.id === id ? { ...f, name } : f)));
+      return c.json({ folders });
+    })
+    .delete('/api/library/folders/:id', async (c) => {
+      const id = c.req.param('id');
+      return c.json({ folders: await gen.library.updateFolders((list) => list.filter((f) => f.id !== id)) });
+    })
+    .post('/api/library/folders/:id/items', async (c) => {
+      const id = c.req.param('id');
+      const body = (await c.req.json()) as { mediaIds?: unknown; on?: unknown };
+      const ids = Array.isArray(body.mediaIds) ? body.mediaIds.filter((m): m is string => typeof m === 'string') : [];
+      const known = new Set((await gen.library.list()).map((m) => m.id));
+      const valid = ids.filter((m) => known.has(m));
+      const folders = await gen.library.updateFolders((list) =>
+        list.map((f) => (f.id !== id ? f : { ...f, mediaIds: body.on === false ? f.mediaIds.filter((m) => !valid.includes(m)) : [...new Set([...f.mediaIds, ...valid])] })),
+      );
+      return c.json({ folders });
+    })
+    .post('/api/library/:id/favorite', async (c) => {
+      const item = await gen.library.get(c.req.param('id'));
+      if (item === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+      const body = (await c.req.json()) as { on?: unknown };
+      return c.json({ favorites: await gen.library.setFavorite(item.id, body.on === true) });
+    })
+    .get('/api/library/:id/file', async (c) => {
+      const item = await gen.library.get(c.req.param('id'));
+      if (item === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+      return gen.library.respond(item, c.req.header('range'));
+    })
+    // Кадр из видео библиотеки (первый / последний) — локально через ffmpeg, бесплатно. Нужен, чтобы
+    // последний кадр клипа стал стартовым кадром следующего. Повторный запрос отдаёт уже извлечённый кадр.
+    .post('/api/library/:id/frame', async (c) => {
+      const video = await gen.library.get(c.req.param('id'));
+      if (video === undefined || video.kind !== 'video') return c.json({ error: 'NOT_VIDEO', messageRu: 'Кадр извлекается только из видео библиотеки.' }, 422);
+      const body = (await c.req.json()) as { which?: unknown };
+      const which = body.which === 'first' ? 'first' : 'last';
+      const label = which === 'last' ? 'Последний кадр видео' : 'Первый кадр видео';
+      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/frame' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
+      if (existing !== undefined) return c.json(existing);
+      const out = path.join(gen.library.root, `.frame-${video.id}-${which}-${process.pid}.png`);
+      try {
+        await (options.ffmpeg ?? runFfmpeg)(frameArgs(gen.library.pathOf(video), out, which));
+        const item = await gen.library.importFile(out, 'png', {
+          kind: 'image',
+          jobId: 'local-frame',
+          taskId: null,
+          provider: 'local',
+          modelId: 'local/frame',
+          providerModel: 'ffmpeg',
+          prompt: label,
+          params: {},
+          refs: [{ label: 'Видео', source: { type: 'media', mediaId: video.id }, role: 'ref' }],
+          origin: video.origin,
+          sessionId: null,
+          index: 0,
+          sourceUrl: '',
+          creditsConsumed: 0,
+          createdAt: new Date().toISOString(),
+        });
+        return c.json(item, 201);
+      } catch (error) {
+        return c.json({ error: 'FRAME_FAILED', messageRu: error instanceof Error ? error.message : 'Кадр не извлёкся.' }, 500);
+      }
+    })
+    .post('/api/library/:id/reveal', async (c) => {
+      const item = await gen.library.get(c.req.param('id'));
+      if (item === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+      if (options.reveal !== false) (options.reveal ?? revealInFinder)(gen.library.pathOf(item));
+      return c.json({ ok: true });
+    })
+    // Картинки для студии с диска / из буфера. Тип — по content-type запроса, только jpg / png / webp.
+    .post('/api/uploads', async (c) => {
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      if (bytes.byteLength > MAX_REF_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Картинка больше 30 МБ — модели такую не примут.' }, 413);
+      const upload = await gen.uploads.save(bytes, (c.req.header('content-type') ?? '').split(';')[0]?.trim() ?? '');
+      return upload === null ? c.json({ error: 'BAD_TYPE', messageRu: 'Подходят только JPG, PNG и WebP.' }, 415) : c.json(upload, 201);
+    })
+    .get('/api/uploads/:id', async (c) => {
+      const found = await gen.uploads.read(c.req.param('id'));
+      if (found === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Картинка не найдена.' }, 404);
+      return c.body(found.bytes as Uint8Array<ArrayBuffer>, 200, { 'content-type': found.upload.mime, 'cache-control': 'private, max-age=31536000, immutable' });
     });
 
   return routes;

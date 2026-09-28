@@ -1,0 +1,521 @@
+/* Студия: центр (лента + composer) и правая панель параметров. */
+.studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  height: 100%;
+}
+
+.center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dragging {
+  background: var(--lab-accent-softer);
+}
+
+.dropHint {
+  position: absolute;
+  inset: var(--lab-space-12);
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--lab-accent);
+  border-radius: var(--lab-radius-2xl);
+  pointer-events: none;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-3);
+  padding: var(--lab-space-16);
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: var(--lab-space-4);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-surface);
+  color: var(--lab-accent);
+  box-shadow: var(--lab-shadow-s);
+}
+
+.feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  align-content: start;
+  gap: var(--lab-space-8);
+  padding: var(--lab-space-12);
+}
+
+/* ——— плитка ——— */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.tileMedia {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--lab-radius-xl);
+  border: 1px solid var(--lab-border-subtle);
+  background: var(--lab-bg-surface);
+}
+
+.tileOpen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.tileOpen img,
+.tileOpen video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tilePlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lab-space-3);
+  height: 100%;
+  padding: var(--lab-space-8);
+  text-align: center;
+}
+
+.tileFailed {
+  color: var(--lab-danger);
+}
+
+.tileError {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.tileActions {
+  position: absolute;
+  top: var(--lab-space-4);
+  right: var(--lab-space-4);
+  display: flex;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-1);
+  border-radius: var(--lab-radius-full);
+  opacity: 0;
+  transition: opacity var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.tileActions,
+.chipTools {
+  background: var(--lab-glass-bg-strong);
+  box-shadow: var(--lab-shadow-s);
+  backdrop-filter: blur(var(--lab-blur-soft));
+}
+
+.tile:hover .tileActions,
+.tileActions:focus-within {
+  opacity: 1;
+}
+
+.tileActions button {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: var(--lab-radius-full);
+  background: none;
+  color: var(--lab-text-secondary);
+  cursor: pointer;
+}
+
+.tileActions button:hover {
+  background: var(--lab-fill-3);
+  color: var(--lab-text-primary);
+}
+
+.tileFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--lab-space-4);
+  padding: 0 var(--lab-space-2);
+}
+
+/* ——— composer ——— */
+.composerWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lab-space-3);
+  padding: 0 var(--lab-space-12) var(--lab-space-8);
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-4);
+  padding: var(--lab-space-6) var(--lab-space-6) var(--lab-space-4);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-2xl);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-m);
+}
+
+.composer:focus-within {
+  border-color: var(--lab-accent-muted);
+}
+
+.tray {
+  display: flex;
+  gap: var(--lab-space-4);
+  overflow-x: auto;
+  padding-bottom: var(--lab-space-1);
+}
+
+.chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  margin: 0;
+}
+
+.chipThumb {
+  position: relative;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-sunken);
+  cursor: pointer;
+}
+
+.chipThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chipBadge {
+  position: absolute;
+  left: var(--lab-space-2);
+  bottom: var(--lab-space-2);
+  min-width: 1.25rem;
+  padding: 0 var(--lab-space-2);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-bg-inverse);
+  color: var(--lab-text-inverse);
+  font-size: var(--lab-type-caption-size);
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+.chipTools {
+  position: absolute;
+  top: var(--lab-space-1);
+  left: 50%;
+  display: flex;
+  border-radius: var(--lab-radius-full);
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+.chip:hover .chipTools,
+.chipTools:focus-within {
+  opacity: 1;
+}
+
+.chipTools button {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lab-radius-full);
+  background: none;
+  color: var(--lab-text-secondary);
+  cursor: pointer;
+}
+
+.chipTools button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.chipRole {
+  width: 4rem;
+  padding: var(--lab-space-1) var(--lab-space-2);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-s);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-secondary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+}
+
+.areaWrap {
+  position: relative;
+}
+
+.area {
+  width: 100%;
+  min-height: 2.75rem;
+  max-height: 11rem;
+  padding: var(--lab-space-2) var(--lab-space-2);
+  border: 0;
+  outline: none;
+  resize: none;
+  field-sizing: content;
+  background: none;
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-body-size);
+  line-height: var(--lab-type-body-line);
+}
+
+.area::placeholder {
+  color: var(--lab-text-tertiary);
+}
+
+.mentionMenu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 16rem;
+  margin-bottom: var(--lab-space-3);
+  padding: var(--lab-space-2);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-l);
+}
+
+.mentionItem {
+  display: grid;
+  grid-template-columns: 2rem auto 1fr;
+  align-items: center;
+  gap: var(--lab-space-4);
+  padding: var(--lab-space-2) var(--lab-space-3);
+  border: 0;
+  border-radius: var(--lab-radius-m);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionItem img {
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--lab-radius-s);
+  object-fit: cover;
+}
+
+.mentionActive {
+  background: var(--lab-accent-softer);
+}
+
+.composerBar {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+}
+
+.grow {
+  flex: 1;
+}
+
+.composerNote {
+  text-align: center;
+}
+
+/* ——— правая панель ——— */
+.controls {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--lab-border-subtle);
+  background: var(--lab-bg-surface);
+}
+
+.controlsHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-10) var(--lab-space-10) var(--lab-space-8);
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-6);
+  padding: var(--lab-space-10);
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+.modelCard {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-6);
+  width: 100%;
+  padding: var(--lab-space-6);
+  border: 1px solid var(--lab-border);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-tertiary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.modelCard:hover {
+  border-color: var(--lab-border-strong);
+}
+
+.modelIcon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-accent-softer);
+  color: var(--lab-accent);
+}
+
+.modelText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.modelList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  padding: var(--lab-space-2);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  box-shadow: var(--lab-shadow-s);
+}
+
+.modelOption {
+  display: flex;
+  flex-direction: column;
+  padding: var(--lab-space-4) var(--lab-space-6);
+  border: 0;
+  border-radius: var(--lab-radius-m);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modelOption:hover {
+  background: var(--lab-fill-4);
+}
+
+.modelOptionActive {
+  background: var(--lab-accent-softer);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lab-space-6);
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-3);
+}
+
+.slider input {
+  width: 100%;
+  accent-color: var(--lab-accent);
+}
+
+.sliderHead {
+  display: flex;
+  justify-content: space-between;
+}
+
+.costRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-1);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-full);
+}
+
+.stepper button {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0;
+  border-radius: var(--lab-radius-full);
+  background: none;
+  color: var(--lab-text-secondary);
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--lab-fill-3);
+  color: var(--lab-text-primary);
+}
+
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

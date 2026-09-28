@@ -1,0 +1,503 @@
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { z } from 'zod';
+import { flowCost } from '../../core/canvas/plan.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
+import { uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
+import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
+import styles from './Canvas.module.css';
+import { NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
+import { NodeView, portsOf } from './NodeView.tsx';
+
+const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
+
+const SAVE_RU = { saved: 'Сохранено', dirty: 'Изменено', saving: 'Сохраняю…', error: 'Не сохранилось' } as const;
+
+/** Список flows в сайдбаре оболочки — как «Projects» в connxn. */
+export function FlowList() {
+  const { flows, flow, loadFlows, openFlow, newFlow, deleteFlow } = useCanvas();
+  useEffect(() => {
+    void loadFlows();
+  }, [loadFlows]);
+  return (
+    <>
+      <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newFlow} onClick={() => void newFlow()}>
+        Новый flow
+      </Button>
+      <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
+        Flows
+      </Text>
+      <nav className={styles.flowList}>
+        {flows.map((f) => (
+          <div key={f.id} className={`${styles.flowItem} ${f.id === flow?.id ? styles.flowItemActive : ''}`}>
+            <button type="button" className={styles.flowLabel} onClick={() => void openFlow(f.id)}>
+              <span>{f.name}</span>
+              <Text as="span" variant="caption" tone="tertiary">
+                {f.nodes}
+              </Text>
+            </button>
+            <button type="button" className={styles.flowDelete} title="Удалить flow (файлы генераций останутся в библиотеке)" onClick={() => void deleteFlow(f.id)}>
+              <Icon name="bin" size={0.875} />
+            </button>
+          </div>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+type Interaction =
+  | { type: 'drag'; id: string; startX: number; startY: number; origX: number; origY: number }
+  | { type: 'pan'; startX: number; startY: number; origX: number; origY: number }
+  | { type: 'link'; from: string; x: number; y: number };
+
+const curve = (x1: number, y1: number, x2: number, y2: number): string => {
+  const dx = Math.max(48, Math.abs(x2 - x1) / 2);
+  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+};
+
+/** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
+export function Canvas() {
+  const { flow, save, selected, error, past, future, newFlow, rename, addNode, patchNode, removeNode, select, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
+  const { library, loadJobs, loadLibrary } = useGen();
+  const board = useRef<HTMLDivElement>(null);
+  const importer = useRef<HTMLInputElement>(null);
+  /** Связь дошла до входа — меню «в пустоту» не нужно. */
+  const linked = useRef(false);
+  const [linkMenu, setLinkMenu] = useState<{ from: string; screenX: number; screenY: number; x: number; y: number } | null>(null);
+  const [act, setAct] = useState<Interaction | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [picker, setPicker] = useState<string | null>(null);
+  const [consent, setConsent] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    void loadJobs();
+    void loadLibrary();
+  }, [loadJobs, loadLibrary]);
+
+  const viewport = flow?.viewport ?? { x: 0, y: 0, zoom: 1 };
+  const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
+    const rect = board.current?.getBoundingClientRect();
+    return { x: (clientX - (rect?.left ?? 0) - viewport.x) / viewport.zoom, y: (clientY - (rect?.top ?? 0) - viewport.y) / viewport.zoom };
+  };
+  const centerWorld = (): { x: number; y: number } => {
+    const rect = board.current?.getBoundingClientRect();
+    const c = toWorld((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2);
+    const jitter = ((flow?.nodes.length ?? 0) % 5) * 24;
+    return { x: c.x - 130 + jitter, y: c.y - 120 + jitter };
+  };
+
+  // Перетаскивание, панорама и протяжка связи — через window, чтобы не терять курсор за пределами ноды.
+  useEffect(() => {
+    if (act === null) return;
+    const move = (event: PointerEvent): void => {
+      if (act.type === 'drag') patchNode(act.id, { x: act.origX + (event.clientX - act.startX) / viewport.zoom, y: act.origY + (event.clientY - act.startY) / viewport.zoom }, `move:${act.id}`);
+      else if (act.type === 'pan') setViewport({ ...viewport, x: act.origX + event.clientX - act.startX, y: act.origY + event.clientY - act.startY });
+      else setAct({ ...act, ...toWorld(event.clientX, event.clientY) });
+    };
+    const up = (event: PointerEvent): void => {
+      // Связь отпустили не на входе, а на пустом холсте — меню подходящих нод, как в connxn.
+      const target = event.target as Element | null;
+      if (act.type === 'link' && !linked.current && target !== null && (target === board.current || target.closest(`.${styles.world}`) === target || target.tagName === 'svg')) {
+        setLinkMenu({ from: act.from, screenX: event.clientX, screenY: event.clientY, ...toWorld(event.clientX, event.clientY) });
+      }
+      linked.current = false;
+      setAct(null);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  });
+
+  // Колесо: с Ctrl / щипком — масштаб к курсору, без — прокрутка холста.
+  useEffect(() => {
+    const el = board.current;
+    if (el === null) return;
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault();
+      const f = useCanvas.getState().flow;
+      if (f === null) return;
+      const vp = f.viewport;
+      if (event.ctrlKey || event.metaKey) {
+        const rect = el.getBoundingClientRect();
+        const zoom = Math.min(2, Math.max(0.3, vp.zoom * Math.exp(-event.deltaY * 0.01)));
+        const px = event.clientX - rect.left;
+        const py = event.clientY - rect.top;
+        setViewport({ zoom, x: px - ((px - vp.x) / vp.zoom) * zoom, y: py - ((py - vp.y) / vp.zoom) * zoom });
+      } else {
+        setViewport({ ...vp, x: vp.x - event.deltaX, y: vp.y - event.deltaY });
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [flow?.id, setViewport]);
+
+  // Клавиши, пока фокус не в поле ввода: Delete — удалить, ⌘Z / ⇧⌘Z / ⌘Y — отмена и повтор,
+  // ⌘C — копировать ноду в буфер (работает и между flows), ⌘D — дублировать. ⌘V ловит обработчик paste ниже.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const tag = (event.target as HTMLElement | null)?.tagName ?? '';
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+      const mod = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (selected !== null && (event.key === 'Delete' || event.key === 'Backspace')) {
+        removeNode(selected);
+      } else if (mod && key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if (mod && ((key === 'z' && event.shiftKey) || key === 'y')) {
+        event.preventDefault();
+        redo();
+      } else if (mod && key === 'd') {
+        event.preventDefault();
+        duplicateSelected();
+      } else if (mod && key === 'c') {
+        const text = copySelected();
+        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint('Нода скопирована — ⌘V вставит её сюда или в другой flow.'));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected, removeNode, undo, redo, duplicateSelected, copySelected]);
+
+  // Вставка: ноды из буфера, картинка → нода картинки, текст → нода промпта. Как в connxn.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent): void => {
+      const tag = (event.target as HTMLElement | null)?.tagName ?? '';
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || useCanvas.getState().flow === null) return;
+      const at = centerWorld();
+      const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
+      if (file !== undefined) {
+        event.preventDefault();
+        void uploadImage(file)
+          .then((source) => patchNode(addNode('image', at.x, at.y), { source, label: file.name }, false))
+          .catch((e: unknown) => setHint(e instanceof Error ? e.message : 'Не загрузилось.'));
+        return;
+      }
+      const text = event.clipboardData?.getData('text/plain') ?? '';
+      if (text.trim() === '') return;
+      event.preventDefault();
+      if (pasteNodes(text, at) > 0) return;
+      patchNode(addNode('prompt', at.x, at.y), { text }, false);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  });
+
+  if (flow === null) {
+    return (
+      <div className={styles.emptyPage}>
+        <Text variant="title-m" medium>
+          Canvas
+        </Text>
+        <Text variant="label" tone="secondary">
+          Нодовый воркфлоу: промпты, картинки и генераторы, связанные между собой.
+        </Text>
+        <Button variant="primary" size="m" icon={<Icon name="plus" size={1} />} onClick={() => void newFlow()}>
+          Новый flow
+        </Button>
+      </div>
+    );
+  }
+
+  const nodeById = new Map(flow.nodes.map((n) => [n.id, n]));
+  const portPoint = (node: CanvasNode, port: InputPort): { x: number; y: number } => ({ x: node.x, y: node.y + PORT_TOP + Math.max(0, portsOf(node).indexOf(port)) * PORT_STEP });
+  const outPoint = (node: CanvasNode): { x: number; y: number } => ({ x: node.x + NODE_WIDTH[node.type], y: node.y + PORT_TOP });
+  const cost = flowCost(flow);
+
+  const onHeaderDown = (event: ReactPointerEvent, node: CanvasNode): void => {
+    event.stopPropagation();
+    select(node.id);
+    setAct({ type: 'drag', id: node.id, startX: event.clientX, startY: event.clientY, origX: node.x, origY: node.y });
+  };
+  const onOutputDown = (event: ReactPointerEvent, node: CanvasNode): void => {
+    event.stopPropagation();
+    setAct({ type: 'link', from: node.id, ...toWorld(event.clientX, event.clientY) });
+  };
+  const onInputUp = (node: CanvasNode, port: InputPort): void => {
+    if (act?.type !== 'link') return;
+    linked.current = true;
+    const from = nodeById.get(act.from);
+    setAct(null);
+    if (from === undefined) return;
+    if (!portAccepts(port, outputOf(from))) {
+      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается нода промпта.' : port === 'video' ? 'Во вход «Видео» подключается генератор видео.' : 'Во вход картинки подключается картинка, кадр или генератор картинки.');
+      return;
+    }
+    const problem = connect(from.id, node.id, port);
+    setHint(problem);
+  };
+
+  /** Что можно создать на конце связи, отпущенной в пустоту, — по типу выхода. */
+  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame'; kind: 'image' | 'video'; port: InputPort }[] => {
+    const from = nodeById.get(fromId);
+    if (from === undefined) return [];
+    const out = outputOf(from);
+    if (out === 'text')
+      return [
+        { label: 'Генератор картинки', type: 'generator', kind: 'image', port: 'prompt' },
+        { label: 'Генератор видео', type: 'generator', kind: 'video', port: 'prompt' },
+      ];
+    if (out === 'video') return [{ label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' }];
+    return [
+      { label: 'Генератор картинки · референс', type: 'generator', kind: 'image', port: 'ref' },
+      { label: 'Генератор видео · старт-кадр', type: 'generator', kind: 'video', port: 'start' },
+    ];
+  };
+  const createLinked = (opt: ReturnType<typeof linkOptions>[number]): void => {
+    if (linkMenu === null) return;
+    const id = addNode(opt.type, linkMenu.x, linkMenu.y - PORT_TOP, opt.kind);
+    // Порт «Старт» у генератора видео — второй вход, а модель по умолчанию его поддерживает (Kling / Seedance).
+    setHint(connect(linkMenu.from, id, opt.port));
+    setLinkMenu(null);
+  };
+
+  const fit = (): void => {
+    const rect = board.current?.getBoundingClientRect();
+    if (rect === undefined || flow.nodes.length === 0) return setViewport({ x: 0, y: 0, zoom: 1 });
+    const minX = Math.min(...flow.nodes.map((n) => n.x));
+    const minY = Math.min(...flow.nodes.map((n) => n.y));
+    const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type]));
+    const maxY = Math.max(...flow.nodes.map((n) => n.y + 360));
+    const zoom = Math.min(1, Math.max(0.3, Math.min(rect.width / (maxX - minX + 96), rect.height / (maxY - minY + 96))));
+    setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (rect.height - (maxY - minY) * zoom) / 2 - minY * zoom });
+  };
+
+  const exportFlow = (): void => {
+    const blob = new Blob([JSON.stringify({ name: flow.name, nodes: flow.nodes, edges: flow.edges }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${flow.name.replace(/[^\p{L}\p{N}-]+/gu, '-')}.flow.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const importFlow = async (f: File): Promise<void> => {
+    try {
+      const parsed = ImportSchema.parse(JSON.parse(await f.text()));
+      await newFlow({ name: parsed.name, nodes: parsed.nodes, edges: parsed.edges });
+    } catch {
+      setHint('Это не flow: файл не читается как экспорт canvas.');
+    }
+  };
+
+  const linkFrom = act?.type === 'link' ? nodeById.get(act.from) : undefined;
+
+  return (
+    <div className={styles.canvas}>
+      <header className={styles.head}>
+        <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label="Название flow" />
+        <Text variant="caption" tone="secondary">
+          {flow.nodes.length} нод · {SAVE_RU[save]}
+          {error !== null && save === 'error' ? ` · ${error}` : ''}
+        </Text>
+        <span className={styles.grow} />
+        <Button variant="soft" size="xs" icon={<Icon name="pencil" size={0.875} />} onClick={() => addNode('prompt', centerWorld().x, centerWorld().y)}>
+          Промпт
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="image" size={0.875} />} onClick={() => addNode('image', centerWorld().x, centerWorld().y)}>
+          Картинка
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="sparkles" size={0.875} />} title="Нода-генератор картинки" onClick={() => addNode('generator', centerWorld().x, centerWorld().y, 'image')}>
+          Ген. картинки
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="video" size={0.875} />} title="Нода-генератор видео" onClick={() => addNode('generator', centerWorld().x, centerWorld().y, 'video')}>
+          Ген. видео
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="layers" size={0.875} />} title="Первый / последний кадр видео — старт-кадр следующего клипа" onClick={() => addNode('frame', centerWorld().x, centerWorld().y)}>
+          Кадр
+        </Button>
+      </header>
+
+      <div
+        ref={board}
+        className={styles.board}
+        style={{ backgroundPosition: `${viewport.x}px ${viewport.y}px`, backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px` }}
+        onPointerDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          select(null);
+          setAct({ type: 'pan', startX: event.clientX, startY: event.clientY, origX: viewport.x, origY: viewport.y });
+        }}
+        onDoubleClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const p = toWorld(event.clientX, event.clientY);
+          addNode('prompt', p.x, p.y);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const f = event.dataTransfer.files[0];
+          if (f === undefined) return;
+          const p = toWorld(event.clientX, event.clientY);
+          void uploadImage(f)
+            .then((source) => {
+              const id = addNode('image', p.x, p.y);
+              patchNode(id, { source, label: f.name });
+            })
+            .catch((e: unknown) => setHint(e instanceof Error ? e.message : 'Не загрузилось.'));
+        }}
+      >
+        <div className={styles.world} style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` }}>
+          <svg className={styles.edges} aria-hidden="true">
+            {flow.edges.map((edge) => {
+              const from = nodeById.get(edge.from);
+              const to = nodeById.get(edge.to);
+              if (from === undefined || to === undefined) return null;
+              const a = outPoint(from);
+              const b = portPoint(to, edge.port);
+              const d = curve(a.x, a.y, b.x, b.y);
+              return (
+                <g key={edge.id} className={styles.edge} onClick={() => disconnect(edge.id)}>
+                  <title>Клик — убрать связь</title>
+                  <path d={d} className={styles.edgeHit} />
+                  <path d={d} className={edge.port === 'prompt' ? styles.edgeText : styles.edgeMedia} />
+                </g>
+              );
+            })}
+            {linkFrom !== undefined && act?.type === 'link' && <path d={curve(outPoint(linkFrom).x, outPoint(linkFrom).y, act.x, act.y)} className={styles.edgeDraft} />}
+          </svg>
+          {flow.nodes.map((node) => (
+            <NodeView key={node.id} node={node} selected={node.id === selected} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
+          ))}
+        </div>
+
+        {flow.nodes.length === 0 && (
+          <div className={styles.emptyBoard}>
+            <span className={styles.emptyIcon}>
+              <Icon name="layers" size={1.5} />
+            </span>
+            <Text variant="title-m" medium>
+              Собери свой воркфлоу
+            </Text>
+            <Text variant="label" tone="secondary">
+              Перетащи картинку на холст, двойной клик — нода промпта. Выход ноды тяни ко входу генератора.
+            </Text>
+            <div className={styles.emptyActions}>
+              <Button variant="border" size="s" icon={<Icon name="pencil" size={1} />} onClick={() => addNode('prompt', centerWorld().x, centerWorld().y)}>
+                Промпт
+              </Button>
+              <Button variant="border" size="s" icon={<Icon name="sparkles" size={1} />} onClick={() => addNode('generator', centerWorld().x + 320, centerWorld().y, 'image')}>
+                Генератор картинки
+              </Button>
+            </div>
+          </div>
+        )}
+        {linkMenu !== null && (
+          <div className={styles.linkMenu} style={{ left: linkMenu.screenX - (board.current?.getBoundingClientRect().left ?? 0), top: linkMenu.screenY - (board.current?.getBoundingClientRect().top ?? 0) }} role="menu" onPointerDown={(event) => event.stopPropagation()}>
+            <Text variant="caption" tone="tertiary" className={styles.linkMenuTitle}>
+              Добавить и соединить
+            </Text>
+            {linkOptions(linkMenu.from).map((opt) => (
+              <button key={opt.label} type="button" role="menuitem" onClick={() => createLinked(opt)}>
+                <Icon name={opt.type === 'frame' ? 'layers' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
+                {opt.label}
+              </button>
+            ))}
+            <button type="button" role="menuitem" onClick={() => setLinkMenu(null)}>
+              <Icon name="close" size={0.875} />
+              Отмена
+            </button>
+          </div>
+        )}
+        {hint !== null && (
+          <button type="button" className={styles.hint} onClick={() => setHint(null)}>
+            <Text variant="caption">{hint}</Text>
+            <Icon name="close" size={0.75} />
+          </button>
+        )}
+        {/* Плавающая группа, как в дизайн-инструментах: вписать, масштаб, экспорт / импорт. */}
+        <div className={styles.zoom}>
+          {cost.usd > 0 && (
+            <span className={styles.cost} title="Сумма по одному запуску каждого генератора. Всё разом не запускается — только нода, которую нажал.">
+              <Text as="span" variant="caption" tone="secondary">
+                прогон всех ≈ ${cost.usd}
+                {cost.credits > 0 ? ` · ${cost.credits} кр` : ''}
+              </Text>
+            </span>
+          )}
+          <button type="button" onClick={undo} disabled={past.length === 0} aria-label="Отменить (⌘Z)" title="Отменить (⌘Z)">
+            <Icon name="arrow-undo" size={0.875} />
+          </button>
+          <button type="button" onClick={redo} disabled={future.length === 0} aria-label="Повторить (⇧⌘Z)" title="Повторить (⇧⌘Z)">
+            <Icon name="arrow-redo" size={0.875} />
+          </button>
+          <button type="button" onClick={fit} title="Вписать все ноды">
+            <Text as="span" variant="caption">
+              Вписать
+            </Text>
+          </button>
+          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.max(0.3, viewport.zoom - 0.1) })} aria-label="Уменьшить">
+            <Icon name="minus" size={0.875} />
+          </button>
+          <Text as="span" variant="caption" tone="secondary" mono>
+            {Math.round(viewport.zoom * 100)}%
+          </Text>
+          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.min(2, viewport.zoom + 0.1) })} aria-label="Увеличить">
+            <Icon name="plus" size={0.875} />
+          </button>
+          <button type="button" onClick={exportFlow} aria-label="Экспорт flow в JSON" title="Экспорт flow в JSON">
+            <Icon name="download" size={0.875} />
+          </button>
+          <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(event) => event.target.files?.[0] !== undefined && void importFlow(event.target.files[0]).finally(() => (event.target.value = ''))} />
+          <button type="button" onClick={() => importer.current?.click()} aria-label="Импорт flow из JSON" title="Импорт flow из JSON">
+            <Icon name="upload" size={0.875} />
+          </button>
+        </div>
+      </div>
+
+      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title="Картинка из библиотеки" description="Файлы с диска — ссылки провайдера для них не нужны.">
+        <div className={styles.pickerGrid}>
+          {library
+            .filter((m) => m.kind === 'image')
+            .map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className={styles.pickerItem}
+                onClick={() => {
+                  if (picker !== null) patchNode(picker, { source: { type: 'media', mediaId: m.id }, label: `Из библиотеки` });
+                  setPicker(null);
+                }}
+              >
+                <img src={mediaUrl(m.id)} alt={m.prompt.slice(0, 60)} loading="lazy" />
+              </button>
+            ))}
+          {library.every((m) => m.kind !== 'image') && (
+            <Text variant="label" tone="tertiary">
+              В библиотеке пока нет картинок.
+            </Text>
+          )}
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={consent !== null}
+        onOpenChange={(open) => !open && setConsent(null)}
+        title="Отправить картинки провайдеру?"
+        description="Входные картинки ноды уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки."
+        footer={
+          <>
+            <Button variant="ghost" size="s" onClick={() => setConsent(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant="primary"
+              size="s"
+              onClick={() => {
+                consent?.();
+                setConsent(null);
+              }}
+            >
+              Отправить и запустить
+            </Button>
+          </>
+        }
+      >
+        <Text variant="label" tone="secondary">
+          Запустится только эта нода.
+        </Text>
+      </Dialog>
+    </div>
+  );
+}
