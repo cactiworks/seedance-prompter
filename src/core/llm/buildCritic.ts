@@ -1,6 +1,7 @@
 import type { Finding } from '../lint/index.ts';
 import type { Project, Shot } from '../model/project.ts';
 import type { CompiledParagraph } from '../compile/compile.ts';
+import type { AgentShooting } from './buildWriter.ts';
 
 /** Таблица симптомов pack — критик получает её как рамку: «какие из известных провалов рискует повторить этот промпт». */
 export interface SymptomCatalog {
@@ -86,6 +87,8 @@ export interface CriticInput {
   findings: Finding[];
   /** Vision-сводки референсов, если владелец их запускал. */
   visionSummaries?: Record<string, string>;
+  /** Режим съёмки и монтаж; нет — метод гайда, один дубль. */
+  shooting?: AgentShooting;
 }
 
 /** Переменная часть: промпт как его увидит модель, панель с ролями, что уже известно. */
@@ -93,18 +96,35 @@ export function buildCriticUser(input: CriticInput): string {
   const { project, shot } = input;
   const refs = new Map(project.refs.map((r) => [r.key, r]));
   const entities = project.entities.filter((e) => e.refKey !== null && shot.panel.includes(e.refKey));
+  const shooting = input.shooting;
   const payload = {
-    format: { durationSec: input.durationSec, aspect: project.aspectRatio, singleContinuousTake: true, dialect: project.dialect },
+    format: { durationSec: input.durationSec, aspect: project.aspectRatio, singleContinuousTake: shooting?.structure !== 'cuts', dialect: project.dialect },
+    ...(shooting === undefined || shooting.guide ? {} : { camera: { mode: shooting.mode, cameraLanguage: shooting.cameraLanguage, provenRu: 'режим съёмки не из гайда — генерацией не проверен' } }),
     panel: shot.panel.map((key, i) => {
       const ref = refs.get(key);
       const bound = entities.filter((e) => e.refKey === key).map((e) => e.name);
-      return { n: i + 1, label: ref?.label ?? key, kind: ref?.kind ?? 'other', boundTo: bound, flags: ref?.flags ?? {}, ...(input.visionSummaries?.[key] !== undefined ? { vision: input.visionSummaries[key] } : {}) };
+      const opens = shot.segments.findIndex((s) => s.frameRef === key);
+      return {
+        n: i + 1,
+        label: ref?.label ?? key,
+        kind: ref?.kind ?? 'other',
+        boundTo: bound,
+        flags: ref?.flags ?? {},
+        ...(opens === -1 ? {} : { storyboardFrameOfSegment: opens + 1 }),
+        ...(ref?.note !== undefined && ref.note.trim() !== '' ? { whatIsInIt: ref.note.trim().slice(0, 400) } : {}),
+        ...(input.visionSummaries?.[key] !== undefined ? { vision: input.visionSummaries[key] } : {}),
+      };
     }),
     lines: project.lines.filter((l) => shot.segments.some((s) => s.text.en.includes(`{{line:${l.id}}}`))).map((l) => ({ id: l.id, ru: l.ru })),
     statesFromPreviousShots: project.states.filter((s) => shot.segments.some((seg) => seg.text.en.includes(`{{state:${s.id}}}`))).map((s) => s.en),
     alreadyFoundByLinter: input.findings.filter((f) => f.severity !== 'info').map((f) => `${f.ruleId}: ${f.messageRu}`),
     consciousExceptions: shot.suppressed.map((s) => s.reasonRu),
-    paragraphs: input.resolvedParagraphs.map((text, i) => ({ p: i + 1, kind: KIND_EN[input.paragraphs[i]?.kind ?? ''] ?? input.paragraphs[i]?.kind ?? 'paragraph', text })),
+    paragraphs: input.resolvedParagraphs.map((text, i) => {
+      const paragraph = input.paragraphs[i];
+      const kind = KIND_EN[paragraph?.kind ?? ''] ?? paragraph?.kind ?? 'paragraph';
+      // Формулы режима не из гайда — не «дословно проверенные»: критик вправе в них сомневаться.
+      return { p: i + 1, kind: paragraph?.origin === 'derived' ? `${kind.replace(/ \((verbatim[^)]*)\)/, '')} (shooting mode formula, not from the guide, unproven)` : kind, text };
+    }),
   };
   return `Review this prompt exactly as the video model will read it.\n\n\`\`\`json\n${JSON.stringify(payload, null, 1)}\n\`\`\``;
 }

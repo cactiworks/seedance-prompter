@@ -1,9 +1,10 @@
-import { compileShot, joinParagraphs, type CompiledParagraph, type CompileIssue, type Kit, type VerbatimPack } from './compile/compile.ts';
+import { compileShot, joinParagraphs, type CompiledParagraph, type CompileIssue, type Kit, type ShootingMode, type ShootingPack, type VerbatimPack } from './compile/compile.ts';
 import { resolve, type DialectPack, type ResolveIssue } from './compile/dialect.ts';
 import { pendingLabels, staleFields } from './compose.ts';
+import type { AgentShooting } from './llm/buildWriter.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
-import { activeStates, durationOf, type Project, type Shot } from './model/project.ts';
+import { activeStates, CUSTOM_SHOOTING, durationOf, GUIDE_SHOOTING, shootingOf, type Project, type Shot, type Structure } from './model/project.ts';
 
 /** Всё, что ядру нужно знать о режиме съёмки. Код правил гайда не знает — он исполняет pack. */
 export interface PackBundle {
@@ -13,6 +14,34 @@ export interface PackBundle {
   dialects: DialectPack;
   lexicon: Lexicon;
   lintParams: LintParams;
+  /** Режимы съёмки и монтаж (shooting.json). Нет — только метод гайда. */
+  shooting?: ShootingPack;
+}
+
+export interface ShotShooting {
+  /** undefined — режима нет в pack (тогда сборку держит блокер). */
+  mode: ShootingMode | undefined;
+  structure: Structure;
+  /** Метод гайда: ручная документальная, дословные формулы. */
+  guide: boolean;
+}
+
+/**
+ * Режим съёмки кадра. У своей съёмки фраза стиль-блока и язык камеры — из ответа агента полей по описанию
+ * владельца; остальное (зачин, ремесло, правило про группу) — из записи custom в pack.
+ */
+export function shootingModeOf(shot: Shot, pack: PackBundle): ShotShooting {
+  const shooting = shootingOf(shot);
+  const modes = pack.shooting?.modes ?? [];
+  const found = modes.find((m) => m.id === shooting.mode);
+  const mode = found !== undefined && found.source === 'custom' ? { ...found, operation: shooting.operation.trim().replace(/[.\s]+$/, ''), language: shooting.language.trim() } : found;
+  return { mode, structure: shooting.structure, guide: shooting.mode === GUIDE_SHOOTING };
+}
+
+/** Режим съёмки для агентов (планировщик, писатель, критик): id, монтаж и язык камеры. */
+export function agentShooting(shot: Shot, pack: PackBundle): AgentShooting {
+  const resolved = shootingModeOf(shot, pack);
+  return { mode: resolved.mode?.id ?? shootingOf(shot).mode, guide: resolved.guide, structure: resolved.structure, cameraLanguage: resolved.mode?.language ?? '' };
 }
 
 export interface ShotBuild {
@@ -89,8 +118,20 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     return { paragraphs: [], prompt: '', resolvedParagraphs: [], blockers: [{ code: 'UNKNOWN_KIT', messageRu: `В pack нет комплекта «${shot.kitId}».` }], findings: [], metrics: { chars: 0, words: 0, speechWords: 0, speechCapacity: 0, refsInPanel: shot.panel.length, refsUsed: 0 } };
   }
 
+  const shooting = shootingModeOf(shot, pack);
+  const shootingRaw = shootingOf(shot);
+  if (!shooting.guide && shooting.mode === undefined) blockers.push({ code: 'UNKNOWN_SHOOTING', messageRu: `В pack нет режима съёмки «${shootingRaw.mode}». Выбери режим в секции «Как снято».` });
+  if (shootingRaw.mode === CUSTOM_SHOOTING) {
+    const described = (shootingRaw.ru ?? '').trim() !== '';
+    // Пока агент не перевёл описание, о пустых английских полях говорит один блокер NEEDS_COMPOSE.
+    if (!described) blockers.push({ code: 'CUSTOM_SHOOTING_EMPTY', messageRu: 'Своя съёмка: опиши в секции «Как снято», как работает камера — на чём стоит, как двигается, как ведёт героя.' });
+    else if (!fieldsPending.has('shooting') && shootingRaw.operation.trim() === '') blockers.push({ code: 'CUSTOM_SHOOTING_NOT_WRITTEN', messageRu: 'Своя съёмка: агент не написал, как работает камера. Допиши описание конкретнее и нажми «Собрать промпт».' });
+  }
+
   const [ref1, ref2] = shot.locationRefs;
-  if (ref1 === undefined) blockers.push({ code: 'NO_LOCATION_REF', messageRu: 'Не выбран референс локации. Гайд: «текст не заменяет референс».' });
+  // В методе гайда без референса локации промпт не собирается («текст не заменяет референс»); в других режимах место
+  // можно задать только словами — например, предметка в студии, — но об этом стоит знать.
+  if (ref1 === undefined && shooting.guide) blockers.push({ code: 'NO_LOCATION_REF', messageRu: 'Не выбран референс локации. Гайд: «текст не заменяет референс».' });
   if (project.world.place.ru.trim() === '' && project.world.place.en.trim() === '') blockers.push({ code: 'NO_PLACE', messageRu: 'Не описано место: заполни «Место» в секции «Локация и погода».' });
   for (const entity of project.entities) {
     if ((entity.nameRu ?? '').trim() === '' && entity.name.trim() === '') blockers.push({ code: 'ENTITY_NO_NAME', messageRu: `В «Герои и предметы» есть ${entity.kind === 'character' ? 'герой' : 'предмет'} без имени — назови или удали.` });
@@ -116,18 +157,19 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
   const compiled = compileShot(
     {
       kit,
+      shooting: shooting.mode === undefined || pack.shooting === undefined ? undefined : { mode: shooting.mode, structure: shooting.structure, pack: pack.shooting },
       durationSec,
       aspectPhrase: pack.dialects.aspect?.phrases[project.aspectRatio],
       defects: shot.defects ?? undefined,
       behavior: shot.behavior,
       operatorRule: shot.operatorRule,
       locationRule: shot.locationRule,
-      locationRefs: [ref1 ?? 'missing-location-ref', ref2 ?? ref1 ?? 'missing-location-ref'],
+      locationRefs: ref1 === undefined && !shooting.guide ? null : [ref1 ?? 'missing-location-ref', ref2 ?? ref1 ?? 'missing-location-ref'],
       // «Что брать с референса» — формула гайда; в интерфейсе её нет, поэтому пустое значение не ломает промпт.
       world: { placeEn: project.world.place.en.trim(), useOnlyEn: project.world.useOnlyEn.trim() === '' ? DEFAULT_USE_ONLY : project.world.useOnlyEn, weatherEn: project.world.weather.en.trim() },
       languageName: pack.dialects.languageNames[project.language] ?? project.language,
       roleSplit: role === null ? undefined : { cameraRef: role.cameraRef, lensRef: role.lensRef, cameraHolder, lensHolder, propsEn: role.propsEn.trim().replace(/[.\s]+$/, '') },
-      segments: shot.segments.map((segment) => ({ id: segment.id, en: segment.text.en })),
+      segments: shot.segments.map((segment) => ({ id: segment.id, en: segment.text.en, frameRef: segment.frameRef ?? null })),
     },
     pack.verbatim,
   );
@@ -171,6 +213,8 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     panelSize: shot.panel.length,
     durationSec,
     suppressed,
+    // Правила ручной документальной съёмки молчат в других режимах, правило «один дубль» — в склейках.
+    shooting: { handheld: shooting.mode === undefined || shooting.mode.source === 'guide', defectStack: shooting.mode === undefined || shooting.mode.defects, oneTake: shooting.structure === 'one-take' },
   })
     // Пока сценария нет, правила о сценарии молчат: об этом уже сказал блокер NO_SCENARIO.
     .filter((f) => hasScenario || !SCENARIO_RULES.has(f.ruleId))
@@ -198,6 +242,16 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     if (!hasSide || !hasLimiter) {
       structural.push({ id: state.id, ruleId: 'CONT_STATE_COMPLETE', family: 'continuity', severity: 'warning', evidence: state.en.slice(0, 80), messageRu: `У последствия ${label} нет ${[!hasSide && 'стороны', !hasLimiter && 'степени или ограничителя'].filter(Boolean).join(' и ')}.`, fixHintRu: 'Гайд, Кадр 3: «right side only… no blood, no cut, just a light bruise» — иначе модель нарисует разбитое лицо не с той стороны.' });
     }
+  }
+
+  // Вне метода гайда место можно задать только словами — но картинка надёжнее текста.
+  if (ref1 === undefined && !shooting.guide) {
+    structural.push({ id: 'location', ruleId: 'NO_LOCATION_REF', family: 'refs', severity: 'warning', evidence: '', messageRu: 'Референса локации нет — место модель нарисует по словам, и в каждом прогоне оно будет другим.', fixHintRu: 'Гайд: «текст не заменяет референс». Добавь в панель картинку места с типом «Локация» — или подави находку, если место условное (студия, фон).' });
+  }
+  // Склейки с одним шотом — это тот же дубль, только с обещанием монтажа, которого не будет.
+  const writtenShots = shot.segments.filter((s) => s.text.en.trim() !== '').length;
+  if (shooting.structure === 'cuts' && hasScenario && writtenShots < 2) {
+    structural.push({ id: 'cuts', ruleId: 'CUTS_SINGLE_SHOT', family: 'budget', severity: 'warning', evidence: '', messageRu: 'Монтаж «шоты со склейками», а шот один — формат обещает склейки, которых в тексте нет.', fixHintRu: 'Добавь отрезки — каждый станет шотом — или переключи монтаж на «один дубль».' });
   }
 
   // Риски референсов — по флагам, которые ставит владелец или vision-анализ.

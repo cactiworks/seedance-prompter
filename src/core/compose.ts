@@ -1,14 +1,14 @@
-import { activeStates, needsAgent, segmentNeedsWriter, type Project, type Shot, type TextUnit } from './model/project.ts';
+import { activeStates, CUSTOM_SHOOTING, needsAgent, segmentNeedsWriter, shootingOf, type Project, type Shot, type TextUnit } from './model/project.ts';
 
 /**
  * «Собрать промпт»: владелец заполняет поля тезисно по-русски, агенты пишут английский. Здесь —
  * чистая часть этого цикла: что устарело, что уходит агенту полей, как применить ответы.
  */
 
-export type FieldKind = 'place' | 'weather' | 'character' | 'object' | 'state' | 'camera' | 'props';
+export type FieldKind = 'place' | 'weather' | 'character' | 'object' | 'state' | 'camera' | 'props' | 'shooting';
 
 export interface FieldItem {
-  /** 'place' | 'weather' | 'entity:<key>' | 'state:<id>' | 'kit' | 'props' */
+  /** 'place' | 'weather' | 'entity:<key>' | 'state:<id>' | 'kit' | 'props' | 'shooting' */
   id: string;
   kind: FieldKind;
   /** Русский ввод; пусто — поле очищено, английский просто стирается без агента. */
@@ -21,6 +21,8 @@ export interface FieldsOutput {
   texts: { id: string; en: string }[];
   /** Своя камера — если её просили. */
   kit: { camera: string; lens: string; look: string; lensNote: string } | null;
+  /** Своя съёмка — если её просили: фраза стиль-блока и язык камеры для писателя. */
+  shooting?: { operation: string; language: string } | null;
   notesRu: string;
 }
 
@@ -51,6 +53,11 @@ export function staleFields(project: Project, shot: Shot, scope: 'shot' | 'compo
   if (shot.roleSplit !== null) {
     const ru = trimmed(shot.roleSplit.propsRu);
     if (needsAgent(ru, shot.roleSplit.propsEn, shot.roleSplit.propsFor, false)) items.push({ id: 'props', kind: 'props', ru, labelRu: 'реквизит' });
+  }
+  const shooting = shootingOf(shot);
+  if (shooting.mode === CUSTOM_SHOOTING) {
+    const ru = trimmed(shooting.ru);
+    if (needsAgent(ru, shooting.operation, shooting.enFor, false)) items.push({ id: 'shooting', kind: 'shooting', ru, labelRu: 'своя съёмка' });
   }
   return items;
 }
@@ -111,6 +118,11 @@ export function applyFields(project: Project, shotId: string, requested: FieldIt
       }
       const props = propsItem === undefined ? undefined : got(propsItem);
       if (propsItem !== undefined && props !== undefined && out.roleSplit !== null) out = { ...out, roleSplit: { ...out.roleSplit, propsEn: props, propsFor: propsItem.ru } };
+      const shootingItem = asked.get('shooting');
+      if (shootingItem !== undefined && (shootingItem.ru === '' || output?.shooting != null)) {
+        const written = shootingItem.ru === '' ? { operation: '', language: '' } : (output?.shooting ?? { operation: '', language: '' });
+        out = { ...out, shooting: { ...shootingOf(out), operation: written.operation.trim(), language: written.language.trim(), enFor: shootingItem.ru } };
+      }
       return out;
     }),
   };

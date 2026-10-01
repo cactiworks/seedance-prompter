@@ -95,6 +95,20 @@ export function createStore(dataDir: string) {
       await atomicWrite(path.join(dirOf(slug), 'refs', fileName), bytes);
     },
 
+    /** Файлы референсов одного проекта — в другой (копия черновика Seedance-промптера из canvas). */
+    async copyRefs(fromSlug: string, toSlug: string): Promise<number> {
+      const from = path.join(dirOf(fromSlug), 'refs');
+      const to = path.join(dirOf(toSlug), 'refs');
+      await mkdir(to, { recursive: true });
+      let copied = 0;
+      for (const file of await readdir(from).catch(() => [] as string[])) {
+        if (!REF_FILE.test(file)) continue;
+        await copyFile(path.join(from, file), path.join(to, file));
+        copied += 1;
+      }
+      return copied;
+    },
+
     async readRef(slug: string, fileName: string): Promise<Uint8Array> {
       if (!REF_FILE.test(fileName)) throw new StoreError('BAD_FILE', 'Недопустимое имя файла референса.');
       try {

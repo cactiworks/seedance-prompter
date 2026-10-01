@@ -1,24 +1,25 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
 import { staleFields, type FieldsOutput } from '../core/compose.ts';
 import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
 import { buildFieldsUser, FIELDS_SCHEMA, normalizeFields, validateFields } from '../core/llm/buildFields.ts';
-import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput } from '../core/llm/buildPlanner.ts';
+import { buildPlannerUser, extractLines, PLANNER_SCHEMA, validatePlan, type PlannerOutput, type PlannerShooting } from '../core/llm/buildPlanner.ts';
 import { buildPrompterSystem, buildPrompterUser, cardFile, EMPTY_SHOT, hasStyles, normalizePrompter, PROMPTER_MAX_REFS, PROMPTER_REF_ROLES, PROMPTER_SCHEMA, validatePrompter, type PrompterOutput, type PrompterRequest, type PrompterShot, type PrompterTemplate } from '../core/llm/buildPrompter.ts';
 import { buildVisionUser, flagsFromVision, VISION_SCHEMA, VISION_SYSTEM, type VisionOutput } from '../core/llm/buildVision.ts';
 import { VERDICT_SYMPTOMS, withLearnings } from '../core/gen/calibration.ts';
-import { findModel, modelsOf } from '../core/gen/models.ts';
+import { findModel, modelsOf, sourceTitleRu } from '../core/gen/models.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { buildRegionPrompt, regionProblems, type Box } from '../core/gen/regionEdit.ts';
 import { buildEditInstructionUser, EDIT_INSTRUCTION_SCHEMA, EDIT_INSTRUCTION_SYSTEM, needsTranslation, validateEditInstruction, type EditInstructionOutput } from '../core/llm/buildEditInstruction.ts';
-import { LearningSchema, MoodboardSchema, VerdictSchema } from '../core/model/media.ts';
-import { durationOf, newProject, ProjectSchema } from '../core/model/project.ts';
-import { buildShot, type PackBundle } from '../core/pipeline.ts';
-import { cropArgs, frameArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
+import { LearningSchema, MoodboardSchema, RefSourceSchema, VerdictSchema } from '../core/model/media.ts';
+import { durationOf, newProject, ProjectSchema, storyboardFrames } from '../core/model/project.ts';
+import { agentShooting, buildShot, type PackBundle } from '../core/pipeline.ts';
+import { cropArgs, frameArgs, resizeArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
 import { GEN_HTTP, GenError } from './gen/provider.ts';
 import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
 import type { ImageInput } from './llm/claudeCli/args.ts';
@@ -41,6 +42,16 @@ const ALLOWED_ORIGINS = new Set([`http://${HOST}:${PORT}`, `http://localhost:${P
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const MIME: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 const MAX_REF_BYTES = 30 * 1024 * 1024;
+/** Свой файл в библиотеку (съёмка, чужая картинка): до 1 ГБ — видео с телефона бывают крупными. */
+const MAX_IMPORT_BYTES = 1024 * 1024 * 1024;
+const IMPORT_EXT: Record<string, { ext: string; kind: 'image' | 'video' }> = {
+  'image/png': { ext: 'png', kind: 'image' },
+  'image/jpeg': { ext: 'jpg', kind: 'image' },
+  'image/webp': { ext: 'webp', kind: 'image' },
+  'video/mp4': { ext: 'mp4', kind: 'video' },
+  'video/quicktime': { ext: 'mov', kind: 'video' },
+  'video/webm': { ext: 'webm', kind: 'video' },
+};
 /** Копия для vision ≤1568 px в JPEG — это сотни КБ; 4 млн знаков base64 ≈ 3 МБ — с запасом, но не «что угодно». */
 const MAX_VISION_BASE64 = 4_000_000;
 
@@ -61,7 +72,8 @@ export interface AppOptions {
 }
 
 function revealInFinder(target: string): void {
-  if (process.platform !== 'darwin') return;
+  // Под тестами Finder не открываем никогда: иначе прогон тестов раскрывает окна с временными папками.
+  if (process.platform !== 'darwin' || process.env.VITEST !== undefined) return;
   // Файл — выделить в его папке; папку — открыть.
   const args = /\.[a-z0-9]{2,4}$/i.test(target) ? ['-R', target] : [target];
   spawn('open', args, { stdio: 'ignore', detached: true }).unref();
@@ -76,7 +88,9 @@ function loadPack(rootDir: string, id: string): PackBundle {
     const kit = read<PackBundle['kits'][string]>(path.join('kits', file));
     kits[kit.id] = kit;
   }
-  return { id, verbatim: read('verbatim.json'), kits, dialects: read('dialects.json'), lexicon: read('lexicon.json'), lintParams: read('lint.json') };
+  // Режимы съёмки — не у каждого pack: без файла остаётся только метод гайда.
+  const shooting = existsSync(path.join(dir, 'shooting.json')) ? read<NonNullable<PackBundle['shooting']>>('shooting.json') : undefined;
+  return { id, verbatim: read('verbatim.json'), kits, dialects: read('dialects.json'), lexicon: read('lexicon.json'), lintParams: read('lint.json'), ...(shooting === undefined ? {} : { shooting }) };
 }
 
 const STATUS: Record<StoreError['code'], 400 | 404 | 409 | 422> = { BAD_SLUG: 400, BAD_FILE: 400, NOT_FOUND: 404, CONFLICT: 409, INVALID: 422 };
@@ -118,8 +132,17 @@ export function createApp(options: AppOptions) {
     .get('/api/packs/:id', (c) => c.json(loadPack(options.rootDir, c.req.param('id'))))
     .get('/api/projects', async (c) => c.json(await store.list()))
     .post('/api/projects', async (c) => {
-      const body = (await c.req.json()) as { slug?: string; title?: string };
-      const project = await store.write(body.slug ?? '', newProject(body.slug ?? '', body.title ?? 'Без названия'), null);
+      const body = (await c.req.json()) as { slug?: string; title?: string; copyFrom?: string };
+      const slug = body.slug ?? '';
+      const title = body.title ?? 'Без названия';
+      // Копия ноды Seedance-промптера в canvas: черновик продолжается с того же места, но попытки — история оригинала.
+      if (typeof body.copyFrom === 'string' && body.copyFrom !== '') {
+        const source = await store.read(body.copyFrom);
+        const project = await store.write(slug, { ...source, slug, title, rev: 0, shots: source.shots.map((shot) => ({ ...shot, attempts: [] })) }, null);
+        await store.copyRefs(source.slug, slug);
+        return c.json(project, 201);
+      }
+      const project = await store.write(slug, newProject(slug, title), null);
       return c.json(project, 201);
     })
     .get('/api/projects/:slug', async (c) => c.json(await store.read(c.req.param('slug'))))
@@ -199,7 +222,7 @@ export function createApp(options: AppOptions) {
       const packDir = path.join(options.rootDir, 'packs', project.packId);
       const catalog = JSON.parse(readFileSync(path.join(packDir, 'symptoms.json'), 'utf8')) as SymptomCatalog;
       const system = buildCriticSystem(readFileSync(path.join(packDir, 'prompts/critic.system.md'), 'utf8'), catalog);
-      const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries });
+      const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries, shooting: agentShooting(shot, pack) });
       try {
         // Критик читает ~12 тыс. токенов и пишет длинный JSON: на opus это не укладывалось в 240 с, по умолчанию — sonnet.
         const result = await (options.runLlm ?? runClaude)<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
@@ -286,8 +309,12 @@ export function createApp(options: AppOptions) {
     .post('/api/llm/plan', async (c) => {
       const body = (await c.req.json()) as { project?: unknown; shotId?: string; synopsisRu?: string };
       const project = ProjectSchema.parse(body.project);
+      const shot = project.shots.find((s) => s.id === body.shotId);
       // Длительность — свойство кадра: от неё зависят бюджет событий и число отрезков.
-      const durationSec = durationOf(project, project.shots.find((s) => s.id === body.shotId) ?? { durationSec: null });
+      const durationSec = durationOf(project, shot ?? { durationSec: null });
+      // Как снято и кадры раскадровки: при кадрах отрезков ровно столько же, отрезок N открывается на кадре N.
+      const shooting: PlannerShooting | undefined = shot === undefined ? undefined : { ...agentShooting(shot, loadPack(options.rootDir, project.packId)), frames: storyboardFrames(project, shot).map((ref) => ({ label: ref.label, ...(ref.note !== undefined && ref.note.trim() !== '' ? { whatIsInIt: ref.note.trim().slice(0, 600) } : {}) })) };
+      const exact = shooting?.frames.length ?? 0;
       const { text, newLines } = extractLines(body.synopsisRu ?? '', project.lines);
       if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
@@ -295,12 +322,12 @@ export function createApp(options: AppOptions) {
       const run = options.runLlm ?? runClaude;
       const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
-        const user = buildPlannerUser(project, text, lineIds, durationSec);
+        const user = buildPlannerUser(project, text, lineIds, durationSec, shooting);
         let result = await run<PlannerOutput>({ ...request, user });
-        let problems = validatePlan(result.data, lineIds, durationSec);
+        let problems = validatePlan(result.data, lineIds, durationSec, exact);
         if (problems.length > 0) {
           result = await run<PlannerOutput>({ ...request, user: `${user}\n\nYour previous plan was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious plan:\n${JSON.stringify(result.data)}` });
-          problems = validatePlan(result.data, lineIds, durationSec);
+          problems = validatePlan(result.data, lineIds, durationSec, exact);
         }
         return c.json({ plan: result.data, newLines, problems, meta: result.meta });
       } catch (error) {
@@ -490,6 +517,15 @@ export function createApp(options: AppOptions) {
     })
     // Удаляется только сессия; файлы остаются в библиотеке.
     .delete('/api/studio/sessions/:id', async (c) => ((await gen.sessions.remove(c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'NOT_FOUND', messageRu: 'Сессия не найдена.' }, 404)))
+    // Убрать задачу из ленты вместе с её файлами. Идущую — нельзя: её ещё опрашивает сервер, а деньги уже потрачены.
+    .delete('/api/gen/jobs/:id', async (c) => {
+      const job = await gen.jobs.get(c.req.param('id'));
+      if (job === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Задача не найдена.' }, 404);
+      if (['submitting', 'queued', 'running', 'downloading'].includes(job.status)) return c.json({ error: 'ACTIVE', messageRu: 'Задача ещё идёт — дождись результата или ошибки.' }, 409);
+      for (const mediaId of job.mediaIds) if (mediaId !== null) await gen.library.remove(mediaId);
+      await gen.jobs.remove(job.id);
+      return c.json({ ok: true });
+    })
     .get('/api/gen/jobs/:id', async (c) => {
       const job = await gen.jobs.get(c.req.param('id'));
       return job === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Задача не найдена.' }, 404) : c.json(job);
@@ -574,6 +610,96 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'FRAME_FAILED', messageRu: error instanceof Error ? error.message : 'Кадр не извлёкся.' }, 500);
       }
     })
+    // Размер площадки (решение 36): нода canvas «Размер» — картинка или видео под W×H, ffmpeg локально, бесплатно.
+    .post('/api/media/resize', async (c) => {
+      const body = (await c.req.json()) as { source?: unknown; width?: unknown; height?: unknown; fit?: unknown };
+      const source = RefSourceSchema.safeParse(body.source);
+      // Стороны чётные: H.264 в yuv420p нечётных не принимает, а картинке это не вредит.
+      const side = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 16 && v <= 8192 ? v - (v % 2) : null);
+      const width = side(body.width);
+      const height = side(body.height);
+      const fit = body.fit === 'contain' ? 'contain' : 'cover';
+      if (!source.success || width === null || height === null) return c.json({ error: 'BAD_RESIZE', messageRu: 'Нужен файл и размер от 16 до 8192 px по каждой стороне.' }, 422);
+      let input: string;
+      let kind: 'image' | 'video' = 'image';
+      let tmpInput: string | null = null;
+      if (source.data.type === 'media') {
+        const item = await gen.library.get(source.data.mediaId);
+        if (item === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+        input = gen.library.pathOf(item);
+        kind = item.kind;
+      } else if (source.data.type === 'upload') {
+        const found = await gen.uploads.read(source.data.uploadId);
+        if (found === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Загруженная картинка не найдена.' }, 404);
+        await mkdir(gen.library.root, { recursive: true });
+        tmpInput = path.join(gen.library.root, `.resize-in-${Date.now().toString(36)}-${found.upload.fileName}`);
+        await writeFile(tmpInput, found.bytes);
+        input = tmpInput;
+      } else {
+        return c.json({ error: 'BAD_SOURCE', messageRu: 'Картинку референса проекта сначала добавь в библиотеку.' }, 422);
+      }
+      const label = `Размер ${width}×${height} · ${fit === 'cover' ? 'заполнить' : 'вписать'}`;
+      const sourceId = source.data.type === 'media' ? source.data.mediaId : null;
+      const existing = sourceId === null ? undefined : (await gen.library.list()).find((m) => m.modelId === 'local/resize' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === sourceId));
+      if (existing !== undefined) return c.json(existing);
+      const ext = kind === 'video' ? 'mp4' : 'png';
+      const out = path.join(gen.library.root, `.resize-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}.${ext}`);
+      try {
+        await (options.ffmpeg ?? runFfmpeg)(resizeArgs(input, out, width, height, fit, kind === 'video'));
+        const item = await gen.library.importFile(out, ext, {
+          kind,
+          jobId: 'local-resize',
+          taskId: null,
+          provider: 'local',
+          modelId: 'local/resize',
+          providerModel: 'ffmpeg',
+          prompt: label,
+          params: {},
+          refs: [{ label: 'Исходник', source: source.data, role: 'ref' }],
+          origin: null,
+          sessionId: null,
+          index: 0,
+          sourceUrl: '',
+          creditsConsumed: 0,
+          createdAt: new Date().toISOString(),
+        });
+        return c.json(item, 201);
+      } catch (error) {
+        return c.json({ error: 'RESIZE_FAILED', messageRu: error instanceof Error ? error.message : 'Размер не подогнался.' }, 500);
+      } finally {
+        if (tmpInput !== null) await rm(tmpInput, { force: true });
+      }
+    })
+    // Свой файл в библиотеку (решение 36): съёмку можно резать, брать из неё кадр и отдавать в canvas, как сгенерированное.
+    .post('/api/library/import', async (c) => {
+      const type = IMPORT_EXT[(c.req.header('content-type') ?? '').split(';')[0]?.trim() ?? ''];
+      if (type === undefined) return c.json({ error: 'BAD_TYPE', messageRu: 'Подходят PNG, JPG, WebP и видео MP4, MOV, WebM.' }, 415);
+      const bytes = new Uint8Array(await c.req.arrayBuffer());
+      if (bytes.byteLength === 0) return c.json({ error: 'EMPTY', messageRu: 'Пустой файл.' }, 422);
+      if (bytes.byteLength > MAX_IMPORT_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Файл больше 1 ГБ — сожми или обрежь его заранее.' }, 413);
+      const name = (c.req.query('name') ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 120);
+      const tmp = path.join(gen.library.root, `.import-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}.${type.ext}`);
+      await mkdir(gen.library.root, { recursive: true });
+      await writeFile(tmp, bytes);
+      const item = await gen.library.importFile(tmp, type.ext, {
+        kind: type.kind,
+        jobId: 'local-import',
+        taskId: null,
+        provider: 'local',
+        modelId: 'local/import',
+        providerModel: 'upload',
+        prompt: name === '' ? 'Свой файл' : name,
+        params: {},
+        refs: [],
+        origin: null,
+        sessionId: null,
+        index: 0,
+        sourceUrl: '',
+        creditsConsumed: 0,
+        createdAt: new Date().toISOString(),
+      });
+      return c.json(item, 201);
+    })
     // Обрезка видео по времени (решение 35): нода canvas «Обрезка», бесплатно, локально ffmpeg; результат — новое видео библиотеки.
     .post('/api/library/:id/trim', async (c) => {
       const video = await gen.library.get(c.req.param('id'));
@@ -643,6 +769,46 @@ export function createApp(options: AppOptions) {
       } catch (error) {
         return c.json({ error: 'CROP_FAILED', messageRu: error instanceof Error ? error.message : 'Обрезка не удалась.' }, 500);
       }
+    })
+    // Удалить файл навсегда (решение 36): файл, описание, избранное, папки, оценки; задача без файлов уходит из ленты.
+    .delete('/api/library/:id', async (c) => {
+      const id = c.req.param('id');
+      if (!(await gen.library.remove(id))) return c.json({ error: 'NOT_FOUND', messageRu: 'Файла нет в библиотеке.' }, 404);
+      for (const job of await gen.jobs.all()) {
+        if (!job.mediaIds.includes(id)) continue;
+        const mediaIds = job.mediaIds.map((m) => (m === id ? null : m));
+        if (job.status === 'saved' && mediaIds.every((m) => m === null)) await gen.jobs.remove(job.id);
+        else await gen.jobs.put({ ...job, mediaIds });
+      }
+      await journal.verdicts.update((list) => list.filter((v) => v.mediaId !== id));
+      return c.json({ ok: true });
+    })
+    // Выгрузка для монтажа: копии выбранных файлов в data/exports/<дата> с понятными именами + Finder. Оригиналы на месте.
+    .post('/api/library/export', async (c) => {
+      const body = (await c.req.json()) as { mediaIds?: unknown };
+      const ids = Array.isArray(body.mediaIds) ? body.mediaIds.filter((m): m is string => typeof m === 'string') : [];
+      const items = (await Promise.all(ids.map((id) => gen.library.get(id)))).filter((m): m is NonNullable<typeof m> => m !== undefined);
+      if (items.length === 0) return c.json({ error: 'EMPTY', messageRu: 'Выбери файлы для выгрузки.' }, 422);
+      const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
+      const dir = path.join(options.dataDir, 'exports', stamp);
+      await mkdir(dir, { recursive: true });
+      const slug = (text: string): string =>
+        text
+          .replace(/[^\p{L}\p{N}]+/gu, ' ')
+          .trim()
+          .split(/\s+/)
+          .slice(0, 6)
+          .join(' ')
+          .slice(0, 48);
+      const files: string[] = [];
+      for (const [i, item] of items.entries()) {
+        const ext = item.file.split('.').pop() ?? 'bin';
+        const name = `${String(i + 1).padStart(2, '0')} ${sourceTitleRu(item.modelId)} ${slug(item.prompt)}`.trim().replace(/\/+/g, '-');
+        await copyFile(gen.library.pathOf(item), path.join(dir, `${name}.${ext}`));
+        files.push(`${name}.${ext}`);
+      }
+      if (options.reveal !== false) (options.reveal ?? revealInFinder)(dir);
+      return c.json({ dir, files });
     })
     .post('/api/library/:id/reveal', async (c) => {
       const item = await gen.library.get(c.req.param('id'));

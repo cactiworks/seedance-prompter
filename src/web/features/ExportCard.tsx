@@ -8,7 +8,7 @@ import { useStore } from '../store.ts';
 import { PromptText } from './PromptText.tsx';
 import styles from './ExportCard.module.css';
 
-const KIND_RU: Record<string, string> = { location: 'локация', character: 'герой', object: 'предмет', gear: 'техника', other: 'другое' };
+const KIND_RU: Record<string, string> = { location: 'локация', character: 'герой', object: 'предмет', gear: 'техника', frame: 'кадр раскадровки', other: 'другое' };
 const VERDICT: Record<string, { label: string; tone: TagTone }> = { ready: { label: 'критик: готов', tone: 'success' }, risky: { label: 'критик: с рисками', tone: 'warning' }, 'not-ready': { label: 'критик: не готов', tone: 'danger' } };
 
 interface ExportCardProps {

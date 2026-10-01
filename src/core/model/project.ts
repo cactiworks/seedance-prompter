@@ -32,12 +32,17 @@ export function needsAgent(ru: string, en: string, enFor: string | undefined, le
   return ru.trim() !== base.trim();
 }
 
+/** frame — кадр раскадровки: с него открывается отрезок (шот) сценария. */
+export const REF_KINDS = ['location', 'character', 'object', 'gear', 'frame', 'other'] as const;
+
 export const RefSchema = z.object({
   key,
   label: z.string(),
-  kind: z.enum(['location', 'character', 'object', 'gear', 'other']),
+  kind: z.enum(REF_KINDS),
   /** Имя файла в каталоге проекта; пусто — референс пока без картинки. */
   file: z.string().nullable().default(null),
+  /** Что на картинке — промпт, которым её сгенерировали (картинки из canvas). Агенты получают его вместо самой картинки. */
+  note: z.string().optional(),
   flags: z.object({ hasPeople: z.boolean().default(false), hasText: z.boolean().default(false), studioBackdrop: z.boolean().default(false) }).default({ hasPeople: false, hasText: false, studioBackdrop: false }),
 });
 export type Ref = z.infer<typeof RefSchema>;
@@ -97,6 +102,11 @@ export const SegmentSchema = z.object({
   beatsRu: z.string().default(''),
   /** Абзац писателя; text.enFor — биты, из которых он написан. */
   text: TextUnitSchema,
+  /**
+   * Кадр раскадровки (референс панели), с которого открывается отрезок: в склейках — шот начинается с этого
+   * кадра, в одном дубле камера приходит к нему. Фразу-привязку пишет компилятор, а не агент.
+   */
+  frameRef: key.nullable().optional(),
 });
 export type Segment = z.infer<typeof SegmentSchema>;
 
@@ -136,6 +146,30 @@ export const CritiqueSchema = z.object({
 });
 export type Critique = z.infer<typeof CritiqueSchema>;
 
+/** Метод гайда: несглаженная ручная камера, дословные блоки. Остальные режимы — packs/<id>/shooting.json. */
+export const GUIDE_SHOOTING = 'handheld-doc';
+export const CUSTOM_SHOOTING = 'custom';
+export const STRUCTURES = ['one-take', 'cuts'] as const;
+export type Structure = (typeof STRUCTURES)[number];
+
+/**
+ * Как работает камера и как устроено время. Режим — id из pack или custom (тогда владелец описывает съёмку
+ * по-русски, агент полей пишет operation — фразу стиль-блока — и language — язык камеры для писателя).
+ * structure: один непрерывный дубль (гайд) или несколько шотов со склейками внутри одной генерации.
+ */
+export const ShootingSchema = z.object({
+  mode: z.string().default(GUIDE_SHOOTING),
+  structure: z.enum(STRUCTURES).default('one-take'),
+  ru: z.string().optional(),
+  enFor: z.string().optional(),
+  operation: z.string().default(''),
+  language: z.string().default(''),
+});
+export type Shooting = z.infer<typeof ShootingSchema>;
+export const DEFAULT_SHOOTING: Shooting = { mode: GUIDE_SHOOTING, structure: 'one-take', operation: '', language: '' };
+/** Кадры до 01.10.2026 съёмки не хранят — у них метод гайда. */
+export const shootingOf = (shot: { shooting?: Shooting }): Shooting => shot.shooting ?? DEFAULT_SHOOTING;
+
 export const ShotSchema = z.object({
   id: z.string(),
   title: z.string().default('Кадр'),
@@ -148,6 +182,8 @@ export const ShotSchema = z.object({
    * «shot on <camera> with <lens>» и характер картинки рядом с ним (приём 01).
    */
   customKit: z.object({ ru: z.string().optional(), enFor: z.string().optional(), camera: z.string().default(''), lens: z.string().default(''), look: z.string().default(''), lensNote: z.string().default('') }).default({ camera: '', lens: '', look: '', lensNote: '' }),
+  /** Как снято: режим работы камеры и монтаж. Нет поля — метод гайда, один дубль. */
+  shooting: ShootingSchema.optional(),
   /** null — набор дефектов комплекта. */
   defects: z.array(z.string()).nullable().default(null),
   behavior: z.array(z.string()).default(['real-human', 'no-staged', 'micro-expressions', 'subtle-movement']),
@@ -198,6 +234,28 @@ export const ProjectSchema = z.object({
   shots: z.array(ShotSchema).default([]),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+/** Кадры раскадровки кадра: картинки панели с типом «Кадр раскадровки», в порядке панели. */
+export function storyboardFrames(project: { refs: Ref[] }, shot: { panel: string[] }): Ref[] {
+  return shot.panel.flatMap((key) => {
+    const ref = project.refs.find((r) => r.key === key);
+    return ref !== undefined && ref.kind === 'frame' ? [ref] : [];
+  });
+}
+
+/**
+ * Панель изменилась — производные кадра следом: референсы локации — первые два с типом «Локация» в порядке
+ * панели; кадр раскадровки у отрезка снимается, если картинки больше нет в панели или она уже не кадр.
+ */
+export function syncPanel(project: { refs: Ref[] }, shot: Shot): Shot {
+  const kinds = new Map(project.refs.map((ref) => [ref.key, ref.kind]));
+  const isFrame = (key: string | null | undefined): boolean => key !== null && key !== undefined && shot.panel.includes(key) && kinds.get(key) === 'frame';
+  return {
+    ...shot,
+    locationRefs: shot.panel.filter((key) => kinds.get(key) === 'location').slice(0, 2),
+    segments: shot.segments.map((s) => (s.frameRef === undefined || s.frameRef === null || isFrame(s.frameRef) ? s : { ...s, frameRef: null })),
+  };
+}
 
 /** Длительность кадра: своя или общая для ролика. */
 export function durationOf(project: { durationSec: number }, shot: { durationSec: number | null }): number {

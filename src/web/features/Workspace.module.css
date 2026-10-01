@@ -3,6 +3,73 @@
   padding: var(--lab-space-6) var(--lab-space-12) var(--lab-space-36);
 }
 
+/* Seedance-промптер из canvas: редактор кадра попапом на весь экран, холст под ним живой. Ниже диалогов (40). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--lab-bg-page);
+  animation: overlay-in var(--lab-duration-fast) var(--lab-ease-standard);
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    animation: none;
+  }
+}
+
+/* режим съёмки и монтаж */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-6);
+  padding-bottom: var(--lab-space-8);
+  border-bottom: 1px solid var(--lab-border-subtle);
+}
+
+/* тип картинки прямо на карточке панели */
+.kindSelect {
+  width: 100%;
+  padding: var(--lab-space-1) var(--lab-space-2);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-m);
+  background: var(--lab-bg-surface);
+  color: var(--lab-text-secondary);
+  font: inherit;
+  font-size: var(--lab-type-caption-size);
+  cursor: pointer;
+}
+
+.refTag {
+  align-self: flex-start;
+}
+
+/* кадр раскадровки, с которого открывается отрезок */
+.frameRow {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--lab-space-6);
+}
+
+.frameThumb {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  object-fit: cover;
+}
+
 .topbar {
   position: sticky;
   top: var(--lab-space-6);

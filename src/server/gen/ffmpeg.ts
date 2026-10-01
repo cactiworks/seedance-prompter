@@ -55,5 +55,19 @@ export const trimArgs = (input: string, output: string, start: number, end: numb
   output,
 ];
 
+/**
+ * Под размер площадки: cover — заполнить и обрезать края, contain — вписать целиком с чёрными полями. Видео — H.264
+ * (стороны чётные — их делает сервер), картинка — PNG.
+ */
+export const resizeArgs = (input: string, output: string, width: number, height: number, fit: 'cover' | 'contain', video: boolean): string[] => {
+  const vf =
+    fit === 'cover'
+      ? `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1`
+      : `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
+  return video
+    ? ['-i', input, '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', output]
+    : ['-i', input, '-vf', vf, '-frames:v', '1', '-update', '1', output];
+};
+
 /** Аргументы для одного кадра: первый — с начала, последний — за 0.1 с до конца (-sseof). */
 export const frameArgs = (input: string, output: string, which: 'first' | 'last'): string[] => [...(which === 'last' ? ['-sseof', '-0.1'] : []), '-i', input, '-frames:v', '1', '-update', '1', output];

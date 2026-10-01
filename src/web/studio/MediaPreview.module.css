@@ -285,6 +285,12 @@
   outline: none;
 }
 
+.confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-2);
+}
+
 /* ——— правка кистью (Edit как у Higgsfield) ——— */
 .maskStage {
   display: grid;

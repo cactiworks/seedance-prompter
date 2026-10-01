@@ -24,7 +24,15 @@ export interface LintTextOptions {
   durationSec?: number;
   /** Отпечатки подавленных находок («осознанное исключение»). */
   suppressed?: Iterable<string>;
+  /**
+   * Режим съёмки: правила ручной документальной камеры (переключатель handheld, стек дефектов) и правило
+   * «один дубль» имеют смысл только в своём режиме. Нет — метод гайда, один дубль.
+   */
+  shooting?: { handheld: boolean; defectStack: boolean; oneTake: boolean };
 }
+
+/** Правила, которые выключает режим съёмки (см. LintTextOptions.shooting). */
+const SHOOTING_RULES = { handheld: ['STYLE_HANDHELD_SWITCH'], defectStack: ['STYLE_DEFECT_STACK'], oneTake: ['ONE_TAKE_CONTRADICTION'] } as const;
 
 const SEVERITY_ORDER = { error: 0, warning: 1, info: 2 } as const;
 
@@ -36,7 +44,7 @@ function fingerprint(ruleId: string, evidence: string): string {
 export function lintText(raw: string, options: LintTextOptions): Finding[] {
   const wrap = options.dialogueWrap ?? 'guillemets';
   const paragraphs = toParagraphs(raw, wrap);
-  const boundary = paragraphs.findIndex((p) => /^(?:Location:|The camera is handheld)/u.test(p.text));
+  const boundary = paragraphs.findIndex((p) => /^(?:Location:|The camera is handheld|The camera crew is never visible)/u.test(p.text));
   const styleZone = paragraphs.slice(0, boundary === -1 ? 1 : Math.max(1, boundary));
 
   const ctx: TextLintContext = {
@@ -52,8 +60,10 @@ export function lintText(raw: string, options: LintTextOptions): Finding[] {
   };
 
   const suppressed = new Set(options.suppressed ?? []);
+  const off = new Set<string>(Object.entries(SHOOTING_RULES).flatMap(([flag, ids]) => (options.shooting?.[flag as keyof typeof SHOOTING_RULES] === false ? ids : [])));
   const findings: Finding[] = [];
   for (const rule of TEXT_RULES) {
+    if (off.has(rule.id)) continue;
     for (const draft of rule.run(ctx)) {
       const finding: Finding = { ...draft, family: rule.family, fingerprint: fingerprint(draft.ruleId, draft.evidence) };
       if (!suppressed.has(finding.fingerprint)) findings.push(finding);

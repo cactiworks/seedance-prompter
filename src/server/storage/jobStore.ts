@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { GenJobSchema, type GenJob } from '../../core/model/media.ts';
 
@@ -51,6 +51,15 @@ export function createJobStore(dataDir: string) {
     async get(id: string): Promise<GenJob | undefined> {
       await load();
       return jobs.get(id);
+    },
+
+    /** Убрать задачу из ленты (файл задачи). Деньги за неё уже списаны — это только запись. */
+    async remove(id: string): Promise<boolean> {
+      await load();
+      if (!jobs.has(id)) return false;
+      jobs.delete(id);
+      await rm(path.join(dir, `${id}.json`), { force: true });
+      return true;
     },
 
     /** Новые первыми. */

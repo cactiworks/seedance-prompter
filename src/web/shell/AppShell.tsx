@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { MediaKind } from '../../core/gen/models.ts';
+import { isCanvasDraft } from '../../core/model/canvas.ts';
 import { ThemeSwitch } from '../features/ThemeSwitch.tsx';
 import { useGen } from '../gen/genStore.ts';
 import { usePrompter } from '../prompter/prompterStore.ts';
@@ -132,7 +133,8 @@ function ProjectList() {
         Ролики
       </Text>
       <nav className={styles.list}>
-        {projects.map((project) => (
+        {/* Черновики Seedance-промптеров живут в своих нодах canvas — здесь только ролики «Кадров». */}
+        {projects.filter((project) => !isCanvasDraft(project.slug)).map((project) => (
           <div key={project.slug} className={styles.item}>
             <button type="button" className={styles.itemLabel} onClick={() => void openProject(project.slug)}>
               <span>{project.title}</span>

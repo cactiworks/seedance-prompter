@@ -282,6 +282,10 @@ const TOPAZ: GenModel = {
 export const GEN_MODELS: readonly GenModel[] = [...GENERATORS, TOPAZ];
 
 export const findModel = (id: string): GenModel | undefined => GEN_MODELS.find((m) => m.id === id);
+
+/** Что сделало файл — для подписей в библиотеке и просмотре: модель или локальная операция (ffmpeg, импорт). */
+const LOCAL_RU: Record<string, string> = { 'local/import': 'Свой файл', 'local/frame': 'Кадр из видео', 'local/crop': 'Обрезка', 'local/trim': 'Обрезка видео', 'local/resize': 'Размер' };
+export const sourceTitleRu = (modelId: string): string => findModel(modelId)?.titleRu ?? LOCAL_RU[modelId] ?? modelId;
 /** Генераторы вида — для выбора модели; инструменты (апскейл) сюда не входят. */
 export const modelsOf = (kind: MediaKind): GenModel[] => GEN_MODELS.filter((m) => m.kind === kind && m.tool !== true);
 

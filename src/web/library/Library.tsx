@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { findModel } from '../../core/gen/models.ts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { sourceTitleRu } from '../../core/gen/models.ts';
 import type { MediaItem } from '../../core/model/media.ts';
-import { mediaUrl, useGen } from '../gen/genStore.ts';
+import { importMedia, mediaUrl, useGen } from '../gen/genStore.ts';
 import { MediaPreview } from '../studio/MediaPreview.tsx';
 import { Button, Icon, Select, Text } from '../ui/components/index.ts';
 import styles from './Library.module.css';
@@ -25,7 +25,7 @@ const dayOf = (iso: string): string => new Date(iso).toLocaleDateString('ru-RU',
  * папки, работы по дням с «выбрать весь день», на карточке — выбор, избранное и меню, размер карточек ползунком.
  */
 export function Library() {
-  const { library, favorites, folders, jobs, loadLibrary, loadJobs, addRef, toggleFavorite, reveal, createFolder, renameFolder, deleteFolder, fileTo } = useGen();
+  const { library, favorites, folders, jobs, loadLibrary, loadJobs, addRef, toggleFavorite, reveal, createFolder, renameFolder, deleteFolder, fileTo, deleteMedia, exportMedia } = useGen();
   const [view, setView] = useState<View>({ type: 'all' });
   const [query, setQuery] = useState('');
   const [order, setOrder] = useState<'new' | 'old'>('new');
@@ -35,6 +35,27 @@ export function Library() {
   const [size, setSize] = useState(readSize);
   const [folderPick, setFolderPick] = useState(false);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importer = useRef<HTMLInputElement>(null);
+
+  /** Свои файлы — в библиотеку по одному; ошибка одного не останавливает остальные. */
+  const importFiles = async (files: File[]): Promise<void> => {
+    setImporting(true);
+    setImportError(null);
+    const failed: string[] = [];
+    for (const f of files) {
+      try {
+        await importMedia(f);
+      } catch (e) {
+        failed.push(`${f.name}: ${e instanceof Error ? e.message : 'не загрузилось'}`);
+      }
+    }
+    await loadLibrary();
+    setImporting(false);
+    if (failed.length > 0) setImportError(failed.join(' · '));
+  };
 
   useEffect(() => {
     void loadLibrary();
@@ -50,7 +71,7 @@ export function Library() {
           (view.type === 'favorites' && favorites.includes(item.id)) ||
           (view.type === 'kind' && item.kind === view.kind) ||
           (view.type === 'folder' && (folder?.mediaIds.includes(item.id) ?? false))) &&
-        (q === '' || item.prompt.toLowerCase().includes(q) || (findModel(item.modelId)?.titleRu.toLowerCase().includes(q) ?? false)),
+        (q === '' || item.prompt.toLowerCase().includes(q) || sourceTitleRu(item.modelId).toLowerCase().includes(q)),
     );
     return order === 'new' ? list : [...list].reverse();
   }, [library, favorites, view, folder, query, order]);
@@ -71,7 +92,7 @@ export function Library() {
     }
   };
   const useAsRef = (item: MediaItem, target: 'image' | 'video'): void => {
-    addRef(target, { label: `Из библиотеки · ${findModel(item.modelId)?.titleRu ?? ''}`, source: { type: 'media', mediaId: item.id } });
+    addRef(target, { label: `Из библиотеки · ${sourceTitleRu(item.modelId)}`, source: { type: 'media', mediaId: item.id } });
     setOpen(null);
     window.location.hash = target === 'image' ? '/images' : '/video';
   };
@@ -156,8 +177,28 @@ export function Library() {
             <Text variant="label" tone="secondary">
               показано {shown.length} из {library.length} · файлы на диске, KIE их больше не держит
             </Text>
+            {importError !== null && (
+              <Text variant="caption" tone="accent">
+                {importError}
+              </Text>
+            )}
           </div>
           <div className={styles.tools}>
+            <input
+              ref={importer}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm"
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                event.target.value = '';
+                void importFiles(files);
+              }}
+            />
+            <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} loading={importing} title="Свои картинки и видео — съёмки, референсы; дальше их можно резать и отдавать в canvas" onClick={() => importer.current?.click()}>
+              Добавить свои
+            </Button>
             {folder !== undefined && (
               <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} title="Удалить папку — файлы останутся" onClick={() => void deleteFolder(folder.id).then(() => setView({ type: 'all' }))}>
                 Удалить папку
@@ -218,7 +259,51 @@ export function Library() {
                 Убрать из папки
               </Button>
             )}
-            <Button variant="ghost" size="xs" onClick={() => setSelected([])}>
+            <Button
+              variant="border"
+              size="xs"
+              icon={<Icon name="download" size={0.875} />}
+              title="Копии с понятными именами — в папку для монтажа, откроется в Finder"
+              onClick={() =>
+                void exportMedia(selected)
+                  .then((r) => setImportError(`Выгружено файлов: ${r.files.length} → ${r.dir}`))
+                  .catch((e: unknown) => setImportError(e instanceof Error ? e.message : 'Не выгрузилось.'))
+              }
+            >
+              Выгрузить для монтажа
+            </Button>
+            {confirmDelete ? (
+              <>
+                <Button
+                  variant="dangerFill"
+                  size="xs"
+                  icon={<Icon name="bin" size={0.875} />}
+                  onClick={() =>
+                    void deleteMedia(selected).then(() => {
+                      setSelected([]);
+                      setConfirmDelete(false);
+                    })
+                  }
+                >
+                  Удалить {selected.length} с диска навсегда
+                </Button>
+                <Button variant="ghost" size="xs" onClick={() => setConfirmDelete(false)}>
+                  Отмена
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} onClick={() => setConfirmDelete(true)}>
+                Удалить
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => {
+                setSelected([]);
+                setConfirmDelete(false);
+              }}
+            >
               Снять выделение
             </Button>
           </div>
@@ -297,7 +382,7 @@ export function Library() {
                         )}
                         <span className={styles.caption}>
                           <Text variant="caption" tone="secondary">
-                            {findModel(item.modelId)?.titleRu ?? item.modelId}
+                            {sourceTitleRu(item.modelId)}
                           </Text>
                         </span>
                       </div>

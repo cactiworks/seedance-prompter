@@ -1,0 +1,96 @@
+{
+ "$source": "Режимы съёмки и монтаж (решение 37, 01.10.2026). handheld-doc — метод гайда: формула формата, переключатель «unstabilized handheld», стек дефектов и правило оператора берутся дословно из verbatim.json, этот файл их не повторяет. Остальные режимы собраны по практике операторской работы и официальной формуле Seedance 2.5 (субъект, действие, сцена, стиль, камера и монтаж, звук) — генерацией НЕ проверены, в интерфейсе стоит «не из гайда». Склейки внутри одной генерации Seedance 2.5 заявлены официально (мультишот в одном дубле, блог ByteDance 31.07.2026); формулировка склеек — наша, проверяется прогоном.",
+ "leads": {
+  "doc": "Hyperrealistic cinematic documentary, indistinguishable from real footage.",
+  "film": "Hyperrealistic cinematic film footage, indistinguishable from a real film shoot."
+ },
+ "structure": {
+  "oneTake": "One continuous {D}-second take, one uninterrupted shot, no cuts, no edits",
+  "cuts": "One {D}-second edited sequence of {N} shots joined by hard cuts, each shot a new camera setup in the same world",
+  "shotLabel": "Shot {I}."
+ },
+ "frame": {
+  "takeOpens": "The take opens exactly on the frame of {REF}: same framing, composition and light.",
+  "arrives": "The camera arrives at the exact framing of {REF}: same composition and light.",
+  "shotOpens": "The shot opens exactly on the frame of {REF}: same framing, composition and light."
+ },
+ "locationNoRef": "Location: {PLACE}.",
+ "crewRule": {
+  "long": "The camera crew is never visible in frame — no operator, no hands, no rig, no tracks, no equipment, no shadows of the crew. Every mention of the operator refers only to the behavior of the camera. The audience only sees what the camera sees.",
+  "short": "The camera crew is never visible in frame — no operator, no hands, no rig. The audience only sees what the camera sees."
+ },
+ "modes": [
+  {
+   "id": "handheld-doc",
+   "titleRu": "Ручная · документальная",
+   "noteRu": "Метод гайда: несглаженная ручная камера, автоматика ошибается, оператор не виден. Формулы дословные, проверены генерациями.",
+   "source": "guide",
+   "lead": "doc",
+   "operation": null,
+   "craft": null,
+   "defects": true,
+   "crewRule": false,
+   "language": "Unstabilized handheld documentary operating. The camera reacts to the physics of the world: it lurches with braking, jerks back when something flies too close, loses focus and catches it, stumbles on a curb; the horizon tilts and corrects. The operator is never an actor — only camera verbs."
+  },
+  {
+   "id": "handheld-cine",
+   "titleRu": "Ручная · киношная",
+   "noteRu": "Оператор с камерой на плече на съёмочной площадке: живое, но управляемое движение, без тряски и без ошибок автоматики.",
+   "source": "derived",
+   "lead": "film",
+   "operation": "handheld camera on a cinema operator's shoulder rig, organic and controlled movement with a gentle breathing float, no shake and no jitter",
+   "craft": "Exposure and white balance locked like on a film set, focus pulled smoothly by hand from one subject to the next",
+   "defects": false,
+   "crewRule": true,
+   "language": "Handheld cinema operating on a film set. The frame floats and breathes slightly, reframes with intention, keeps a steady distance and follows the action; every move is motivated by the action, never random. No stumbles, no focus hunting, no auto-exposure jumps — a film crew, not a documentary run-and-gun."
+  },
+  {
+   "id": "steadicam",
+   "titleRu": "Стедикам · гимбал",
+   "noteRu": "Плавное парящее движение вместе с героями сквозь пространство, горизонт ровный.",
+   "source": "derived",
+   "lead": "film",
+   "operation": "camera on a Steadicam, smooth gliding movement that floats through the space with the subjects, perfectly level horizon",
+   "craft": "Exposure and white balance locked, smooth manual focus pulls, the frame glides without a single bump",
+   "defects": false,
+   "crewRule": true,
+   "language": "Steadicam. Long gliding moves: the camera follows a character from behind, circles around them, leads them backwards through the space, rises slightly over an obstacle. The horizon stays level, changes of distance are slow and continuous, there is no shake at all."
+  },
+  {
+   "id": "rig",
+   "titleRu": "Кино · тележка, кран, штатив",
+   "noteRu": "Классическая игровая съёмка: медленные точные проезды, кран, статичные выверенные планы.",
+   "source": "derived",
+   "lead": "film",
+   "operation": "camera on professional film support — dolly track, crane and tripod — every move slow, precise and motivated, compositions held like a still photograph",
+   "craft": "Exposure and white balance locked, precise focus pulls by a focus puller, deliberate framing",
+   "defects": false,
+   "crewRule": true,
+   "language": "Rig moves only: a slow dolly push-in, a lateral dolly move alongside the action, a crane rising or descending, a slow pan or tilt from a tripod, or a locked-off static frame. At most one camera move per segment, each motivated by the action. The camera never shakes and never reacts by itself."
+  },
+  {
+   "id": "drone",
+   "titleRu": "Дрон · аэро",
+   "noteRu": "Съёмка с кинодрона: общие планы сверху, плавные пролёты, облёты и подлёты к герою.",
+   "source": "derived",
+   "lead": "film",
+   "operation": "aerial footage from a heavy-lift cinema drone with a stabilized gimbal, smooth sweeping moves, perfectly level horizon",
+   "craft": "Exposure locked, crisp focus far into the distance, the motion stays smooth and stable",
+   "defects": false,
+   "crewRule": true,
+   "language": "Aerial camera. High establishing views, slow descents toward the subject, wide sweeping arcs, reveals over a ridge or a rooftop, tracking a moving vehicle from above. Smooth, stable and level; distances change slowly."
+  },
+  {
+   "id": "custom",
+   "titleRu": "Своя съёмка",
+   "noteRu": "Описываешь, как работает камера, своими словами — агент перепишет это в стиль-блок и в язык камеры для писателя.",
+   "source": "custom",
+   "lead": "film",
+   "operation": "",
+   "craft": "Exposure and white balance locked like on a film set, focus pulled smoothly by hand",
+   "defects": false,
+   "crewRule": true,
+   "language": ""
+  }
+ ]
+}

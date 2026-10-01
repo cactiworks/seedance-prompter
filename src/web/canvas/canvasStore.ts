@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { modelsOf, paramsFor, type MediaKind } from '../../core/gen/models.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import { wouldCycle } from '../../core/canvas/plan.ts';
+import { cloneSeedance } from '../../core/canvas/seedance.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
 /** Префикс нод в системном буфере — чтобы вставка работала между flows и вкладками. */
@@ -28,7 +29,7 @@ let seq = 0;
 export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
-export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280 };
+export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300 };
 /** Вертикаль портов: выход и первый вход — под шапкой, остальные входы — шагом PORT_STEP. */
 export const PORT_TOP = 58;
 export const PORT_STEP = 30;
@@ -91,6 +92,11 @@ interface CanvasState {
   /** Вставить ноды из текста буфера `sp-canvas:`; возвращает число вставленных. */
   pasteNodes: (text: string, at: { x: number; y: number }) => number;
   duplicateSelected: () => void;
+  /**
+   * «В canvas» из просмотра работы: файл библиотеки — новой нодой (картинка или видео) правее всего графа в
+   * открытом flow; flow нет — создаётся. Вид сдвигается к новой ноде.
+   */
+  sendMedia: (item: { id: string; kind: 'image' | 'video'; label: string }) => Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,8 +130,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
     set((s) => ({ past: [...s.past.slice(-(HISTORY_LIMIT - 1)), flow], future: [] }));
   };
 
-  /** Копия ноды без результатов: запуски принадлежат исходной ноде. */
-  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: null });
+  /** Копия ноды без результатов: запуски принадлежат исходной ноде. Seedance-промптер получит копию черновика при открытии. */
+  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: null, ...cloneSeedance(node) });
 
   /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
   const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {
@@ -249,9 +255,16 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (from === to) return 'Нода не соединяется сама с собой.';
       if (wouldCycle(flow, from, to)) return 'Так получится цикл.';
       // Во входы «Старт», «Финал» и «Видео» — одна связь; повторная заменяет прежнюю.
-      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video');
+      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media');
       if (flow.edges.some((e) => e.from === from && e.to === to && e.port === port)) return null;
-      get().update((f) => ({ ...f, edges: [...f.edges.filter((e) => !replace(e)), { id: newId('e'), from, to, port }] }));
+      // «Размер» отдаёт то же, что получил: картинку или видео; прежний результат другого вида больше не годится.
+      const source = flow.nodes.find((n) => n.id === from);
+      const kind = source === undefined ? 'image' : outputOf(source) === 'video' ? 'video' : 'image';
+      get().update((f) => ({
+        ...f,
+        nodes: port === 'media' ? f.nodes.map((n) => (n.id === to ? { ...n, kind, mediaId: n.kind === kind ? n.mediaId : null } : n)) : f.nodes,
+        edges: [...f.edges.filter((e) => !replace(e)), { id: newId('e'), from, to, port }],
+      }));
       return null;
     },
     disconnect: (edgeId) => get().update((f) => ({ ...f, edges: f.edges.filter((e) => e.id !== edgeId) })),
@@ -278,6 +291,18 @@ export const useCanvas = create<CanvasState>((set, get) => {
     duplicateSelected: () => {
       const copied = group();
       if (copied.nodes.length > 0) insertCopies(copied.nodes, copied.edges, 32, 32);
+    },
+    sendMedia: async (item) => {
+      if (get().flow === null) await get().loadFlows();
+      if (get().flow === null) await get().newFlow();
+      const flow = get().flow;
+      if (flow === null) return;
+      const x = flow.nodes.length === 0 ? 0 : Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type])) + 80;
+      const y = flow.nodes.length === 0 ? 0 : Math.min(...flow.nodes.map((n) => n.y));
+      const id = get().addNode(item.kind === 'video' ? 'video' : 'image', x, y);
+      get().patchNode(id, item.kind === 'video' ? { mediaId: item.id, label: item.label } : { source: { type: 'media', mediaId: item.id }, label: item.label }, false);
+      const zoom = get().flow?.viewport.zoom ?? 1;
+      get().setViewport({ zoom, x: 240 - x * zoom, y: 160 - y * zoom });
     },
   };
 });

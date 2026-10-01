@@ -87,6 +87,26 @@ describe('API: проекты на диске', () => {
     const bad = await app.request('/api/projects/kamery/refs/evil.svg', { method: 'PUT', headers: { host, [CLIENT_HEADER]: '1' }, body: bytes });
     expect(bad.status).toBe(400);
   });
+
+  it('копия черновика ноды Seedance-промптера: тот же кадр и картинки, без чужих попыток; оригинала нет — 404', async () => {
+    const { app } = makeApp();
+    const created = (await (await app.request('/api/projects', { method: 'POST', headers: write, body: JSON.stringify({ slug: 'cv-orig', title: 'Canvas · flow' }) })).json()) as Project;
+    const withAttempt: Project = { ...created, shots: created.shots.map((s) => ({ ...s, synopsisRu: 'Герой идёт к пикапу', shooting: { mode: 'rig', structure: 'cuts', operation: '', language: '' }, attempts: [{ n: 1, createdAt: '2026-10-01T00:00:00Z', prompt: 'x', panel: [], segments: [], kitId: s.kitId, verdict: 'pending', workedRu: '', failedRu: '', symptomIds: [], readbackRu: '' }] })) };
+    await app.request('/api/projects/cv-orig', { method: 'PUT', headers: { ...write, 'if-match': '1' }, body: JSON.stringify(withAttempt) });
+    await app.request('/api/projects/cv-orig/refs/cv-na.png', { method: 'PUT', headers: { host, [CLIENT_HEADER]: '1' }, body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) });
+
+    const copy = await app.request('/api/projects', { method: 'POST', headers: write, body: JSON.stringify({ slug: 'cv-copy', title: 'Canvas · flow', copyFrom: 'cv-orig' }) });
+    expect(copy.status).toBe(201);
+    const copied = (await copy.json()) as Project;
+    expect(copied.slug).toBe('cv-copy');
+    expect(copied.rev).toBe(1);
+    expect(copied.shots[0]).toMatchObject({ synopsisRu: 'Герой идёт к пикапу', shooting: { mode: 'rig', structure: 'cuts' }, attempts: [] });
+    const file = await app.request('/api/projects/cv-copy/refs/cv-na.png', { headers: { host } });
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+
+    const orphan = await app.request('/api/projects', { method: 'POST', headers: write, body: JSON.stringify({ slug: 'cv-other', title: 'x', copyFrom: 'cv-missing' }) });
+    expect(orphan.status).toBe(404);
+  });
 });
 
 describe('pack отдаётся клиенту, и новый проект собирается конвейером', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { isCanvasDraft } from '../../core/model/canvas.ts';
 import { Button, Card, Icon, Text, TextField } from '../ui/components/index.ts';
 import { useStore } from '../store.ts';
 import styles from './Home.module.css';
@@ -6,7 +7,9 @@ import styles from './Home.module.css';
 const formatDate = (ms: number): string => new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
 export function Home() {
-  const { projects, loadProjects, createProject, openProject, error } = useStore();
+  const { projects: all, loadProjects, createProject, openProject, error } = useStore();
+  // Черновики Seedance-промптеров из canvas открываются из своих нод, здесь их нет.
+  const projects = all.filter((p) => !isCanvasDraft(p.slug));
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
 

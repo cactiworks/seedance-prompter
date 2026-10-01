@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { estimate, findModel, formatCost, paramsFor } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
 import { VerdictBar } from '../calibration/VerdictBar.tsx';
+import { useCanvas } from '../canvas/canvasStore.ts';
 import { CropEditor } from './CropEditor.tsx';
 import { EditPanel, type StageMode } from './EditPanel.tsx';
 import { MaskEditor } from './MaskEditor.tsx';
@@ -32,7 +33,9 @@ interface PreviewProps {
  * справа «Инфо» (промпт, параметры, действия) и «Правка» (рецепт починки или своё описание — `EditPanel`).
  */
 export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: PreviewProps) {
-  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo } = useGen();
+  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo, deleteMedia } = useGen();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const sendMedia = useCanvas((s) => s.sendMedia);
   const styleNames = new Map((useGen((s) => s.styles.higgsfield) ?? []).map((s) => [s.id, s.name]));
   const [current, setCurrent] = useState<MediaItem | null>(opened);
   const [tab, setTab] = useState<'info' | 'edit'>('info');
@@ -46,6 +49,8 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
     setTab('info');
     setMode('view');
   }, [opened]);
+  // Подтверждение удаления относится к одной работе — при листании сбрасывается.
+  useEffect(() => setConfirmDelete(false), [current?.id]);
 
   const item = current;
   const siblings = list ?? [];
@@ -81,7 +86,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
   const favorite = favorites.includes(item.id);
 
   const facts: [string, string][] = [
-    ['Модель', model?.titleRu ?? item.modelId],
+    ['Модель', sourceTitleRu(item.modelId)],
     ...Object.entries(item.params).map(([k, v]): [string, string] => [
       PARAM_RU[k] ?? k,
       k === 'durationSec' ? `${String(v)} с` : k === 'styleId' ? (v === '' ? 'нет' : (styleNames.get(String(v)) ?? String(v))) : k === 'seed' && v === 0 ? 'случайный' : showValue(v),
@@ -93,7 +98,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
   ];
 
   return createPortal(
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`Просмотр: ${model?.titleRu ?? ''}`}>
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`Просмотр: ${sourceTitleRu(item.modelId)}`}>
       <div className={styles.backdrop} style={{ backgroundImage: item.kind === 'image' ? `url(${mediaUrl(item.id)})` : undefined }} />
 
       {(versions.done.length > 1 || versions.pending.length > 0) && (
@@ -133,7 +138,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
         <header className={styles.panelHead}>
           <div>
             <Text variant="label" medium>
-              {model?.titleRu ?? item.modelId}
+              {sourceTitleRu(item.modelId)}
             </Text>
             <Text variant="caption" tone="secondary">
               {formatDate(item.savedAt)}
@@ -232,12 +237,53 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
                   </Button>
                 </>
               )}
+              <Button
+                variant="border"
+                size="s"
+                icon={<Icon name="layers" size={1} />}
+                title="Новой нодой в открытый flow canvas"
+                onClick={() => {
+                  void sendMedia({ id: item.id, kind: item.kind, label: item.modelId === 'local/import' ? item.prompt : sourceTitleRu(item.modelId) }).then(() => {
+                    onClose();
+                    window.location.hash = '/canvas';
+                  });
+                }}
+              >
+                В canvas
+              </Button>
               <Button variant="ghost" size="s" icon={<Icon name="star" size={1} />} onClick={() => void toggleFavorite(item.id)}>
                 {favorite ? 'В избранном' : 'В избранное'}
               </Button>
               <Button variant="ghost" size="s" icon={<Icon name="folder" size={1} />} onClick={() => void reveal(item.id)}>
                 В Finder
               </Button>
+              {/* Подтверждение — на месте кнопки: диалог встал бы под просмотр (он выше по слоям). */}
+              {confirmDelete ? (
+                <span className={styles.confirm}>
+                  <Button
+                    variant="dangerFill"
+                    size="s"
+                    icon={<Icon name="bin" size={1} />}
+                    onClick={() => {
+                      const next = siblings[index + 1] ?? siblings[index - 1] ?? null;
+                      void deleteMedia([item.id]).then(() => {
+                        setConfirmDelete(false);
+                        if (next === null) onClose();
+                        else setCurrent(next);
+                      });
+                    }}
+                  >
+                    Удалить с диска навсегда
+                  </Button>
+                  <Button variant="ghost" size="s" onClick={() => setConfirmDelete(false)}>
+                    Отмена
+                  </Button>
+                </span>
+              ) : (
+                <Button variant="ghost" size="s" icon={<Icon name="bin" size={1} />} onClick={() => setConfirmDelete(true)}>
+                  Удалить
+                </Button>
+              )}
               <div className={styles.folderWrap}>
                 <Button variant="ghost" size="s" icon={<Icon name="files" size={1} />} onClick={() => setFolderMenu((v) => !v)}>
                   В папку

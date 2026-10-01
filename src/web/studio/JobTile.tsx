@@ -36,7 +36,7 @@ export const retryable = (job: GenJob): boolean => job.status === 'download_fail
 
 /** Плитка задачи: заглушка с таймером → файл с диска; ошибка на месте; действия по наведению. */
 export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string) => void }) {
-  const { remix, regenerate, retry, reveal, toggleFavorite, favorites } = useGen();
+  const { remix, regenerate, retry, reveal, toggleFavorite, favorites, deleteJob } = useGen();
   const active = isActive(job);
   const elapsed = useElapsed(job.createdAt, active);
   const model = findModel(job.modelId);
@@ -72,6 +72,11 @@ export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string
             {retryable(job) && (
               <Button variant="border" size="xs" onClick={() => void retry(job.id)}>
                 {job.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}
+              </Button>
+            )}
+            {job.status === 'failed' && (
+              <Button variant="ghost" size="xs" icon={<Icon name="close" size={0.75} />} title="Убрать неудачную задачу из ленты" onClick={() => void deleteJob(job.id)}>
+                Убрать
               </Button>
             )}
           </div>

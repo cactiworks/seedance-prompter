@@ -2,12 +2,15 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { z } from 'zod';
 import { flowCost } from '../../core/canvas/plan.ts';
 import { CanvasEdgeSchema, CanvasNodeSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
-import { uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
+import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
 import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
 import { NodeView, portsOf } from './NodeView.tsx';
+import { afterSeedanceClose } from './openSeedance.ts';
+import { cloneSeedance } from '../../core/canvas/seedance.ts';
+import { useStore, type ProjectHost } from '../store.ts';
 
 const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
 
@@ -102,12 +105,22 @@ export function Canvas() {
   const [act, setAct] = useState<Interaction | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [picker, setPicker] = useState<string | null>(null);
+  const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
   const [consent, setConsent] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     void loadJobs();
     void loadLibrary();
   }, [loadJobs, loadLibrary]);
+
+  // Seedance-промптер закрыт — подпись ноды по сохранённому черновику и свежие задачи (выход ноды).
+  const host = useStore((s) => s.host);
+  const lastHost = useRef<ProjectHost | null>(null);
+  useEffect(() => {
+    const previous = lastHost.current;
+    lastHost.current = host;
+    if (previous !== null && host === null) void afterSeedanceClose(previous.nodeId);
+  }, [host]);
 
   const viewport = flow?.viewport ?? { x: 0, y: 0, zoom: 1 };
   const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
@@ -198,6 +211,8 @@ export function Canvas() {
     const onKey = (event: KeyboardEvent): void => {
       const tag = (event.target as HTMLElement | null)?.tagName ?? '';
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+      // Поверх холста открыт Seedance-промптер: Delete, ⌘Z и ⌘A относятся к нему, а не к нодам под ним.
+      if (useStore.getState().host !== null) return;
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       if (selection.length > 0 && (event.key === 'Delete' || event.key === 'Backspace')) {
@@ -230,7 +245,7 @@ export function Canvas() {
   useEffect(() => {
     const onPaste = (event: ClipboardEvent): void => {
       const tag = (event.target as HTMLElement | null)?.tagName ?? '';
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || useCanvas.getState().flow === null) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || useCanvas.getState().flow === null || useStore.getState().host !== null) return;
       const at = centerWorld();
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
       if (file !== undefined) {
@@ -299,7 +314,7 @@ export function Canvas() {
     setAct(null);
     if (from === undefined) return;
     if (!portAccepts(port, outputOf(from))) {
-      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается нода промпта.' : port === 'video' ? 'Во вход «Видео» подключается генератор видео.' : 'Во вход картинки подключается картинка, кадр или генератор картинки.');
+      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается нода промпта.' : port === 'video' ? 'Во вход «Видео» подключается видео: генератор, своё видео или обрезка.' : port === 'media' ? 'Во вход «Файл» подключается картинка или видео.' : 'Во вход картинки подключается картинка, кадр или генератор картинки.');
       return;
     }
     const problem = connect(from.id, node.id, port);
@@ -307,7 +322,7 @@ export function Canvas() {
   };
 
   /** Что можно создать на конце связи, отпущенной в пустоту, — по типу выхода. */
-  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim'; kind: 'image' | 'video'; port: InputPort }[] => {
+  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim' | 'resize' | 'seedance'; kind: 'image' | 'video'; port: InputPort }[] => {
     const from = nodeById.get(fromId);
     if (from === undefined) return [];
     const out = outputOf(from);
@@ -320,10 +335,13 @@ export function Canvas() {
       return [
         { label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' },
         { label: 'Обрезка видео', type: 'trim', kind: 'image', port: 'video' },
+        { label: 'Размер под площадку', type: 'resize', kind: 'video', port: 'media' },
       ];
     return [
       { label: 'Генератор картинки · референс', type: 'generator', kind: 'image', port: 'ref' },
       { label: 'Генератор видео · старт-кадр', type: 'generator', kind: 'video', port: 'start' },
+      { label: 'Seedance-промптер · в панель', type: 'seedance', kind: 'image', port: 'ref' },
+      { label: 'Размер под площадку', type: 'resize', kind: 'image', port: 'media' },
     ];
   };
   const createLinked = (opt: ReturnType<typeof linkOptions>[number]): void => {
@@ -356,7 +374,15 @@ export function Canvas() {
   const importFlow = async (f: File): Promise<void> => {
     try {
       const parsed = ImportSchema.parse(JSON.parse(await f.text()));
-      await newFlow({ name: parsed.name, nodes: parsed.nodes, edges: parsed.edges });
+      // Новые id: импорт того же flow второй раз не должен делить с оригиналом ноды и черновики Seedance-промптеров.
+      const ids = new Map(parsed.nodes.map((n) => [n.id, newId('n')]));
+      const nodes = parsed.nodes.map((n) => ({ ...n, id: ids.get(n.id) ?? n.id, ...cloneSeedance(n) }));
+      const edges = parsed.edges.flatMap((e) => {
+        const from = ids.get(e.from);
+        const to = ids.get(e.to);
+        return from === undefined || to === undefined ? [] : [{ ...e, id: newId('e'), from, to }];
+      });
+      await newFlow({ name: parsed.name, nodes, edges });
     } catch {
       setHint('Это не flow: файл не читается как экспорт canvas.');
     }
@@ -385,11 +411,20 @@ export function Canvas() {
         <Button variant="soft" size="xs" icon={<Icon name="video" size={0.875} />} title="Нода-генератор видео" onClick={() => addNode('generator', centerWorld().x, centerWorld().y, 'video')}>
           Ген. видео
         </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="options" size={0.875} />} title="Seedance-промптер — полный конструктор кадра «Кадров»: съёмка, камера, рефы по номерам, сценарий по шотам, генерация" onClick={() => addNode('seedance', centerWorld().x, centerWorld().y)}>
+          Seedance-промптер
+        </Button>
         <Button variant="soft" size="xs" icon={<Icon name="layers" size={0.875} />} title="Первый / последний кадр видео — старт-кадр следующего клипа" onClick={() => addNode('frame', centerWorld().x, centerWorld().y)}>
           Кадр
         </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="upload" size={0.875} />} title="Своё видео с диска или из библиотеки — его можно резать и брать кадр" onClick={() => addNode('video', centerWorld().x, centerWorld().y)}>
+          Видео
+        </Button>
         <Button variant="soft" size="xs" icon={<Icon name="time" size={0.875} />} title="Обрезать видео по времени — бесплатно, локально" onClick={() => addNode('trim', centerWorld().x, centerWorld().y)}>
           Обрезка
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="apps" size={0.875} />} title="Картинку или видео — под размер площадки (1080×1920 и др.), бесплатно" onClick={() => addNode('resize', centerWorld().x, centerWorld().y)}>
+          Размер
         </Button>
       </header>
 
@@ -418,6 +453,18 @@ export function Canvas() {
           const f = event.dataTransfer.files[0];
           if (f === undefined) return;
           const p = toWorld(event.clientX, event.clientY);
+          // Видео с диска — в библиотеку и нодой «Видео»: его можно резать и брать из него кадр.
+          if (f.type.startsWith('video/')) {
+            setHint(`Загружаю «${f.name}»…`);
+            void importMedia(f)
+              .then((item) => {
+                patchNode(addNode('video', p.x, p.y), { mediaId: item.id, label: f.name }, false);
+                setHint(null);
+                void loadLibrary();
+              })
+              .catch((e: unknown) => setHint(e instanceof Error ? e.message : 'Видео не загрузилось.'));
+            return;
+          }
           void uploadImage(f)
             .then((source) => {
               const id = addNode('image', p.x, p.y);
@@ -500,7 +547,7 @@ export function Canvas() {
             </Text>
             {linkOptions(linkMenu.from).map((opt) => (
               <button key={opt.label} type="button" role="menuitem" onClick={() => createLinked(opt)}>
-                <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
+                <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.type === 'resize' ? 'apps' : opt.type === 'seedance' ? 'options' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
                 {opt.label}
               </button>
             ))}
@@ -556,26 +603,26 @@ export function Canvas() {
         </div>
       </div>
 
-      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title="Картинка из библиотеки" description="Файлы с диска — ссылки провайдера для них не нужны.">
+      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? 'Видео из библиотеки' : 'Картинка из библиотеки'} description="Файлы с диска — ссылки провайдера для них не нужны. Свои файлы добавляются кнопкой «С диска».">
         <div className={styles.pickerGrid}>
           {library
-            .filter((m) => m.kind === 'image')
+            .filter((m) => m.kind === pickKind)
             .map((m) => (
               <button
                 key={m.id}
                 type="button"
                 className={styles.pickerItem}
                 onClick={() => {
-                  if (picker !== null) patchNode(picker, { source: { type: 'media', mediaId: m.id }, label: `Из библиотеки` });
+                  if (picker !== null) patchNode(picker, pickKind === 'video' ? { mediaId: m.id, label: m.modelId === 'local/import' ? m.prompt : 'Из библиотеки' } : { source: { type: 'media', mediaId: m.id }, label: 'Из библиотеки' });
                   setPicker(null);
                 }}
               >
-                <img src={mediaUrl(m.id)} alt={m.prompt.slice(0, 60)} loading="lazy" />
+                {pickKind === 'video' ? <video src={mediaUrl(m.id)} muted preload="metadata" /> : <img src={mediaUrl(m.id)} alt={m.prompt.slice(0, 60)} loading="lazy" />}
               </button>
             ))}
-          {library.every((m) => m.kind !== 'image') && (
+          {library.every((m) => m.kind !== pickKind) && (
             <Text variant="label" tone="tertiary">
-              В библиотеке пока нет картинок.
+              {pickKind === 'video' ? 'В библиотеке пока нет видео.' : 'В библиотеке пока нет картинок.'}
             </Text>
           )}
         </div>

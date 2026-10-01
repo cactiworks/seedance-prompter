@@ -69,6 +69,16 @@ export async function extractFrame(videoMediaId: string, which: 'first' | 'last'
   return json<MediaItem>(await fetch(`/api/library/${videoMediaId}/frame`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ which }) }));
 }
 
+/** Свой файл (съёмка, картинка) → библиотека: дальше его можно резать, брать кадр, отдавать в canvas. */
+export async function importMedia(file: File): Promise<MediaItem> {
+  return json<MediaItem>(await fetch(`/api/library/import?name=${encodeURIComponent(file.name)}`, { method: 'POST', headers: { 'x-sp-client': '1', 'content-type': file.type }, body: file }));
+}
+
+/** Картинка или видео под размер площадки (ffmpeg, локально) → новый файл библиотеки. */
+export async function resizeMedia(source: RefSource, width: number, height: number, fit: 'cover' | 'contain'): Promise<MediaItem> {
+  return json<MediaItem>(await fetch('/api/media/resize', { method: 'POST', headers: HEADERS, body: JSON.stringify({ source, width, height, fit }) }));
+}
+
 /** Отрезок видео библиотеки → новое видео (ffmpeg, локально, бесплатно). `end` 0 — до конца. */
 export async function trimVideo(videoMediaId: string, start: number, end: number): Promise<MediaItem> {
   return json<MediaItem>(await fetch(`/api/library/${videoMediaId}/trim`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ start, end }) }));
@@ -136,6 +146,12 @@ interface GenState {
   /** Положить / убрать файлы из папки. */
   fileTo: (folderId: string, mediaIds: string[], on: boolean) => Promise<void>;
   reveal: (mediaId: string) => Promise<void>;
+  /** Удалить файлы навсегда (с диска); задачи без файлов уходят из ленты. */
+  deleteMedia: (mediaIds: string[]) => Promise<void>;
+  /** Убрать задачу из ленты вместе с её файлами (неудачную — просто убрать). */
+  deleteJob: (jobId: string) => Promise<void>;
+  /** Копии в data/exports/<дата> с понятными именами + Finder; возвращает папку. */
+  exportMedia: (mediaIds: string[]) => Promise<{ dir: string; files: string[] }>;
   retry: (jobId: string) => Promise<void>;
 
   setModel: (kind: MediaKind, modelId: string) => void;
@@ -272,6 +288,15 @@ export const useGen = create<GenState>((set, get) => {
     reveal: async (mediaId) => {
       await post(`/api/library/${mediaId}/reveal`, {});
     },
+    deleteMedia: async (mediaIds) => {
+      for (const id of mediaIds) await json(await fetch(`/api/library/${id}`, { method: 'DELETE', headers: HEADERS }));
+      await Promise.all([get().loadLibrary(), get().loadJobs()]);
+    },
+    deleteJob: async (jobId) => {
+      await json(await fetch(`/api/gen/jobs/${jobId}`, { method: 'DELETE', headers: HEADERS }));
+      await Promise.all([get().loadLibrary(), get().loadJobs()]);
+    },
+    exportMedia: (mediaIds) => post<{ dir: string; files: string[] }>('/api/library/export', { mediaIds }),
     retry: async (jobId) => {
       await post(`/api/gen/jobs/${jobId}/retry`, {});
       await get().loadJobs();

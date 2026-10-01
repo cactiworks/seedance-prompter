@@ -1,7 +1,7 @@
 import { buildValidationContext, buildWriterSystem, buildWriterUser, fixableSegments, writableSegments, WRITER_SCHEMA, type FewShot, type FixBrief } from '../../../core/llm/buildWriter.ts';
 import { validateWriterOutput, type Violation, type WriterOutput } from '../../../core/llm/validate.ts';
 import type { Project, Shot } from '../../../core/model/project.ts';
-import { buildShot, kitOf, type PackBundle } from '../../../core/pipeline.ts';
+import { agentShooting, buildShot, kitOf, type PackBundle } from '../../../core/pipeline.ts';
 import type { LlmRequest, LlmResult } from '../claudeCli/provider.ts';
 
 export type Runner = <T>(request: LlmRequest) => Promise<LlmResult<T>>;
@@ -73,12 +73,13 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
     return result.data;
   };
 
-  let output = await call(buildWriterUser(project, shot, kit, writable, undefined, input.fix));
+  const shooting = agentShooting(shot, pack);
+  let output = await call(buildWriterUser(project, shot, kit, writable, undefined, input.fix, shooting));
   let problems = check(output);
   let rounds = 1;
 
   if (problems.violations.length > 0 || problems.lintRu.length > 0) {
-    const repaired = await call(buildWriterUser(project, shot, kit, writable, { previous: output.blocks.map((b) => ({ segmentId: b.segmentId, en: b.en })), violations: problems.violations, lintFindings: problems.lintRu }, input.fix));
+    const repaired = await call(buildWriterUser(project, shot, kit, writable, { previous: output.blocks.map((b) => ({ segmentId: b.segmentId, en: b.en })), violations: problems.violations, lintFindings: problems.lintRu }, input.fix, shooting));
     const after = check(repaired);
     rounds = 2;
     // Ремонт принимается, только если стало не хуже.

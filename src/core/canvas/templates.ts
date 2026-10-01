@@ -41,6 +41,32 @@ const ROW = 420;
 
 export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   {
+    id: 'storyboard-seedance',
+    titleRu: 'Шоты → Seedance-промптер',
+    descriptionRu: 'Три кадра раскадровки в GPT Image 2.5 сходятся в один Seedance-промптер — ролик собирается по ним.',
+    build: (newId) =>
+      assemble(
+        newId,
+        [
+          { key: 'p1', type: 'prompt', x: 0, y: 0 },
+          { key: 'i1', type: 'generator', x: COL, y: 0, modelId: 'kie/gpt-image-2-5' },
+          { key: 'p2', type: 'prompt', x: 0, y: ROW },
+          { key: 'i2', type: 'generator', x: COL, y: ROW, modelId: 'kie/gpt-image-2-5' },
+          { key: 'p3', type: 'prompt', x: 0, y: ROW * 2 },
+          { key: 'i3', type: 'generator', x: COL, y: ROW * 2, modelId: 'kie/gpt-image-2-5' },
+          { key: 'sd', type: 'seedance', x: COL * 2 + 60, y: ROW },
+        ],
+        [
+          ['p1', 'i1', 'prompt'],
+          ['p2', 'i2', 'prompt'],
+          ['p3', 'i3', 'prompt'],
+          ['i1', 'sd', 'ref'],
+          ['i2', 'sd', 'ref'],
+          ['i3', 'sd', 'ref'],
+        ],
+      ),
+  },
+  {
     id: 'image-to-video',
     titleRu: 'Картинка → видео',
     descriptionRu: 'Кадр в GPT Image 2.5, затем он же — стартовый кадр ролика Kling 3.0.',

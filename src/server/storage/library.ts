@@ -179,6 +179,25 @@ export function createLibrary(dataDir: string, options: { fetch?: typeof fetch; 
       return [...index.values()].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
     },
 
+    /**
+     * Удалить файл навсегда: сам файл, описание, отметки в избранном и папках. Сначала описание — если процесс
+     * упадёт посередине, библиотека просто не увидит осиротевший файл.
+     */
+    async remove(id: string): Promise<boolean> {
+      await load();
+      const item = MEDIA_ID.test(id) ? index.get(id) : undefined;
+      if (item === undefined) return false;
+      const file = pathOf(item);
+      await rm(file.replace(/\.[a-z0-9]+$/i, '.json'), { force: true });
+      await rm(file, { force: true });
+      index.delete(id);
+      const favorites = await this.favorites();
+      if (favorites.includes(id)) await this.setFavorite(id, false);
+      const folders = await this.folders();
+      if (folders.some((f) => f.mediaIds.includes(id))) await this.updateFolders((list) => list.map((f) => ({ ...f, mediaIds: f.mediaIds.filter((m) => m !== id) })));
+      return true;
+    },
+
     /** Избранное — отдельный файл: описания файлов после сохранения не меняются. */
     async favorites(): Promise<string[]> {
       try {

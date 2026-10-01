@@ -50,24 +50,40 @@ export function segmentRange(durationSec: number): { min: number; max: number } 
   return { min: durationSec <= 8 ? 1 : 2, max: Math.max(2, Math.round((8 * durationSec) / 30)) };
 }
 
-export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], durationSec: number = project.durationSec): string {
+/**
+ * Как снято — для планировщика. frames — кадры раскадровки панели по порядку: тогда отрезков ровно столько же,
+ * отрезок N открывается на кадре N (привязку ставит код, не агент).
+ */
+export interface PlannerShooting {
+  mode: string;
+  guide: boolean;
+  structure: 'one-take' | 'cuts';
+  cameraLanguage: string;
+  frames: { label: string; whatIsInIt?: string }[];
+}
+
+export function buildPlannerUser(project: Project, synopsis: string, lineIds: string[], durationSec: number = project.durationSec, shooting?: PlannerShooting): string {
+  const frames = shooting?.frames ?? [];
   const input = {
     durationSec,
     majorEvents: eventBudget(durationSec),
-    segments: segmentRange(durationSec),
+    segments: frames.length > 0 ? { min: frames.length, max: frames.length } : segmentRange(durationSec),
     synopsisRu: synopsis,
     lineIds,
     entities: project.entities.map((e) => ({ name: (e.nameRu ?? '').trim() === '' ? e.name : e.nameRu, kind: e.kind })),
     world: { placeRu: project.world.place.ru, weatherRu: project.world.weather.ru },
+    ...(shooting === undefined || shooting.guide ? {} : { camera: { mode: shooting.mode, cameraLanguage: shooting.cameraLanguage } }),
+    ...(shooting?.structure === 'cuts' ? { editedSequence: 'Every segment is one shot of an edited sequence; hard cuts between segments.' } : {}),
+    ...(frames.length > 0 ? { storyboardFrames: frames.map((f, i) => ({ segment: i + 1, image: f.label, ...(f.whatIsInIt !== undefined ? { whatIsInIt: f.whatIsInIt } : {}) })) } : {}),
   };
   return `Plan the timeline for this shot.\n\n\`\`\`json\n${JSON.stringify(input, null, 1)}\n\`\`\``;
 }
 
-/** Проверка плана: число отрезков, реплики по одному разу и в порядке, английский без кириллицы. */
-export function validatePlan(plan: PlannerOutput, lineIds: string[], durationSec = 30): string[] {
+/** Проверка плана: число отрезков, реплики по одному разу и в порядке, английский без кириллицы. exact — по числу кадров раскадровки. */
+export function validatePlan(plan: PlannerOutput, lineIds: string[], durationSec = 30, exact?: number): string[] {
   const problems: string[] = [];
-  const range = segmentRange(durationSec);
-  if (plan.segments.length < range.min || plan.segments.length > range.max) problems.push(`Segments: ${plan.segments.length}; expected ${range.min}–${range.max}.`);
+  const range = exact !== undefined && exact > 0 ? { min: exact, max: exact } : segmentRange(durationSec);
+  if (plan.segments.length < range.min || plan.segments.length > range.max) problems.push(`Segments: ${plan.segments.length}; expected ${range.min === range.max ? range.min : `${range.min}–${range.max}`}.`);
   if (plan.segments.some((s) => s.beatsRu.trim() === '')) problems.push('Every segment needs Russian beats.');
   const seen = plan.segments.flatMap((s) => s.beatsRu.match(/\bL\d+\b/g) ?? []);
   for (const id of lineIds) {

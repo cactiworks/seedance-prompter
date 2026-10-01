@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { applyFields, applyWrite, staleFields, staleSegments, type FieldItem, type FieldsOutput } from '../core/compose.ts';
-import type { Attempt, Critique, Project, Shot } from '../core/model/project.ts';
+import { storyboardFrames, type Attempt, type Critique, type Project, type Shot } from '../core/model/project.ts';
 import type { PackBundle } from '../core/pipeline.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
@@ -22,18 +22,32 @@ export interface ProjectListItem {
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'conflict' | 'error';
 
+/**
+ * Где открыт ролик. null — своя страница «Кадров». canvas — черновик ноды Seedance-промптера: редактор кадра
+ * открыт поверх холста, «Назад» возвращает на холст, вкладок кадров нет — нода держит один кадр.
+ */
+export interface ProjectHost {
+  kind: 'canvas';
+  flowId: string;
+  nodeId: string;
+}
+
 interface State {
   pack: PackBundle | null;
   projects: ProjectListItem[];
   project: Project | null;
   shotId: string | null;
+  host: ProjectHost | null;
   save: SaveState;
   error: string | null;
   loadPack: () => Promise<void>;
   loadProjects: () => Promise<void>;
   createProject: (title: string) => Promise<void>;
   openProject: (slug: string) => Promise<void>;
-  closeProject: () => void;
+  /** Черновик ноды canvas: проект уже на диске, кадр выбран нодой. `prepare` — правка сразу после открытия (панель из проводков). */
+  openInHost: (project: Project, shotId: string, host: ProjectHost, prepare?: (project: Project) => Project) => void;
+  /** Закрыть ролик: сначала дописать незаписанное (автосейв ждёт 800 мс), потом выйти. */
+  closeProject: () => Promise<void>;
   selectShot: (shotId: string) => void;
   /** Новый кадр наследует комплект, правила и панель текущего: мир ролика общий. */
   addShot: () => void;
@@ -184,6 +198,7 @@ export const useStore = create<State>((set, get) => {
     projects: [],
     project: null,
     shotId: null,
+    host: null,
     save: 'saved',
     error: null,
 
@@ -200,11 +215,23 @@ export const useStore = create<State>((set, get) => {
 
     openProject: async (slug) => {
       const project = await json<Project>(await fetch(`/api/projects/${slug}`));
-      set({ project, shotId: project.shots[0]?.id ?? null, save: 'saved', error: null });
+      set({ project, shotId: project.shots[0]?.id ?? null, host: null, save: 'saved', error: null });
     },
 
-    closeProject: () => {
-      set({ project: null, shotId: null });
+    openInHost: (project, shotId, host, prepare) => {
+      set({ project, shotId: project.shots.some((s) => s.id === shotId) ? shotId : (project.shots[0]?.id ?? null), host, save: 'saved', error: null, writeReport: null, planReport: null, proposals: null, exportResult: null, visionReports: {} });
+      if (prepare !== undefined) get().update(prepare);
+    },
+
+    closeProject: async () => {
+      // Автосейв ждёт паузу в 800 мс: без этого правка, сделанная за миг до «Назад», терялась.
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+        await flush();
+      }
+      while (get().save === 'saving') await new Promise((resolve) => setTimeout(resolve, 50));
+      set({ project: null, shotId: null, host: null, writeReport: null, planReport: null, proposals: null, exportResult: null });
       void get().loadProjects();
     },
 
@@ -225,6 +252,8 @@ export const useStore = create<State>((set, get) => {
             durationSec: base?.durationSec ?? null,
             kitId: base?.kitId ?? 'arri-alexa35-cooke-s4i',
             customKit: base?.customKit ?? { camera: '', lens: '', look: '', lensNote: '' },
+            // Как снято — тоже мир ролика: следующий кадр снимается той же камерой и так же смонтирован.
+            ...(base?.shooting === undefined ? {} : { shooting: base.shooting }),
             defects: null,
             behavior: base?.behavior ?? ['real-human', 'no-staged', 'micro-expressions', 'subtle-movement'],
             operatorRule: base?.operatorRule ?? 'long',
@@ -453,13 +482,15 @@ export const useStore = create<State>((set, get) => {
         const res = await fetch('/api/llm/plan', { method: 'POST', headers: HEADERS, body: JSON.stringify({ project, shotId: shot.id, synopsisRu: shot.synopsisRu }) });
         const { plan, newLines, problems, meta } = await json<PlanResponse>(res);
         const stamp = Date.now().toString(36);
+        // Кадры раскадровки панели — по порядку: отрезок N открывается на кадре N (планировщик знает их число).
+        const frames = storyboardFrames(project, shot).map((ref) => ref.key);
         get().update((p) => ({
           ...p,
           // Реплики из «ёлочек» синопсиса — буква в букву, невычитанные: галочку ставит владелец.
           lines: [...p.lines, ...newLines.map((l) => ({ id: l.id, speakerKey: null, ru: l.ru, proofread: false }))],
-          shots: p.shots.map((s) => (s.id === shotId ? { ...s, segments: plan.segments.map((seg, i) => ({ id: `seg-${stamp}-${i + 1}`, titleRu: seg.titleRu, beatsRu: seg.beatsRu, text: { ru: '', en: '', source: 'empty' as const, locked: false } })) } : s)),
+          shots: p.shots.map((s) => (s.id === shotId ? { ...s, segments: plan.segments.map((seg, i) => ({ id: `seg-${stamp}-${i + 1}`, titleRu: seg.titleRu, beatsRu: seg.beatsRu, text: { ru: '', en: '', source: 'empty' as const, locked: false }, frameRef: frames[i] ?? null })) } : s)),
         }));
-        set({ planReport: { ok: problems.length === 0, messageRu: `Отрезков: ${plan.segments.length} · новых реплик: ${newLines.length} · ${Math.round(meta.durationMs / 1000)} с. ${plan.notesRu}${problems.length > 0 ? ` Осталось: ${problems.join(' ')}` : ''} Проверь биты и нажми «Собрать промпт».` } });
+        set({ planReport: { ok: problems.length === 0, messageRu: `Отрезков: ${plan.segments.length}${frames.length > 0 ? ` · по кадрам раскадровки: ${Math.min(frames.length, plan.segments.length)}` : ''} · новых реплик: ${newLines.length} · ${Math.round(meta.durationMs / 1000)} с. ${plan.notesRu}${problems.length > 0 ? ` Осталось: ${problems.join(' ')}` : ''} Проверь биты и нажми «Собрать промпт».` } });
       } catch (cause) {
         set({ planReport: { ok: false, messageRu: cause instanceof Error ? cause.message : String(cause) } });
       } finally {

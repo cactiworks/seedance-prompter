@@ -6,10 +6,11 @@ const TEXT = { type: 'string' } as const;
 export const FIELDS_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['texts', 'kit', 'notesRu'],
+  required: ['texts', 'kit', 'shooting', 'notesRu'],
   properties: {
     texts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'en'], properties: { id: TEXT, en: TEXT } } },
     kit: { type: 'object', additionalProperties: false, required: ['camera', 'lens', 'look', 'lensNote'], properties: { camera: TEXT, lens: TEXT, look: TEXT, lensNote: TEXT } },
+    shooting: { type: 'object', additionalProperties: false, required: ['operation', 'language'], properties: { operation: TEXT, language: TEXT } },
     notesRu: TEXT,
   },
 } as const;
@@ -40,7 +41,9 @@ export function normalizeFields(output: FieldsOutput, items: FieldItem[]): Field
   });
   const asked = items.some((item) => item.kind === 'camera' && item.ru !== '');
   const kit = output.kit === null || !asked ? null : { camera: sentence(output.kit.camera), lens: sentence(output.kit.lens), look: sentence(output.kit.look), lensNote: sentence(output.kit.lensNote) };
-  return { texts, kit, notesRu: output.notesRu.trim() };
+  const shootingAsked = items.some((item) => item.kind === 'shooting' && item.ru !== '');
+  const shooting = output.shooting == null || !shootingAsked ? null : { operation: sentence(output.shooting.operation), language: output.shooting.language.trim().replace(/\s+/g, ' ') };
+  return { texts, kit, shooting, notesRu: output.notesRu.trim() };
 }
 
 const CYRILLIC = /[Ѐ-ӿ]/u;
@@ -48,7 +51,7 @@ const CYRILLIC = /[Ѐ-ӿ]/u;
 /** Проверка ответа: все поля на месте, английский, имена героев не пустые и не повторяются. */
 export function validateFields(output: FieldsOutput, items: FieldItem[], project: Project): string[] {
   const problems: string[] = [];
-  const wanted = items.filter((item) => item.ru !== '' && item.kind !== 'camera');
+  const wanted = items.filter((item) => item.ru !== '' && item.kind !== 'camera' && item.kind !== 'shooting');
   const ids = output.texts.map((t) => t.id);
   for (const item of wanted) {
     const count = ids.filter((id) => id === item.id).length;
@@ -74,6 +77,17 @@ export function validateFields(output: FieldsOutput, items: FieldItem[], project
       if (Object.values(kit).some((value) => CYRILLIC.test(value))) problems.push('kit: English only, no Cyrillic.');
       if (/^(a |the )?(cinematic|film|movie|professional|digital) camera$/i.test(kit.camera.trim())) problems.push('kit.camera: a real model name, not a generic camera.');
       if (kit.camera.trim() !== '' && kit.look.trim() === '') problems.push('kit.look: describe the picture of this gear.');
+    }
+  }
+
+  if (items.some((item) => item.kind === 'shooting' && item.ru !== '')) {
+    const shooting = output.shooting;
+    if (shooting == null) problems.push('shooting: the custom shooting was requested.');
+    else {
+      if (CYRILLIC.test(shooting.operation) || CYRILLIC.test(shooting.language)) problems.push('shooting: English only, no Cyrillic.');
+      if (shooting.operation.trim() === '') problems.push('shooting.operation: say how the camera is operated (support and movement).');
+      if (shooting.language.trim() === '') problems.push('shooting.language: describe the camera behaviour for the scenario writer.');
+      if (/\b(cinematic|stunning|epic|beautiful|breathtaking)\b/i.test(shooting.operation)) problems.push('shooting.operation: no "cinematic", "stunning", "epic" — physical camera behaviour only.');
     }
   }
   return problems;

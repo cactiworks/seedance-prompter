@@ -1,6 +1,6 @@
 import { estimate, findModel, paramsFor, validateGen, type Estimate, type GenParams, type RefRole } from '../gen/models.ts';
-import type { CanvasNode, Flow, InputPort } from '../model/canvas.ts';
-import type { JobRef } from '../model/media.ts';
+import { outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
+import type { JobRef, RefSource } from '../model/media.ts';
 
 /** Что уйдёт в модель при запуске ноды-генератора. Считается из графа, без сети. */
 export interface RunPlan {
@@ -12,13 +12,16 @@ export interface RunPlan {
   problems: string[];
 }
 
-const ROLE_OF: Record<Exclude<InputPort, 'prompt' | 'video'>, RefRole> = { ref: 'ref', start: 'start', end: 'end' };
+const ROLE_OF: Record<Exclude<InputPort, 'prompt' | 'video' | 'media'>, RefRole> = { ref: 'ref', start: 'start', end: 'end' };
 
 export const nodeTitle = (node: CanvasNode): string => {
   if (node.type === 'prompt') return 'Промпт';
   if (node.type === 'image') return node.label !== '' ? node.label : 'Картинка';
   if (node.type === 'frame') return node.which === 'last' ? 'Последний кадр видео' : 'Первый кадр видео';
   if (node.type === 'trim') return 'Обрезка видео';
+  if (node.type === 'video') return node.label !== '' ? node.label : 'Видео';
+  if (node.type === 'resize') return `Размер · ${node.width}×${node.height}`;
+  if (node.type === 'seedance') return 'Seedance-промптер';
   return `${node.kind === 'image' ? 'Картинка' : 'Видео'} · ${findModel(node.modelId)?.titleRu ?? 'модель'}`;
 };
 
@@ -46,18 +49,18 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
 
   const refs: JobRef[] = [];
   for (const edge of incoming) {
-    if (edge.port === 'prompt' || edge.port === 'video') continue;
+    if (edge.port === 'prompt' || edge.port === 'video' || edge.port === 'media') continue;
     const from = source(edge.from);
     if (from === undefined) continue;
     const role = ROLE_OF[edge.port];
-    if (from.type === 'frame') {
-      if (from.mediaId === null) problems.push(`Сначала извлеки кадр в ноде «${nodeTitle(from)}».`);
+    if (from.type === 'frame' || from.type === 'resize') {
+      if (from.mediaId === null) problems.push(from.type === 'frame' ? `Сначала извлеки кадр в ноде «${nodeTitle(from)}».` : `Сначала подгони размер в ноде «${nodeTitle(from)}».`);
       else refs.push({ label: nodeTitle(from), source: { type: 'media', mediaId: from.mediaId }, role });
     } else if (from.type === 'image') {
       if (from.source === null) problems.push(`В ноде «${nodeTitle(from)}» нет картинки.`);
       else refs.push({ label: nodeTitle(from), source: from.source, role });
-    } else if (from.type === 'generator') {
-      if (from.kind === 'video') {
+    } else if (from.type === 'generator' || from.type === 'seedance') {
+      if (from.type === 'seedance' || from.kind === 'video') {
         problems.push(`«${nodeTitle(from)}»: видео на вход генератора пока не подаётся.`);
         continue;
       }
@@ -82,9 +85,29 @@ export function frameInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) 
   const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
   if (from === undefined) return { mediaId: null, problemRu: 'Подключи ко входу «Видео» генератор видео или обрезку.' };
   if (from.type === 'trim') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала обрежь видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
+  if (from.type === 'video') return from.mediaId === null ? { mediaId: null, problemRu: `Выбери видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
+  if (from.type === 'resize') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала подгони размер в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
   const jobId = from.jobIds[from.selected];
   const mediaId = jobId === undefined ? null : mediaOf(jobId);
   return mediaId === null ? { mediaId: null, problemRu: `У «${nodeTitle(from)}» ещё нет готового видео.` } : { mediaId, problemRu: null };
+}
+
+/**
+ * Что пришло во вход «Файл» ноды «Размер»: источник для ffmpeg (картинка с диска, файл библиотеки, выбранный вариант
+ * генератора) и его вид — от вида зависит выход ноды.
+ */
+export function mediaInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) => string | null): { source: RefSource | null; kind: 'image' | 'video'; problemRu: string | null } {
+  const edge = flow.edges.find((e) => e.to === nodeId && e.port === 'media');
+  const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
+  if (from === undefined) return { source: null, kind: 'image', problemRu: 'Подключи ко входу «Файл» картинку или видео.' };
+  const kind = outputOf(from) === 'video' ? 'video' : 'image';
+  if (from.type === 'image') return from.source === null ? { source: null, kind, problemRu: `В ноде «${nodeTitle(from)}» нет картинки.` } : { source: from.source, kind, problemRu: null };
+  if (from.type === 'generator' || from.type === 'seedance') {
+    const jobId = from.jobIds[from.selected];
+    const mediaId = jobId === undefined ? null : mediaOf(jobId);
+    return mediaId === null ? { source: null, kind, problemRu: `Сначала запусти «${nodeTitle(from)}» и дождись результата.` } : { source: { type: 'media', mediaId }, kind, problemRu: null };
+  }
+  return from.mediaId === null ? { source: null, kind, problemRu: `В ноде «${nodeTitle(from)}» ещё нет файла.` } : { source: { type: 'media', mediaId: from.mediaId }, kind, problemRu: null };
 }
 
 /** Отрезок обрезки: конец 0 — до конца видео. Проверки — по-русски, для подписи в ноде. */

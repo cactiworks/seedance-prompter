@@ -61,6 +61,23 @@ product name is an anchor, "cinematic camera" is not.
   15–40 words, no trailing period. Grounded in the real gear; no numbers you are not sure of.
 - `lensNote`: one optional sentence about how this optics treats flares and bright light, or empty.
 
+## `shooting` — the owner's own way of operating the camera (answer in `shooting`, not in `texts`)
+
+The owner describes in Russian how the camera works in this take: what it stands on or who carries it and
+how it moves («камера на скейте в сантиметрах от асфальта, летит за героем», «как будто снимает кот —
+снизу, рывками»). This is not the camera model (that is `camera`) — it is the support and the movement.
+
+- `operation`: continues the style block after the format and before "shot on …" — one comma-separated
+  phrase, 12–35 words, no trailing period: the physical support and the movement it gives the frame,
+  `camera on a skateboard dolly gliding a few centimeters above the asphalt, fast and smooth, following
+  the hero at ankle height`. Physical behaviour only; keep the owner's facts, add only their physical
+  consequences.
+- `language`: 2–4 sentences for the scenario writer — how this camera behaves in time: which moves it
+  makes, how it follows people, what it never does. `The camera rides low and fast behind the hero,
+  drifts sideways on turns, never rises above knee height. Every speed change is felt in the frame.`
+
+No "cinematic", "stunning", "epic". When `shooting` is not requested, return two empty strings.
+
 ## `props` — continues `Separately, {props}.` when the same gear appears in the scene as props
 
 One sentence: who holds which prop, by the entities' English names —
@@ -74,8 +91,9 @@ No trailing period, no optical effects, nothing else.
   or places he did not mention.
 - Only what can be shown: no smells, no thoughts, no feelings of the audience.
 - No "cinematic", "stunning", "epic", "beautiful", "breathtaking".
-- Return every requested id exactly once: `camera` goes into `kit`, everything else into `texts`. When no
-  camera is requested, return `kit` with four empty strings.
+- Return every requested id exactly once: `camera` goes into `kit`, `shooting` into `shooting`, everything
+  else into `texts`. When no camera is requested, return `kit` with four empty strings; when no shooting is
+  requested, return `shooting` with two empty strings.
 - If a note cannot be turned into its slot, return an empty `en` and explain in `notesRu`.
 - `notesRu`: short Russian notes for the owner — what you decided on your own and what is missing, one
   line per field at most, only about the fields in `write`. Never mention slots that were not requested.

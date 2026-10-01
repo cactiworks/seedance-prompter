@@ -62,7 +62,7 @@ function setup(patch: Partial<GenProvider> = {}, dataDir = mkdtempSync(path.join
   const mock = mockProvider(patch);
   const cdn = mediaServer();
   const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: clock.now });
-  const app = createApp({ rootDir: ROOT, dataDir, gen });
+  const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
   const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
   return { app, gen, mock, cdn, clock, dataDir, post };
 }
@@ -548,5 +548,81 @@ describe('обрезка видео по времени (ffmpeg)', () => {
     expect((await post(`/api/library/${video!.id}/trim`, { start: 2, end: 1 })).status).toBe(422);
     const frame = (await (await post(`/api/library/${video!.id}/frame`, { which: 'first' })).json()) as MediaItem;
     expect((await post(`/api/library/${frame.id}/trim`, { start: 0, end: 1 })).status).toBe(422);
+  });
+});
+
+describe('свои файлы в библиотеку', () => {
+  it('видео и картинка импортируются с именем и типом; чужой формат — 415; своё видео режется как сгенерированное', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-import-'));
+    const gen = createGenRuntime({ dataDir, providers: {} });
+    const app = createApp({ rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])) });
+    const upload = (type: string, name: string, bytes: Uint8Array) => app.request(`/api/library/import?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': type }, body: bytes as Uint8Array<ArrayBuffer> });
+    const video = await upload('video/quicktime', 'съёмка на крыше.mov', new Uint8Array([0, 0, 0, 0x14, 0x66, 0x74, 0x79, 0x70]));
+    expect(video.status).toBe(201);
+    const item = (await video.json()) as MediaItem;
+    expect(item).toMatchObject({ kind: 'video', modelId: 'local/import', prompt: 'съёмка на крыше.mov', provider: 'local', creditsConsumed: 0, mime: 'video/quicktime' });
+    expect(item.file).toMatch(/\.mov$/);
+    expect((await upload('image/png', 'ref.png', new Uint8Array([0x89, 0x50]))).status).toBe(201);
+    expect((await upload('application/pdf', 'doc.pdf', new Uint8Array([1]))).status).toBe(415);
+    const cut = await app.request(`/api/library/${item.id}/trim`, { method: 'POST', headers, body: JSON.stringify({ start: 0, end: 1 }) });
+    expect(cut.status).toBe(201);
+  });
+});
+
+describe('размер под площадку (ffmpeg)', () => {
+  it('файл библиотеки и картинка с диска → новый файл того же вида; стороны чётные; повтор — тот же файл', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-resize-'));
+    const gen = createGenRuntime({ dataDir, providers: {} });
+    const calls: string[][] = [];
+    const app = createApp({ rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => { calls.push(args); writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])); } });
+    const video = (await (await app.request('/api/library/import?name=clip.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 8]) })).json()) as MediaItem;
+    const post = (body: unknown) => app.request('/api/media/resize', { method: 'POST', headers, body: JSON.stringify(body) });
+
+    const res = await post({ source: { type: 'media', mediaId: video.id }, width: 1081, height: 1920, fit: 'cover' });
+    expect(res.status).toBe(201);
+    const out = (await res.json()) as MediaItem;
+    expect(out).toMatchObject({ kind: 'video', modelId: 'local/resize', prompt: 'Размер 1080×1920 · заполнить', refs: [{ source: { type: 'media', mediaId: video.id } }] });
+    expect(calls[0]).toContain('scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1');
+    expect(((await (await post({ source: { type: 'media', mediaId: video.id }, width: 1080, height: 1920, fit: 'cover' })).json()) as MediaItem).id).toBe(out.id);
+
+    const upload = (await (await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) })).json()) as { id: string };
+    const img = await post({ source: { type: 'upload', uploadId: upload.id }, width: 1080, height: 1080, fit: 'contain' });
+    expect(img.status).toBe(201);
+    expect(((await img.json()) as MediaItem).kind).toBe('image');
+    expect(calls.at(-1)).toContain('scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1');
+    expect((await post({ source: { type: 'media', mediaId: video.id }, width: 8, height: 1920 })).status).toBe(422);
+  });
+});
+
+describe('удаление и выгрузка для монтажа', () => {
+  it('удаление: файл, описание, избранное, папки, оценка; задача без файлов уходит из ленты; идущую задачу не удалить', async () => {
+    const { app, gen, mock, cdn, clock, dataDir, post } = setup();
+    cdn.files.set('https://cdn.example/a.png', { bytes: new Uint8Array([7, 7, 7]), type: 'image/png' });
+    const created = (await (await post('/api/gen/jobs', imageJob())).json()) as { jobs: GenJob[] };
+    const jobId = created.jobs[0]?.id ?? '';
+    expect((await app.request(`/api/gen/jobs/${jobId}`, { method: 'DELETE', headers })).status).toBe(409);
+    mock.queue.push(success(['https://cdn.example/a.png'], 6));
+    clock.advance(10_000);
+    await gen.tick();
+    const [item] = await gen.library.list();
+    const file = path.join(dataDir, 'library', item!.file);
+    await post(`/api/library/${item!.id}/favorite`, { on: true });
+    const folder = (await (await post('/api/library/folders', { name: 'Рилсы' })).json()) as { id: string };
+    await post(`/api/library/folders/${folder.id}/items`, { mediaIds: [item!.id], on: true });
+    await app.request(`/api/verdicts/${item!.id}`, { method: 'PUT', headers, body: JSON.stringify({ verdict: 'bad', symptoms: ['text'] }) });
+
+    const exported = (await (await post('/api/library/export', { mediaIds: [item!.id] })).json()) as { dir: string; files: string[] };
+    expect(exported.files[0]).toMatch(/^01 GPT Image 2\.5 A red chair\.png$/);
+    expect(existsSync(path.join(exported.dir, exported.files[0]!))).toBe(true);
+
+    expect((await app.request(`/api/library/${item!.id}`, { method: 'DELETE', headers })).status).toBe(200);
+    expect(existsSync(file)).toBe(false);
+    const lib = (await (await app.request('/api/library', { headers: { host } })).json()) as { items: unknown[]; favorites: string[]; folders: { mediaIds: string[] }[] };
+    expect(lib.items).toHaveLength(0);
+    expect(lib.favorites).toEqual([]);
+    expect(lib.folders[0]?.mediaIds).toEqual([]);
+    expect((await (await app.request('/api/verdicts', { headers: { host } })).json()) as unknown[]).toEqual([]);
+    expect(await gen.jobs.get(jobId)).toBeUndefined();
+    expect(existsSync(exported.dir)).toBe(true);
   });
 });
