@@ -79,6 +79,17 @@ export async function resizeMedia(source: RefSource, width: number, height: numb
   return json<MediaItem>(await fetch('/api/media/resize', { method: 'POST', headers: HEADERS, body: JSON.stringify({ source, width, height, fit }) }));
 }
 
+/** Что сервер намерил во входе апскейла: параметры цены (длинная сторона, секунды) и размер / длительность для подписи. */
+export interface MeasuredInput {
+  params: GenParams;
+  info: { width: number | null; height: number | null; durationSec: number | null; bytes: number } | null;
+}
+
+/** Замер входа апскейла тем же кодом, что при запуске, — цена на кнопке совпадёт с гейтом. Локально, бесплатно. */
+export async function measureInput(modelId: string, source: RefSource): Promise<MeasuredInput> {
+  return json<MeasuredInput>(await fetch('/api/gen/measure', { method: 'POST', headers: HEADERS, body: JSON.stringify({ modelId, refs: [{ source }] }) }));
+}
+
 /** Отрезок видео библиотеки → новое видео (ffmpeg, локально, бесплатно). `end` 0 — до конца. */
 export async function trimVideo(videoMediaId: string, start: number, end: number): Promise<MediaItem> {
   return json<MediaItem>(await fetch(`/api/library/${videoMediaId}/trim`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ start, end }) }));

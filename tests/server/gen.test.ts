@@ -626,3 +626,51 @@ describe('удаление и выгрузка для монтажа', () => {
     expect(existsSync(exported.dir)).toBe(true);
   });
 });
+
+describe('апскейл видео Topaz (решение 39)', () => {
+  it('сервер мерит длительность сам, замер для формы совпадает с гейтом; видео уходит в KIE, картинка и пустой вход — 422', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-topaz-video-'));
+    const mock = mockProvider();
+    const probed: string[] = [];
+    const gen = createGenRuntime({
+      dataDir,
+      providers: { kie: mock.provider },
+      probe: async (filePath) => {
+        probed.push(filePath);
+        return { durationSec: 5.04, width: 480, height: 854 };
+      },
+    });
+    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const upload = (type: string, name: string, bytes: Uint8Array) => app.request(`/api/library/import?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': type }, body: bytes as Uint8Array<ArrayBuffer> });
+    const video = (await (await upload('video/quicktime', 'черновик.mov', new Uint8Array([0, 0, 0, 0x14, 0x66, 0x74, 0x79, 0x70]))).json()) as MediaItem;
+    const image = (await (await upload('image/png', 'кадр.png', new Uint8Array([0x89, 0x50]))).json()) as MediaItem;
+    const source = { type: 'media', mediaId: video.id };
+
+    // 5.04 с — секунд к оплате 5 (допуск на округление контейнера), а не 6.
+    const measured = await post('/api/gen/measure', { modelId: 'kie/topaz-video-upscale', refs: [{ source }] });
+    expect(measured.status).toBe(200);
+    expect(await measured.json()).toEqual({ params: { sourceSec: 5 }, info: { width: 480, height: 854, durationSec: 5.04, bytes: 8 } });
+    expect(probed.at(-1)).toMatch(/\.mov$/);
+
+    // Клиент назвал 30 с — сервер перемерит: 2× = 8 кр/с × 5 = 40, а не 240.
+    const run = (upscaleFactor: string, confirmCredits: number) => post('/api/gen/jobs', { modelId: 'kie/topaz-video-upscale', prompt: '', params: { upscaleFactor, sourceSec: 30 }, refs: [{ source }], confirmCredits, refsConsent: true });
+    expect((await run('2', 240)).status).toBe(409);
+    expect((await run('2', 70)).status).toBe(409);
+    const ok = await run('2', 40);
+    expect(ok.status).toBe(202);
+    expect(((await ok.json()) as { jobs: GenJob[] }).jobs[0]?.params).toEqual({ upscaleFactor: '2', sourceSec: 5 });
+    expect(mock.calls.upload.at(-1)).toMatchObject({ mime: 'video/quicktime', size: 8 });
+    expect(mock.calls.submit.at(-1)).toEqual({ model: 'topaz/video-upscale', input: { video_url: expect.stringContaining('https://up.example/') as unknown, upscale_factor: '2' } });
+    expect((await run('4', 70)).status).toBe(202);
+
+    const wrong = await post('/api/gen/jobs', { modelId: 'kie/topaz-video-upscale', prompt: '', params: { upscaleFactor: '2' }, refs: [{ source: { type: 'media', mediaId: image.id } }], confirmCredits: 40, refsConsent: true });
+    expect(wrong.status).toBe(422);
+    expect(((await wrong.json()) as { messageRu: string }).messageRu).toContain('нужно видео');
+    expect((await post('/api/gen/measure', { modelId: 'kie/topaz-video-upscale', refs: [{ source: { type: 'upload', uploadId: 'u-1' } }] })).status).toBe(422);
+    const empty = await post('/api/gen/jobs', { modelId: 'kie/topaz-video-upscale', prompt: '', params: { upscaleFactor: '2' }, confirmCredits: 40 });
+    expect(empty.status).toBe(422);
+    expect(((await empty.json()) as { messageRu: string }).messageRu).toContain('нужно входное видео');
+    expect(mock.calls.submit).toHaveLength(2);
+  });
+});

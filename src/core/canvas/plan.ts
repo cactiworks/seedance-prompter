@@ -1,5 +1,5 @@
-import { estimate, findModel, paramsFor, validateGen, type Estimate, type GenParams, type RefRole } from '../gen/models.ts';
-import { outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
+import { estimate, findModel, paramsFor, upscaleModelOf, validateGen, type Estimate, type GenModel, type GenParams, type RefRole } from '../gen/models.ts';
+import { isJobNode, outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
 import type { JobRef, RefSource } from '../model/media.ts';
 
 /** Что уйдёт в модель при запуске ноды-генератора. Считается из графа, без сети. */
@@ -22,8 +22,30 @@ export const nodeTitle = (node: CanvasNode): string => {
   if (node.type === 'video') return node.label !== '' ? node.label : 'Видео';
   if (node.type === 'resize') return `Размер · ${node.width}×${node.height}`;
   if (node.type === 'seedance') return 'Seedance-промптер';
+  if (node.type === 'upscale') return `Апскейл Topaz · ${String(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor)}×`;
   return `${node.kind === 'image' ? 'Картинка' : 'Видео'} · ${findModel(node.modelId)?.titleRu ?? 'модель'}`;
 };
+
+/** Модель ноды: у генератора — выбранная, у апскейла — Topaz для вида входа. */
+export const modelOfNode = (node: CanvasNode): GenModel | undefined => (node.type === 'upscale' ? upscaleModelOf(node.kind) : node.type === 'generator' ? findModel(node.modelId) : undefined);
+
+/** Ключ источника, для которого нода апскейла хранит замер (`params.measuredFor`): сменился вход — мерить заново. */
+export const sourceKey = (source: RefSource): string => JSON.stringify(source);
+
+/**
+ * Апскейл (решение 39): вход «Файл» → Topaz для картинки или видео. Длинную сторону / секунды мерит сервер, нода хранит
+ * замер в params вместе с ключом источника; пока замера для текущего входа нет — запуск закрыт (цена была бы выдумана).
+ */
+function planUpscale(flow: Flow, node: CanvasNode, mediaOf: (jobId: string) => string | null): RunPlan {
+  const model = upscaleModelOf(node.kind);
+  const input = mediaInput(flow, node.id, mediaOf);
+  const params = paramsFor(model, node.params);
+  if (input.source === null) return { modelId: model.id, prompt: '', params, refs: [], estimate: estimate(model, params), problems: [input.problemRu ?? 'Подключи ко входу «Файл» картинку или видео.'] };
+  const refs: JobRef[] = [{ label: 'Апскейл', source: input.source, role: 'ref' }];
+  const problems = node.params.measuredFor === sourceKey(input.source) ? [] : ['Меряю исходник…'];
+  problems.push(...validateGen(model, '', params, ['ref']));
+  return { modelId: model.id, prompt: '', params, refs, estimate: estimate(model, params, 1, 1), problems };
+}
 
 /**
  * `mediaOf(jobId)` — сохранённый файл задачи или null. Генератор выше по графу отдаёт выбранный вариант;
@@ -32,6 +54,7 @@ export const nodeTitle = (node: CanvasNode): string => {
  */
 export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => string | null): RunPlan {
   const node = flow.nodes.find((n) => n.id === nodeId);
+  if (node?.type === 'upscale') return planUpscale(flow, node, mediaOf);
   const model = node === undefined ? undefined : findModel(node.modelId);
   if (node === undefined || node.type !== 'generator' || model === undefined) return { modelId: node?.modelId ?? '', prompt: '', params: {}, refs: [], estimate: null, problems: ['Выбери модель в ноде.'] };
 
@@ -59,7 +82,7 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
     } else if (from.type === 'image') {
       if (from.source === null) problems.push(`В ноде «${nodeTitle(from)}» нет картинки.`);
       else refs.push({ label: nodeTitle(from), source: from.source, role });
-    } else if (from.type === 'generator' || from.type === 'seedance') {
+    } else if (isJobNode(from)) {
       if (from.type === 'seedance' || from.kind === 'video') {
         problems.push(`«${nodeTitle(from)}»: видео на вход генератора пока не подаётся.`);
         continue;
@@ -102,7 +125,7 @@ export function mediaInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) 
   if (from === undefined) return { source: null, kind: 'image', problemRu: 'Подключи ко входу «Файл» картинку или видео.' };
   const kind = outputOf(from) === 'video' ? 'video' : 'image';
   if (from.type === 'image') return from.source === null ? { source: null, kind, problemRu: `В ноде «${nodeTitle(from)}» нет картинки.` } : { source: from.source, kind, problemRu: null };
-  if (from.type === 'generator' || from.type === 'seedance') {
+  if (isJobNode(from)) {
     const jobId = from.jobIds[from.selected];
     const mediaId = jobId === undefined ? null : mediaOf(jobId);
     return mediaId === null ? { source: null, kind, problemRu: `Сначала запусти «${nodeTitle(from)}» и дождись результата.` } : { source: { type: 'media', mediaId }, kind, problemRu: null };
@@ -125,8 +148,8 @@ export function flowCost(flow: Flow): { credits: number; usd: number } {
   let credits = 0;
   let usd = 0;
   for (const node of flow.nodes) {
-    if (node.type !== 'generator') continue;
-    const model = findModel(node.modelId);
+    // Апскейл считается по последнему замеру входа (до замера — по умолчанию модели: 1024 px / 5 с).
+    const model = modelOfNode(node);
     if (model === undefined) continue;
     const refCount = flow.edges.filter((e) => e.to === node.id && e.port !== 'prompt').length;
     const e = estimate(model, paramsFor(model, node.params), 1, refCount);

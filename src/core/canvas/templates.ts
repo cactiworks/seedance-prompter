@@ -12,7 +12,8 @@ export interface FlowTemplate {
   build: (newId: (prefix: string) => string) => { nodes: CanvasNode[]; edges: CanvasEdge[] };
 }
 
-type Spec = { key: string; type: CanvasNodeType; x: number; y: number; modelId?: string; text?: string; which?: 'first' | 'last'; label?: string };
+/** kind — для нод без модели, чей выход зависит от входа (апскейл, «Размер»): должен совпасть с тем, что придёт. */
+type Spec = { key: string; type: CanvasNodeType; x: number; y: number; modelId?: string; text?: string; which?: 'first' | 'last'; label?: string; kind?: 'image' | 'video' };
 
 /** Ноды по описанию + рёбра по ключам: `[из, в, порт]`. */
 function assemble(newId: (prefix: string) => string, specs: Spec[], links: [string, string, InputPort][]): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
@@ -26,7 +27,7 @@ function assemble(newId: (prefix: string) => string, specs: Spec[], links: [stri
       y: s.y,
       text: s.text ?? '',
       label: s.label ?? '',
-      kind: model?.kind ?? 'image',
+      kind: s.kind ?? model?.kind ?? 'image',
       modelId: model?.id ?? '',
       params: model === undefined ? {} : paramsFor(model, {}),
       which: s.which ?? 'last',
@@ -43,7 +44,7 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   {
     id: 'storyboard-seedance',
     titleRu: 'Шоты → Seedance-промптер',
-    descriptionRu: 'Три кадра раскадровки в GPT Image 2.5 сходятся в один Seedance-промптер — ролик собирается по ним.',
+    descriptionRu: 'Три кадра раскадровки в GPT Image 2.5 сходятся в один Seedance-промптер — ролик собирается по ним. Черновик — в 480p, утверждённый дубль доводит апскейл Topaz.',
     build: (newId) =>
       assemble(
         newId,
@@ -55,6 +56,7 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
           { key: 'p3', type: 'prompt', x: 0, y: ROW * 2 },
           { key: 'i3', type: 'generator', x: COL, y: ROW * 2, modelId: 'kie/gpt-image-2-5' },
           { key: 'sd', type: 'seedance', x: COL * 2 + 60, y: ROW },
+          { key: 'up', type: 'upscale', x: COL * 3 + 120, y: ROW, kind: 'video' },
         ],
         [
           ['p1', 'i1', 'prompt'],
@@ -63,6 +65,7 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
           ['i1', 'sd', 'ref'],
           ['i2', 'sd', 'ref'],
           ['i3', 'sd', 'ref'],
+          ['sd', 'up', 'media'],
         ],
       ),
   },

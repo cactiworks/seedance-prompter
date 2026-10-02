@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
-import { estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenParams, type ProviderId, type SentRef } from '../../core/gen/models.ts';
+import { billedSeconds, estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenModel, type GenParams, type MediaKind, type ProviderId, type SentRef } from '../../core/gen/models.ts';
 import { GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJobStore, newJobId } from '../storage/jobStore.ts';
@@ -9,6 +9,7 @@ import { createSessions } from '../storage/sessions.ts';
 import { createUploads } from '../storage/uploads.ts';
 import { createHiggsfieldProvider } from './higgsfield.ts';
 import { createKieProvider } from './kie.ts';
+import { probeVideo, type VideoInfo, type VideoProbe } from './ffmpeg.ts';
 import { imageSize } from './imageSize.ts';
 import { GenError, type GenProvider, type ProviderStyle } from './provider.ts';
 
@@ -59,7 +60,17 @@ export interface GenRuntimeOptions {
   /** fetch для скачивания результатов (в тестах — подмена). */
   fetch?: typeof fetch;
   now?: () => number;
+  /** Длительность видео для цены апскейла (по умолчанию ffprobe; в тестах — подмена). */
+  probe?: VideoProbe;
 }
+
+/** Что сервер намерил во входном файле: параметры для цены и подпись для формы. */
+export interface Measured {
+  params: GenParams;
+  info: { width: number | null; height: number | null; durationSec: number | null; bytes: number } | null;
+}
+
+export const MeasureRequestSchema = z.object({ modelId: z.string(), refs: z.array(z.object({ source: RefSourceSchema })).max(1) });
 
 const pollDelay = (job: GenJob): number => Math.min(30_000, (job.kind === 'video' ? 8_000 : 3_000) * 1.4 ** Math.min(job.polls, 10));
 
@@ -87,12 +98,20 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     return provider;
   };
 
-  async function readRef(source: RefSource): Promise<{ bytes: Uint8Array; fileName: string; mime: string }> {
+  /** Файл входа. `media` — что ждёт модель: картинку (по умолчанию) или видео; видео берётся только из библиотеки. */
+  async function readRef(source: RefSource, media: MediaKind = 'image'): Promise<{ bytes: Uint8Array; fileName: string; mime: string; filePath: string | null }> {
+    if (media === 'video') {
+      if (source.type !== 'media') throw new SubmitError('REF_NOT_VIDEO', 422, 'Видео на вход берётся из библиотеки.');
+      const item = await library.get(source.mediaId);
+      if (item === undefined) throw new SubmitError('REF_NOT_FOUND', 422, 'Файл из библиотеки не найден.');
+      if (item.kind !== 'video') throw new SubmitError('REF_NOT_VIDEO', 422, 'Сюда нужно видео, а пришла картинка.');
+      return { bytes: await library.readBytes(item), fileName: item.file.split('/').pop() ?? `${item.id}.mp4`, mime: item.mime, filePath: library.pathOf(item) };
+    }
     if (source.type === 'projectRef') {
       const fileName = source.file.split('?')[0] ?? '';
       try {
         const bytes = await projects.readRef(source.slug, fileName);
-        return { bytes, fileName, mime: MIME_BY_EXT[fileName.split('.').pop() ?? ''] ?? 'image/jpeg' };
+        return { bytes, fileName, mime: MIME_BY_EXT[fileName.split('.').pop() ?? ''] ?? 'image/jpeg', filePath: null };
       } catch {
         throw new SubmitError('REF_NOT_FOUND', 422, `Нет файла референса «${fileName}» в проекте «${source.slug}».`);
       }
@@ -100,12 +119,53 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     if (source.type === 'upload') {
       const found = await uploads.read(source.uploadId);
       if (found === undefined) throw new SubmitError('REF_NOT_FOUND', 422, 'Загруженная картинка не найдена — добавь её заново.');
-      return { bytes: found.bytes, fileName: found.upload.fileName, mime: found.upload.mime };
+      return { bytes: found.bytes, fileName: found.upload.fileName, mime: found.upload.mime, filePath: null };
     }
     const item = await library.get(source.mediaId);
     if (item === undefined) throw new SubmitError('REF_NOT_FOUND', 422, 'Файл из библиотеки не найден.');
     if (item.kind !== 'image') throw new SubmitError('REF_NOT_IMAGE', 422, 'Референсом пока может быть только картинка.');
-    return { bytes: await library.readBytes(item), fileName: item.file.split('/').pop() ?? `${item.id}.png`, mime: item.mime };
+    return { bytes: await library.readBytes(item), fileName: item.file.split('/').pop() ?? `${item.id}.png`, mime: item.mime, filePath: null };
+  }
+
+  /**
+   * Параметры, которые меряет сервер по первому входу (длинная сторона картинки, секунды видео у апскейла), и предел
+   * размера файла. Цена считается по ним, а не по словам клиента; форма берёт то же самое через /api/gen/measure.
+   */
+  async function measureRefs(model: GenModel, refs: readonly { source: RefSource }[]): Promise<Measured> {
+    const derived = model.params.filter((d) => d.fromRef !== undefined);
+    const first = refs[0];
+    const media = model.refs.media ?? 'image';
+    if (first === undefined || (derived.length === 0 && model.refs.maxBytes === undefined)) return { params: {}, info: null };
+    const file = await readRef(first.source, media);
+    const what = media === 'video' ? 'Видео' : 'Картинка';
+    const limit = model.refs.maxBytes;
+    if (limit !== undefined && file.bytes.byteLength > limit) throw new SubmitError('REF_TOO_LARGE', 422, `${what} ${(file.bytes.byteLength / 1024 / 1024).toFixed(1)} МБ — ${model.titleRu} принимает до ${limit / 1024 / 1024} МБ.`);
+    const params: GenParams = {};
+    if (media === 'video') {
+      if (file.filePath === null) throw new SubmitError('REF_NOT_VIDEO', 422, 'Видео на вход берётся из библиотеки.');
+      let video: VideoInfo;
+      try {
+        video = await (options.probe ?? probeVideo)(file.filePath);
+      } catch (error) {
+        throw new SubmitError('BAD_VIDEO', 422, error instanceof Error ? error.message : 'Не удалось прочитать видео.');
+      }
+      for (const d of derived) if (d.fromRef === 'seconds') params[d.key] = billedSeconds(video.durationSec);
+      return { params, info: { width: video.width, height: video.height, durationSec: video.durationSec, bytes: file.bytes.byteLength } };
+    }
+    if (derived.length === 0) return { params, info: null };
+    const size = imageSize(file.bytes);
+    if (size === null) throw new SubmitError('BAD_IMAGE', 422, 'Не удалось прочитать размер картинки — нужен PNG, JPEG или WebP.');
+    for (const d of derived) if (d.fromRef === 'longSide') params[d.key] = Math.max(size.width, size.height);
+    return { params, info: { width: size.width, height: size.height, durationSec: null, bytes: file.bytes.byteLength } };
+  }
+
+  /** Замер для формы: тот же, что сделает submit, — цена на кнопке совпадёт с гейтом. */
+  async function measure(raw: unknown): Promise<Measured> {
+    const parsed = MeasureRequestSchema.safeParse(raw);
+    if (!parsed.success) throw new SubmitError('BAD_REQUEST', 422, 'Неверный запрос замера.');
+    const model = findModel(parsed.data.modelId);
+    if (model === undefined) throw new SubmitError('UNKNOWN_MODEL', 422, `Модели «${parsed.data.modelId}» нет в каталоге.`);
+    return measureRefs(model, parsed.data.refs);
   }
 
   async function submit(raw: unknown): Promise<{ jobs: GenJob[]; estimate: Estimate }> {
@@ -119,20 +179,8 @@ export function createGenRuntime(options: GenRuntimeOptions) {
 
     const count = request.count ?? 1;
     if (!Number.isInteger(count) || count < 1 || count > MAX_JOBS_PER_REQUEST) throw new SubmitError('BAD_COUNT', 422, `За один запуск — от 1 до ${MAX_JOBS_PER_REQUEST} генераций.`);
-    // Параметры, которые меряет сервер (длинная сторона исходника у апскейла): цена считается по ним, а не по словам клиента.
-    const measured: GenParams = {};
-    const derived = model.params.filter((d) => d.fromRef !== undefined);
-    const first = request.refs?.[0];
-    if (first !== undefined && (derived.length > 0 || model.refs.maxBytes !== undefined)) {
-      const file = await readRef(first.source);
-      const limit = model.refs.maxBytes;
-      if (limit !== undefined && file.bytes.byteLength > limit) throw new SubmitError('REF_TOO_LARGE', 422, `Картинка ${(file.bytes.byteLength / 1024 / 1024).toFixed(1)} МБ — ${model.titleRu} принимает до ${limit / 1024 / 1024} МБ.`);
-      if (derived.length > 0) {
-        const size = imageSize(file.bytes);
-        if (size === null) throw new SubmitError('BAD_IMAGE', 422, 'Не удалось прочитать размер картинки — нужен PNG, JPEG или WebP.');
-        for (const d of derived) measured[d.key] = Math.max(size.width, size.height);
-      }
-    }
+    // Параметры, которые меряет сервер (длинная сторона, секунды видео у апскейла): цена считается по ним, а не по словам клиента.
+    const measured = (await measureRefs(model, request.refs ?? [])).params;
     const params = paramsFor(model, { ...(request.params ?? {}), ...measured });
     const refs: JobRef[] = (request.refs ?? []).map((r) => ({ label: r.label ?? '', source: r.source, role: r.role ?? 'ref' }));
     const roles = refs.map((r) => r.role);
@@ -150,7 +198,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const session = request.sessionId === undefined ? undefined : await sessions.get(request.sessionId);
     if (request.sessionId !== undefined && (session === undefined || session.kind !== model.kind)) throw new SubmitError('NO_SESSION', 422, 'Сессия не найдена или другого типа — выбери сессию заново.');
     // Файлы читаются до создания задач: отсутствующий реф не должен стоить ни кредита.
-    const files = await Promise.all(refs.map((r) => readRef(r.source)));
+    const files = await Promise.all(refs.map((r) => readRef(r.source, model.refs.media)));
     const sentPrompt = forProvider(model, request.prompt).prompt;
 
     // Конкретный seed у каждой задачи сохраняется в её параметрах — кадр можно повторить (решение 27).
@@ -379,6 +427,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     sessions,
     styles,
     submit,
+    measure,
     retry,
     status,
     tick,

@@ -476,6 +476,8 @@ export function createApp(options: AppOptions) {
     .get('/api/gen/styles', async (c) => c.json(await gen.styles(c.req.query('provider') === 'higgsfield' ? 'higgsfield' : 'kie')))
     // Только по клику: сервер сверяет подтверждённую сумму с оценкой и согласие на отправку рефов.
     .post('/api/gen/jobs', async (c) => c.json(await gen.submit(await c.req.json()), 202))
+    // Замер входа апскейла (длинная сторона, секунды видео) — тот же, что при запуске: цена на кнопке = гейт. Бесплатно, локально.
+    .post('/api/gen/measure', async (c) => c.json(await gen.measure(await c.req.json())))
     .get('/api/gen/jobs', async (c) => {
       const { slug, shotId, sessionId, kind } = c.req.query();
       const all = await gen.jobs.all();

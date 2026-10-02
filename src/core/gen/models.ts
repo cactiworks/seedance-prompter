@@ -31,10 +31,11 @@ export interface ParamDef {
   hintRu?: string;
   default: ParamValue;
   /**
-   * Значение берёт сервер из первой входной картинки (длинная сторона в пикселях) — владелец его не вводит, форма не
-   * показывает. Клиент присылает своё измерение для оценки цены; не совпало — гейт цены вернёт 409.
+   * Значение берёт сервер из первого входного файла — владелец его не вводит, форма не показывает. longSide — длинная
+   * сторона картинки в пикселях, seconds — длительность видео в целых секундах (`billedSeconds`). Клиент присылает
+   * своё измерение для оценки цены; не совпало — гейт цены вернёт 409.
    */
-  fromRef?: 'longSide';
+  fromRef?: 'longSide' | 'seconds';
 }
 
 /** ref — референс; start / end — первый и последний кадр видео. */
@@ -51,6 +52,8 @@ export interface RefSpec {
   min?: number;
   /** Предел размера одного файла у провайдера, байт. */
   maxBytes?: number;
+  /** Что подаётся на вход: картинки (по умолчанию) или видео (апскейл видео). */
+  media?: MediaKind;
 }
 
 export interface SentRef {
@@ -279,8 +282,42 @@ const TOPAZ: GenModel = {
   limits: (p) => (upscaledSide(p) > 8192 ? [`Результат ${upscaledSide(p)} px по длинной стороне — больше 8K; выбери меньшее увеличение.`] : []),
 };
 
+/**
+ * Секунды к оплате по длительности видео: целые, вверх, с допуском 0.1 с на округление контейнера (5.04 с Seedance → 5).
+ * Как KIE округляет на самом деле, в доке нет — списанное придёт с результатом и запишется в задачу.
+ */
+export const billedSeconds = (durationSec: number): number => Math.max(1, Math.ceil(durationSec - 0.1));
+
+/**
+ * Апскейл видео Topaz — решение 39: утверждённый черновик Seedance (480p, решение 38) доводится до финала тем же дублем;
+ * перегенерация дала бы другой — seed у Seedance на KIE нет. Схема: docs.kie.ai/market/topaz/video-upscale (02.10.2026):
+ * `video_url` (mp4 / mov / mkv, до 50 МБ), `upscale_factor` 1 / 2 / 4. Прайс KIE 02.10: 1× и 2× — 8 кр/с, 4× — 14 кр/с.
+ */
+const TOPAZ_VIDEO: GenModel = {
+  id: 'kie/topaz-video-upscale',
+  provider: 'kie',
+  kind: 'video',
+  titleRu: 'Topaz Video Upscale',
+  noteRu: 'Topaz Labs · апскейл видео 2× / 4× — тот же дубль',
+  maxPromptChars: 0,
+  params: [
+    enumParam('upscaleFactor', 'Увеличение', ['2', '4', '1'], '2', { '1': '1× — только чистка', '2': '2×', '4': '4×' }),
+    { key: 'sourceSec', labelRu: 'Исходник, с', type: 'int', min: 1, max: 600, default: 5, fromRef: 'seconds', hintRu: 'Длительность исходника — сервер меряет сам.' },
+  ],
+  refs: { max: 1, min: 1, roles: ['ref'], maxBytes: 50 * 1024 * 1024, media: 'video' },
+  promptRefs: 'image-n',
+  credits: (p) => (str(p, 'upscaleFactor') === '4' ? 14 : 8) * num(p, 'sourceSec'),
+  target: () => 'topaz/video-upscale',
+  input: (_prompt, p, refs) => ({ video_url: refs[0]?.url ?? '', upscale_factor: str(p, 'upscaleFactor') }),
+  tool: true,
+  promptless: true,
+};
+
+/** Апскейл для вида файла — один инструмент на картинку и на видео (нода canvas «Апскейл Topaz»). */
+export const upscaleModelOf = (kind: MediaKind): GenModel => (kind === 'video' ? TOPAZ_VIDEO : TOPAZ);
+
 /** Всё, что можно запустить: генераторы и инструменты. */
-export const GEN_MODELS: readonly GenModel[] = [...GENERATORS, TOPAZ];
+export const GEN_MODELS: readonly GenModel[] = [...GENERATORS, TOPAZ, TOPAZ_VIDEO];
 
 export const findModel = (id: string): GenModel | undefined => GEN_MODELS.find((m) => m.id === id);
 
@@ -347,7 +384,7 @@ export function validateGen(model: GenModel, prompt: string, params: GenParams, 
   }
 
   const count = (role: RefRole): number => roles.filter((r) => r === role).length;
-  if (roles.length < (model.refs.min ?? 0)) problems.push(`${model.titleRu} нужна входная картинка.`);
+  if (roles.length < (model.refs.min ?? 0)) problems.push(`${model.titleRu} ${model.refs.media === 'video' ? 'нужно входное видео' : 'нужна входная картинка'}.`);
   problems.push(...(model.limits?.(params) ?? []));
   if (roles.length > model.refs.max) problems.push(model.refs.max === 0 ? `${model.titleRu} не принимает картинки.` : `Картинок ${roles.length}, а ${model.titleRu} принимает не больше ${model.refs.max}.`);
   for (const role of new Set(roles)) if (!model.refs.roles.includes(role)) problems.push(`Роль «${REF_ROLE_RU[role]}» не поддерживается ${model.titleRu}.`);

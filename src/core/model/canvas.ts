@@ -10,8 +10,9 @@ import { GenParamsSchema, RefSourceSchema } from './media.ts';
  * video — своё видео из библиотеки (съёмка или прошлая генерация) как вход цепочки.
  * seedance — Seedance-промптер: полный конструктор «Кадров» во весь экран. У ноды свой черновик-ролик
  * (data/projects/cv-<id>), картинки входа «Рефы» становятся панелью кадра, выход — сгенерированное видео.
+ * upscale — апскейл Topaz (решение 39): картинка или видео на входе «Файл», выход того же вида; запуск платный, с гейтом.
  */
-export const CANVAS_NODE_TYPES = ['prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance'] as const;
+export const CANVAS_NODE_TYPES = ['prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance', 'upscale'] as const;
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[number];
 
 /** video — вход ноды «Кадр из видео»: принимает результат генератора видео. media — вход «Размера»: картинка или видео. */
@@ -73,7 +74,7 @@ export type Flow = z.infer<typeof FlowSchema>;
 /** Какие входы принимает нода. Промпт и картинка входов не имеют. */
 export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[] {
   if (node.type === 'frame' || node.type === 'trim') return ['video'];
-  if (node.type === 'resize') return ['media'];
+  if (node.type === 'resize' || node.type === 'upscale') return ['media'];
   // Seedance-промптер берёт сколько угодно картинок (модель — до 30): каждая становится картинкой панели.
   if (node.type === 'seedance') return ['ref'];
   if (node.type !== 'generator') return [];
@@ -82,7 +83,10 @@ export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[
 
 /** Что отдаёт нода: текст, картинку или видео. Обрезка отдаёт видео — его можно резать дальше и брать из него кадр. */
 export const outputOf = (node: CanvasNode): 'text' | 'image' | 'video' =>
-  node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize') && node.kind === 'video') ? 'video' : 'image';
+  node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize' || node.type === 'upscale') && node.kind === 'video') ? 'video' : 'image';
+
+/** Ноды, выход которых — выбранный вариант запусков (`jobIds[selected]`): генератор, Seedance-промптер, апскейл. */
+export const isJobNode = (node: CanvasNode): boolean => node.type === 'generator' || node.type === 'seedance' || node.type === 'upscale';
 
 /** Черновик-ролик Seedance-промптера: слаг проекта по id ноды (латиница, цифры — подходит под слаг). */
 export const seedanceSlug = (nodeId: string): string => `cv-${nodeId.toLowerCase().replace(/[^a-z0-9-]/g, '')}`.slice(0, 64);

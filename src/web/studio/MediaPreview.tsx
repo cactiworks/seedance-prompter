@@ -8,11 +8,12 @@ import { VerdictBar } from '../calibration/VerdictBar.tsx';
 import { useCanvas } from '../canvas/canvasStore.ts';
 import { CropEditor } from './CropEditor.tsx';
 import { EditPanel, type StageMode } from './EditPanel.tsx';
+import { VideoEditPanel } from './VideoEditPanel.tsx';
 import { MaskEditor } from './MaskEditor.tsx';
 import styles from './MediaPreview.module.css';
 
 const formatDate = (iso: string): string => new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
-const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта', styleId: 'Мудборд', seed: 'Seed', upscaleFactor: 'Увеличение', sourceSize: 'Исходник, px' };
+const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', aspectRatio: 'Формат', durationSec: 'Длительность', audio: 'Звук', variant: 'Вариант', background: 'Фон', mode: 'Режим', soulId: 'Soul ID', enhancePrompt: 'Улучшение промпта', styleId: 'Мудборд', seed: 'Seed', upscaleFactor: 'Увеличение', sourceSize: 'Исходник, px', sourceSec: 'Исходник, с' };
 const showValue = (v: unknown): string => (v === true ? 'да' : v === false ? 'нет' : v === '' ? '—' : String(v));
 
 const parentOf = (item: MediaItem): string | null => {
@@ -105,7 +106,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
         <nav className={styles.versions} aria-label="Версии">
           {versions.done.map((v) => (
             <button key={v.id} type="button" className={`${styles.version} ${v.id === item.id ? styles.versionOn : ''}`} onClick={() => setCurrent(v)} title={parentOf(v) === null ? 'Исходник' : 'Правка'}>
-              <img src={mediaUrl(v.id)} alt="" />
+              {v.kind === 'video' ? <video src={mediaUrl(v.id)} muted playsInline preload="metadata" /> : <img src={mediaUrl(v.id)} alt="" />}
             </button>
           ))}
           {versions.pending.map((j) => (
@@ -149,21 +150,20 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
           </button>
         </header>
 
-        {item.kind === 'image' && (
-          <SegmentedControl<'info' | 'edit'>
-            aria-label="Вкладка"
-            size="s"
-            value={tab}
-            onChange={(next) => {
-              setTab(next);
-              setMode(next === 'edit' ? 'brush' : 'view');
-            }}
-            options={[
-              { value: 'info', label: 'Инфо' },
-              { value: 'edit', label: 'Правка' },
-            ]}
-          />
-        )}
+        <SegmentedControl<'info' | 'edit'>
+          aria-label="Вкладка"
+          size="s"
+          value={tab}
+          onChange={(next) => {
+            setTab(next);
+            // Кисть — только у картинки; у видео в «Правке» апскейл (решение 39).
+            setMode(next === 'edit' && item.kind === 'image' ? 'brush' : 'view');
+          }}
+          options={[
+            { value: 'info', label: 'Инфо' },
+            { value: 'edit', label: 'Правка' },
+          ]}
+        />
 
         {tab === 'info' && (
           <div className={styles.panelBody}>
@@ -312,6 +312,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
         )}
 
         {tab === 'edit' && item.kind === 'image' && <EditPanel key={item.id} item={item} mode={mode} onMode={setMode} />}
+        {tab === 'edit' && item.kind === 'video' && <VideoEditPanel key={item.id} item={item} />}
       </aside>
     </div>,
     document.body,

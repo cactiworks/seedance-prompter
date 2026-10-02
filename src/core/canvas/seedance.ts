@@ -57,7 +57,7 @@ export function seedanceInputs(flow: Flow, nodeId: string, jobOf: JobLookup): { 
     if (from.type === 'image') {
       if (from.source === null) problems.push(`В ноде «${nodeTitle(from)}» нет картинки — в панель она не попала.`);
       else add(from.source, 'other', null);
-    } else if (from.type === 'generator') {
+    } else if (from.type === 'generator' || from.type === 'upscale') {
       if (from.kind === 'video') {
         problems.push(`«${nodeTitle(from)}»: видео в панель Seedance-промптера пока не подаётся — возьми из него кадр нодой «Кадр».`);
         continue;

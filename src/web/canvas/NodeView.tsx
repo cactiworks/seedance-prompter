@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { frameInput, mediaInput, planRun, nodeTitle, trimProblems } from '../../core/canvas/plan.ts';
+import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
 import { seedanceInputs } from '../../core/canvas/seedance.ts';
-import { findModel, formatCost, modelsOf, paramsFor } from '../../core/gen/models.ts';
+import { findModel, formatCost, modelsOf, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import { inputsOf, RESIZE_PRESETS, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
-import { extractFrame, hasRefsConsent, importMedia, isActive, mediaUrl, resizeMedia, thumbOf, trimVideo, uploadImage, useGen } from '../gen/genStore.ts';
+import { extractFrame, hasRefsConsent, importMedia, isActive, measureInput, mediaUrl, resizeMedia, thumbOf, trimVideo, uploadImage, useGen, type MeasuredInput } from '../gen/genStore.ts';
 import { ParamField } from '../studio/Controls.tsx';
 import { STATUS_RU } from '../studio/JobTile.tsx';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
@@ -326,6 +326,62 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
   );
 }
 
+/**
+ * Вход апскейла (решение 39): сервер мерит его тем же кодом, что при запуске (длинная сторона картинки или секунды видео),
+ * нода хранит замер в params с ключом источника. Сменился вход — мерим заново; без замера запуск закрыт.
+ */
+function UpscaleSource({ node }: { node: CanvasNode }) {
+  const { flow, patchNode } = useCanvas();
+  const jobs = useGen((s) => s.jobs);
+  const [info, setInfo] = useState<MeasuredInput['info']>(null);
+  const [error, setError] = useState<string | null>(null);
+  const latest = useRef(node);
+  latest.current = node;
+  const mediaOf = (jobId: string): string | null => {
+    const job = jobs.find((j) => j.id === jobId);
+    return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
+  };
+  const source = flow === null ? null : mediaInput(flow, node.id, mediaOf).source;
+  const key = source === null ? null : sourceKey(source);
+  const modelId = upscaleModelOf(node.kind).id;
+
+  useEffect(() => {
+    if (source === null || key === null) {
+      setInfo(null);
+      return;
+    }
+    let live = true;
+    setError(null);
+    measureInput(modelId, source)
+      .then((measured) => {
+        if (!live) return;
+        setInfo(measured.info);
+        const current = latest.current;
+        const changed = current.params.measuredFor !== key || Object.entries(measured.params).some(([k, v]) => current.params[k] !== v);
+        if (changed) patchNode(current.id, { params: { ...current.params, ...measured.params, measuredFor: key } }, false);
+      })
+      .catch((e: unknown) => live && setError(e instanceof Error ? e.message : 'Исходник не измерился.'));
+    return () => {
+      live = false;
+    };
+    // source описан ключом: объект пересоздаётся на каждый рендер, ключ — нет.
+  }, [key, modelId, patchNode]);
+
+  if (error !== null)
+    return (
+      <Text variant="caption" tone="accent">
+        {error}
+      </Text>
+    );
+  if (info === null || info.width === null || info.height === null) return null;
+  const factor = Number(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor);
+  return (
+    <Text variant="caption" tone="secondary">
+      {`Исходник ${info.width}×${info.height}${info.durationSec === null ? '' : ` · ${info.durationSec.toFixed(1)} с`} → ${info.width * factor}×${info.height * factor}`}
+    </Text>
+  );
+}
+
 interface NodeViewProps {
   node: CanvasNode;
   selected: boolean;
@@ -358,7 +414,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     }
   };
 
-  const plan = flow === null || node.type !== 'generator' ? null : planRun(flow, node.id, mediaOf);
+  const plan = flow === null || (node.type !== 'generator' && node.type !== 'upscale') ? null : planRun(flow, node.id, mediaOf);
   const current = node.jobIds[node.selected];
   const job = current === undefined ? undefined : jobs.find((j) => j.id === current);
   const resultMedia = current === undefined ? null : mediaOf(current);
@@ -403,6 +459,55 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
 
   const model = findModel(node.modelId);
 
+  // Выход платной ноды (генератор, апскейл): выбранный вариант ‹ n/N ›, причины, кнопка с ценой.
+  const runOutput = (
+    <>
+      <div className={styles.nodeResult}>
+        {resultMedia !== null ? (
+          node.kind === 'image' ? (
+            <img src={mediaUrl(resultMedia)} alt="Результат" />
+          ) : (
+            <video src={mediaUrl(resultMedia)} controls muted loop playsInline />
+          )
+        ) : (
+          <div className={`${styles.nodeDrop} lab-hatch`}>
+            <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
+              {job === undefined ? 'Результата пока нет' : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
+            </Text>
+            {job?.error !== null && job?.error !== undefined && (
+              <Text variant="caption" tone="secondary">
+                {job.error.messageRu}
+              </Text>
+            )}
+          </div>
+        )}
+        {node.jobIds.length > 1 && (
+          <div className={styles.iterations}>
+            <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
+              <Icon name="chevron-back" size={0.875} />
+            </button>
+            <Text variant="caption" tone="secondary">
+              {node.selected + 1} / {node.jobIds.length}
+            </Text>
+            <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
+              <Icon name="chevron-forward" size={0.875} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {plan !== null && plan.problems.length > 0 && (
+        <Text variant="caption" tone="secondary" className={styles.nodeProblems}>
+          {plan.problems.slice(0, 2).join(' ')}
+        </Text>
+      )}
+      <Button variant="dark" size="s" loading={busy} disabled={plan === null || plan.problems.length > 0 || plan.estimate === null} icon={<Icon name={node.type === 'upscale' ? 'push' : 'sparkle'} size={1} />} onClick={onRun}>
+        {node.type === 'upscale' ? 'Апскейл' : 'Запустить'}
+        {plan?.estimate !== null && plan?.estimate !== undefined ? ` · ${formatCost(plan.estimate)}` : ''}
+      </Button>
+    </>
+  );
+
   return (
     <div
       data-node-id={node.id}
@@ -424,7 +529,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       }}
     >
       <header className={styles.nodeHead} onPointerDown={(event) => onHeaderDown(event, node)}>
-        <Icon name={node.type === 'prompt' ? 'pencil' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.type === 'video' ? 'upload' : node.type === 'resize' ? 'apps' : node.type === 'seedance' ? 'options' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
+        <Icon name={node.type === 'prompt' ? 'pencil' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.type === 'video' ? 'upload' : node.type === 'resize' ? 'apps' : node.type === 'seedance' ? 'options' : node.type === 'upscale' ? 'push' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
         <Text variant="label" medium className={styles.nodeTitle}>
           {nodeTitle(node)}
         </Text>
@@ -538,49 +643,28 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
               </div>
             )}
             <textarea className={styles.nodeText} rows={2} value={node.text} placeholder="Доп. текст — допишется после входящих промптов" onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />
+            {runOutput}
+          </>
+        )}
 
-            <div className={styles.nodeResult}>
-              {resultMedia !== null ? (
-                node.kind === 'image' ? (
-                  <img src={mediaUrl(resultMedia)} alt="Результат" />
-                ) : (
-                  <video src={mediaUrl(resultMedia)} controls muted loop playsInline />
-                )
-              ) : (
-                <div className={`${styles.nodeDrop} lab-hatch`}>
-                  <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
-                    {job === undefined ? 'Результата пока нет' : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
-                  </Text>
-                  {job?.error !== null && job?.error !== undefined && (
-                    <Text variant="caption" tone="secondary">
-                      {job.error.messageRu}
-                    </Text>
-                  )}
-                </div>
-              )}
-              {node.jobIds.length > 1 && (
-                <div className={styles.iterations}>
-                  <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
-                    <Icon name="chevron-back" size={0.875} />
-                  </button>
-                  <Text variant="caption" tone="secondary">
-                    {node.selected + 1} / {node.jobIds.length}
-                  </Text>
-                  <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
-                    <Icon name="chevron-forward" size={0.875} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {plan !== null && plan.problems.length > 0 && (
-              <Text variant="caption" tone="secondary" className={styles.nodeProblems}>
-                {plan.problems.slice(0, 2).join(' ')}
-              </Text>
-            )}
-            <Button variant="dark" size="s" loading={busy} disabled={plan === null || plan.problems.length > 0 || plan.estimate === null} icon={<Icon name="sparkle" size={1} />} onClick={onRun}>
-              Запустить{plan?.estimate !== null && plan?.estimate !== undefined ? ` · ${formatCost(plan.estimate)}` : ''}
-            </Button>
+        {node.type === 'upscale' && (
+          <>
+            <SegmentedControl<string>
+              aria-label="Увеличение"
+              size="s"
+              value={String(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor)}
+              onChange={(upscaleFactor) => patchNode(node.id, { params: { ...node.params, upscaleFactor } }, `params:${node.id}`)}
+              options={[
+                { value: '1', label: '1×', title: 'Только чистка: размер тот же' },
+                { value: '2', label: '2×' },
+                { value: '4', label: '4×' },
+              ]}
+            />
+            <UpscaleSource node={node} />
+            {runOutput}
+            <Text variant="caption" tone="tertiary">
+              Topaz не перерисовывает: тот же {node.kind === 'video' ? 'дубль' : 'кадр'}, больше пикселей. Выход — {node.kind === 'video' ? 'видео' : 'картинка'}: тяни в «Размер» или дальше.
+            </Text>
           </>
         )}
         {error !== null && (

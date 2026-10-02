@@ -322,7 +322,7 @@ export function Canvas() {
   };
 
   /** Что можно создать на конце связи, отпущенной в пустоту, — по типу выхода. */
-  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim' | 'resize' | 'seedance'; kind: 'image' | 'video'; port: InputPort }[] => {
+  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim' | 'resize' | 'seedance' | 'upscale'; kind: 'image' | 'video'; port: InputPort }[] => {
     const from = nodeById.get(fromId);
     if (from === undefined) return [];
     const out = outputOf(from);
@@ -336,12 +336,14 @@ export function Canvas() {
         { label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' },
         { label: 'Обрезка видео', type: 'trim', kind: 'image', port: 'video' },
         { label: 'Размер под площадку', type: 'resize', kind: 'video', port: 'media' },
+        { label: 'Апскейл Topaz', type: 'upscale', kind: 'video', port: 'media' },
       ];
     return [
       { label: 'Генератор картинки · референс', type: 'generator', kind: 'image', port: 'ref' },
       { label: 'Генератор видео · старт-кадр', type: 'generator', kind: 'video', port: 'start' },
       { label: 'Seedance-промптер · в панель', type: 'seedance', kind: 'image', port: 'ref' },
       { label: 'Размер под площадку', type: 'resize', kind: 'image', port: 'media' },
+      { label: 'Апскейл Topaz', type: 'upscale', kind: 'image', port: 'media' },
     ];
   };
   const createLinked = (opt: ReturnType<typeof linkOptions>[number]): void => {
@@ -425,6 +427,9 @@ export function Canvas() {
         </Button>
         <Button variant="soft" size="xs" icon={<Icon name="apps" size={0.875} />} title="Картинку или видео — под размер площадки (1080×1920 и др.), бесплатно" onClick={() => addNode('resize', centerWorld().x, centerWorld().y)}>
           Размер
+        </Button>
+        <Button variant="soft" size="xs" icon={<Icon name="push" size={0.875} />} title="Апскейл Topaz картинки или видео — тот же кадр или дубль, больше пикселей; платно, цена на кнопке ноды" onClick={() => addNode('upscale', centerWorld().x, centerWorld().y)}>
+          Апскейл
         </Button>
       </header>
 
@@ -547,7 +552,7 @@ export function Canvas() {
             </Text>
             {linkOptions(linkMenu.from).map((opt) => (
               <button key={opt.label} type="button" role="menuitem" onClick={() => createLinked(opt)}>
-                <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.type === 'resize' ? 'apps' : opt.type === 'seedance' ? 'options' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
+                <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.type === 'resize' ? 'apps' : opt.type === 'seedance' ? 'options' : opt.type === 'upscale' ? 'push' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
                 {opt.label}
               </button>
             ))}

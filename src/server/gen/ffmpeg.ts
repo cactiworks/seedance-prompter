@@ -17,6 +17,34 @@ export const runFfmpeg: FfmpegRunner = (args) =>
     });
   });
 
+/** Длительность и кадр видео. В тестах подменяется через опции рантайма. */
+export interface VideoInfo {
+  durationSec: number;
+  width: number | null;
+  height: number | null;
+}
+export type VideoProbe = (filePath: string) => Promise<VideoInfo>;
+
+/** ffprobe лежит рядом с ffmpeg (Homebrew ставит оба). Цена апскейла видео считается по этой длительности. */
+export const probeVideo: VideoProbe = (filePath) =>
+  new Promise((resolve, reject) => {
+    const bin = CANDIDATES.map((p) => p.replace(/ffmpeg$/, 'ffprobe')).find((p) => existsSync(p)) ?? 'ffprobe';
+    execFile(bin, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', filePath], { timeout: 20_000 }, (error, stdout) => {
+      if (error !== null) {
+        reject(new Error((error as NodeJS.ErrnoException).code === 'ENOENT' ? 'ffprobe не найден — поставь: brew install ffmpeg.' : 'Не удалось прочитать видео (ffprobe).'));
+        return;
+      }
+      try {
+        const data = JSON.parse(String(stdout)) as { format?: { duration?: string }; streams?: { width?: number; height?: number }[] };
+        const durationSec = Number(data.format?.duration);
+        if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error('no duration');
+        resolve({ durationSec, width: data.streams?.[0]?.width ?? null, height: data.streams?.[0]?.height ?? null });
+      } catch {
+        reject(new Error('Не удалось узнать длительность видео.'));
+      }
+    });
+  });
+
 /** Обрезка картинки: доли 0…1 от ширины и высоты исходника — ffmpeg сам знает размер (iw / ih). */
 export const cropArgs = (input: string, output: string, box: { x: number; y: number; w: number; h: number }): string[] => [
   '-i',

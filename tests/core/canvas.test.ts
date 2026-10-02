@@ -132,6 +132,8 @@ describe('canvas: обрезка видео и шаблоны (решение 35
         if (from === undefined || to === undefined) continue;
         expect(portAccepts(e.port, outputOf(from)), `${t.id}: ${from.type} → ${e.port}`).toBe(true);
         expect(inputsOf(to, findModel(to.modelId)?.refs.roles ?? []), `${t.id}: у ${to.type} есть вход ${e.port}`).toContain(e.port);
+        // Апскейл и «Размер» отдают то, что получили: вид ноды в шаблоне должен совпасть с выходом источника.
+        if (e.port === 'media') expect(to.kind, `${t.id}: вид ${to.type}`).toBe(outputOf(from));
         expect(wouldCycle({ ...flow, edges: edges.filter((x) => x.id !== e.id) }, e.from, e.to)).toBe(false);
       }
       for (const node of nodes.filter((x) => x.type === 'generator')) expect(findModel(node.modelId), `${t.id}: модель`).toBeDefined();

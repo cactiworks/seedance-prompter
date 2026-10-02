@@ -29,7 +29,7 @@ let seq = 0;
 export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
-export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300 };
+export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
 /** Вертикаль портов: выход и первый вход — под шапкой, остальные входы — шагом PORT_STEP. */
 export const PORT_TOP = 58;
 export const PORT_STEP = 30;
@@ -47,7 +47,7 @@ export function blankNode(type: CanvasNodeType, x: number, y: number, kind: Medi
     y,
     kind,
     modelId: type === 'generator' ? (model?.id ?? '') : '',
-    params: type === 'generator' && model !== undefined ? paramsFor(model, {}) : {},
+    params: type === 'generator' && model !== undefined ? paramsFor(model, {}) : type === 'upscale' ? { upscaleFactor: '2' } : {},
   });
 }
 
@@ -257,12 +257,14 @@ export const useCanvas = create<CanvasState>((set, get) => {
       // Во входы «Старт», «Финал» и «Видео» — одна связь; повторная заменяет прежнюю.
       const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media');
       if (flow.edges.some((e) => e.from === from && e.to === to && e.port === port)) return null;
-      // «Размер» отдаёт то же, что получил: картинку или видео; прежний результат другого вида больше не годится.
+      // «Размер» и апскейл отдают то же, что получили: картинку или видео; прежний результат другого вида больше не годится
+      // (у апскейла его запуски остаются в библиотеке, но выходом ноды быть не могут).
       const source = flow.nodes.find((n) => n.id === from);
       const kind = source === undefined ? 'image' : outputOf(source) === 'video' ? 'video' : 'image';
+      const retype = (n: CanvasNode): CanvasNode => (n.kind === kind ? n : { ...n, kind, mediaId: null, jobIds: [], selected: 0 });
       get().update((f) => ({
         ...f,
-        nodes: port === 'media' ? f.nodes.map((n) => (n.id === to ? { ...n, kind, mediaId: n.kind === kind ? n.mediaId : null } : n)) : f.nodes,
+        nodes: port === 'media' ? f.nodes.map((n) => (n.id === to ? retype(n) : n)) : f.nodes,
         edges: [...f.edges.filter((e) => !replace(e)), { id: newId('e'), from, to, port }],
       }));
       return null;
