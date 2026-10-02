@@ -21,5 +21,6 @@ for a serious shot, recommend it in `alternativesRu`.
   not mention any.
 
 ## Parameters
-- resolution: 480p, 720p, 1080p (default 720p). durationSec: 4–30. aspectRatio: 9:16, 3:4, 1:1, 4:3, 16:9, 21:9.
+- resolution: 480p, 720p, 1080p (default 480p — the owner drafts Seedance in 480p; 720p / 1080p only when the idea
+  says it is a final). durationSec: 4–30. aspectRatio: 9:16, 3:4, 1:1, 4:3, 16:9, 21:9.
   audio: on by default.

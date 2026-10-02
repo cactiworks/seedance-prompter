@@ -60,7 +60,8 @@ describe('canvas: что уйдёт в модель при запуске нод
   });
 
   it('цена flow — сумма по одному запуску генераторов', () => {
-    expect(flowCost(graph)).toEqual({ credits: 321, usd: 1.605 });
+    // GPT Image 6 кр + Seedance 5 с в 480p по умолчанию (решение 38) 140 кр.
+    expect(flowCost(graph)).toEqual({ credits: 146, usd: 0.73 });
   });
 
   it('цикл не допускается', () => {

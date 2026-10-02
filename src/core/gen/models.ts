@@ -234,7 +234,8 @@ const GENERATORS: readonly GenModel[] = [
     titleRu: 'Seedance 2.5',
     noteRu: 'ByteDance · до 30 с, звук · кадры или до 30 рефов',
     maxPromptChars: 30_000,
-    params: [resolution(['480p', '720p', '1080p'], '720p'), aspect(['9:16', '3:4', '1:1', '4:3', '16:9', '21:9'], '9:16'), duration(4, 30, 5), audio(true)],
+    // 480p по умолчанию: черновик Seedance делается в 480p (решение 38), финал выбирается явно.
+    params: [resolution(['480p', '720p', '1080p'], '480p'), aspect(['9:16', '3:4', '1:1', '4:3', '16:9', '21:9'], '9:16'), duration(4, 30, 5), audio(true)],
     refs: { max: 30, roles: ['ref', 'start', 'end'], framesExclusive: true },
     promptRefs: 'at-image',
     // Кредиты в секунду без входного видео (видео-рефы пока не поддержаны); звук на цену не влияет.

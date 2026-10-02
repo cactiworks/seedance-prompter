@@ -65,7 +65,9 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   // порядку (@ImageN). Настройки Higgsfield и порядок загрузки сервер выставляет сам — эти пункты чек-листа не нужны.
   const gen = useGen();
   const { loadStatus } = gen;
-  const [genRes, setGenRes] = useState('720p');
+  const seedance = findModel('kie/seedance-2-5');
+  // Разрешение по умолчанию — из каталога (черновик 480p, решение 38).
+  const [genRes, setGenRes] = useState(() => String(seedance?.params.find((p) => p.key === 'resolution')?.default ?? '480p'));
   const [genAudio, setGenAudio] = useState(true);
   const [consent, setConsent] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
@@ -73,7 +75,6 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   useEffect(() => {
     if (open) void loadStatus();
   }, [open, loadStatus]);
-  const seedance = findModel('kie/seedance-2-5');
   const genParams = seedance === undefined ? {} : paramsFor(seedance, { resolution: genRes, aspectRatio: project.aspectRatio, durationSec, audio: genAudio });
   const panelFiles = shot.panel.map((key, i) => ({ n: i + 1, label: refByKey.get(key)?.label ?? key, file: refByKey.get(key)?.file ?? null }));
   const genCost = seedance === undefined ? null : estimate(seedance, genParams, 1, panelFiles.length);
