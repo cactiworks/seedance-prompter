@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
-import { billedSeconds, estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenModel, type GenParams, type MediaKind, type ProviderId, type SentRef } from '../../core/gen/models.ts';
+import { billedSeconds, estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenModel, type GenParams, type MediaKind, type ParamDef, type ProviderId, type SentRef } from '../../core/gen/models.ts';
 import { GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJobStore, newJobId } from '../storage/jobStore.ts';
@@ -70,7 +70,15 @@ export interface Measured {
   info: { width: number | null; height: number | null; durationSec: number | null; bytes: number } | null;
 }
 
-export const MeasureRequestSchema = z.object({ modelId: z.string(), refs: z.array(z.object({ source: RefSourceSchema })).max(1) });
+/** Прочитанный файл входа; filePath — только у файла библиотеки (по нему меряет ffprobe). */
+interface RefFile {
+  bytes: Uint8Array;
+  fileName: string;
+  mime: string;
+  filePath: string | null;
+}
+
+export const MeasureRequestSchema =z.object({ modelId: z.string(), refs: z.array(z.object({ source: RefSourceSchema })).max(1) });
 
 const pollDelay = (job: GenJob): number => Math.min(30_000, (job.kind === 'video' ? 8_000 : 3_000) * 1.4 ** Math.min(job.polls, 10));
 
@@ -99,7 +107,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
   };
 
   /** Файл входа. `media` — что ждёт модель: картинку (по умолчанию) или видео; видео берётся только из библиотеки. */
-  async function readRef(source: RefSource, media: MediaKind = 'image'): Promise<{ bytes: Uint8Array; fileName: string; mime: string; filePath: string | null }> {
+  async function readRef(source: RefSource, media: MediaKind = 'image'): Promise<RefFile> {
     if (media === 'video') {
       if (source.type !== 'media') throw new SubmitError('REF_NOT_VIDEO', 422, 'Видео на вход берётся из библиотеки.');
       const item = await library.get(source.mediaId);
@@ -131,15 +139,23 @@ export function createGenRuntime(options: GenRuntimeOptions) {
    * Параметры, которые меряет сервер по первому входу (длинная сторона картинки, секунды видео у апскейла), и предел
    * размера файла. Цена считается по ним, а не по словам клиента; форма берёт то же самое через /api/gen/measure.
    */
-  async function measureRefs(model: GenModel, refs: readonly { source: RefSource }[]): Promise<Measured> {
+  async function measureRefs(model: GenModel, refs: readonly { source: RefSource }[]): Promise<{ measured: Measured; file: RefFile | null }> {
     const derived = model.params.filter((d) => d.fromRef !== undefined);
     const first = refs[0];
     const media = model.refs.media ?? 'image';
-    if (first === undefined || (derived.length === 0 && model.refs.maxBytes === undefined)) return { params: {}, info: null };
+    if (first === undefined || (derived.length === 0 && model.refs.maxBytes === undefined)) return { measured: { params: {}, info: null }, file: null };
     const file = await readRef(first.source, media);
     const what = media === 'video' ? 'Видео' : 'Картинка';
     const limit = model.refs.maxBytes;
     if (limit !== undefined && file.bytes.byteLength > limit) throw new SubmitError('REF_TOO_LARGE', 422, `${what} ${(file.bytes.byteLength / 1024 / 1024).toFixed(1)} МБ — ${model.titleRu} принимает до ${limit / 1024 / 1024} МБ.`);
+    // Замер вне пределов параметра — отказ, а не подмена: paramsFor молча поставил бы умолчание (5 с, 1024 px), и цена
+    // ушла бы в разы ниже настоящей (находка ревью PR #1).
+    const put = (params: GenParams, def: ParamDef, value: number): void => {
+      if (value < (def.min ?? -Infinity) || value > (def.max ?? Infinity)) {
+        throw new SubmitError('REF_OUT_OF_RANGE', 422, def.fromRef === 'seconds' ? `Видео ${value} с — ${model.titleRu} принимает до ${def.max ?? '…'} с за раз; обрежь его нодой «Обрезка».` : `Картинка ${value} px по длинной стороне — ${model.titleRu} принимает до ${def.max ?? '…'} px.`);
+      }
+      params[def.key] = value;
+    };
     const params: GenParams = {};
     if (media === 'video') {
       if (file.filePath === null) throw new SubmitError('REF_NOT_VIDEO', 422, 'Видео на вход берётся из библиотеки.');
@@ -149,14 +165,14 @@ export function createGenRuntime(options: GenRuntimeOptions) {
       } catch (error) {
         throw new SubmitError('BAD_VIDEO', 422, error instanceof Error ? error.message : 'Не удалось прочитать видео.');
       }
-      for (const d of derived) if (d.fromRef === 'seconds') params[d.key] = billedSeconds(video.durationSec);
-      return { params, info: { width: video.width, height: video.height, durationSec: video.durationSec, bytes: file.bytes.byteLength } };
+      for (const d of derived) if (d.fromRef === 'seconds') put(params, d, billedSeconds(video.durationSec));
+      return { measured: { params, info: { width: video.width, height: video.height, durationSec: video.durationSec, bytes: file.bytes.byteLength } }, file };
     }
-    if (derived.length === 0) return { params, info: null };
+    if (derived.length === 0) return { measured: { params, info: null }, file };
     const size = imageSize(file.bytes);
     if (size === null) throw new SubmitError('BAD_IMAGE', 422, 'Не удалось прочитать размер картинки — нужен PNG, JPEG или WebP.');
-    for (const d of derived) if (d.fromRef === 'longSide') params[d.key] = Math.max(size.width, size.height);
-    return { params, info: { width: size.width, height: size.height, durationSec: null, bytes: file.bytes.byteLength } };
+    for (const d of derived) if (d.fromRef === 'longSide') put(params, d, Math.max(size.width, size.height));
+    return { measured: { params, info: { width: size.width, height: size.height, durationSec: null, bytes: file.bytes.byteLength } }, file };
   }
 
   /** Замер для формы: тот же, что сделает submit, — цена на кнопке совпадёт с гейтом. */
@@ -165,7 +181,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     if (!parsed.success) throw new SubmitError('BAD_REQUEST', 422, 'Неверный запрос замера.');
     const model = findModel(parsed.data.modelId);
     if (model === undefined) throw new SubmitError('UNKNOWN_MODEL', 422, `Модели «${parsed.data.modelId}» нет в каталоге.`);
-    return measureRefs(model, parsed.data.refs);
+    return (await measureRefs(model, parsed.data.refs)).measured;
   }
 
   async function submit(raw: unknown): Promise<{ jobs: GenJob[]; estimate: Estimate }> {
@@ -180,7 +196,8 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const count = request.count ?? 1;
     if (!Number.isInteger(count) || count < 1 || count > MAX_JOBS_PER_REQUEST) throw new SubmitError('BAD_COUNT', 422, `За один запуск — от 1 до ${MAX_JOBS_PER_REQUEST} генераций.`);
     // Параметры, которые меряет сервер (длинная сторона, секунды видео у апскейла): цена считается по ним, а не по словам клиента.
-    const measured = (await measureRefs(model, request.refs ?? [])).params;
+    const { measured: m, file: measuredFile } = await measureRefs(model, request.refs ?? []);
+    const measured = m.params;
     const params = paramsFor(model, { ...(request.params ?? {}), ...measured });
     const refs: JobRef[] = (request.refs ?? []).map((r) => ({ label: r.label ?? '', source: r.source, role: r.role ?? 'ref' }));
     const roles = refs.map((r) => r.role);
@@ -198,7 +215,8 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const session = request.sessionId === undefined ? undefined : await sessions.get(request.sessionId);
     if (request.sessionId !== undefined && (session === undefined || session.kind !== model.kind)) throw new SubmitError('NO_SESSION', 422, 'Сессия не найдена или другого типа — выбери сессию заново.');
     // Файлы читаются до создания задач: отсутствующий реф не должен стоить ни кредита.
-    const files = await Promise.all(refs.map((r) => readRef(r.source, model.refs.media)));
+    // Первый файл уже прочитан замером — видео до 50 МБ второй раз в память не грузим.
+    const files = await Promise.all(refs.map((r, i) => (i === 0 && measuredFile !== null ? measuredFile : readRef(r.source, model.refs.media))));
     const sentPrompt = forProvider(model, request.prompt).prompt;
 
     // Конкретный seed у каждой задачи сохраняется в её параметрах — кадр можно повторить (решение 27).

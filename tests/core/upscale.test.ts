@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { flowCost, nodeTitle, planRun, sourceKey } from '../../src/core/canvas/plan.ts';
-import { seedanceInputs } from '../../src/core/canvas/seedance.ts';
+import { flowCost, frameInput, nodeTitle, planRun, sourceKey } from '../../src/core/canvas/plan.ts';
+import { nextRefSync, seedanceInputs, type SeedanceInput } from '../../src/core/canvas/seedance.ts';
 import { billedSeconds, estimate, findModel, modelsOf, paramsFor, upscaleModelOf, validateGen, type GenModel } from '../../src/core/gen/models.ts';
-import { CanvasNodeSchema, inputsOf, outputOf, type CanvasNode, type Flow } from '../../src/core/model/canvas.ts';
+import { CanvasNodeSchema, dropStaleEdges, forgetMedia, inputsOf, outputOf, type CanvasNode, type Flow } from '../../src/core/model/canvas.ts';
 
 const node = (patch: Partial<CanvasNode> & Pick<CanvasNode, 'id' | 'type'>): CanvasNode => CanvasNodeSchema.parse({ x: 0, y: 0, ...patch });
 const flow = (nodes: CanvasNode[], edges: Flow['edges']): Flow => ({ id: 'f-test', name: 't', nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, createdAt: '', updatedAt: '' });
@@ -90,5 +90,44 @@ describe('нода canvas «Апскейл Topaz»', () => {
 
   it('сумма flow включает апскейл по последнему замеру', () => {
     expect(flowCost(graph(up({ params: { upscaleFactor: '2', sourceSec: 10, measuredFor } })))).toEqual({ credits: 80, usd: 0.4 });
+  });
+});
+
+describe('находки ревью PR #1', () => {
+  it('«Размер» сменил вид на видео — связь во вход картинки снимается, остальные остаются', () => {
+    const resize = node({ id: 'rs', type: 'resize', kind: 'video' });
+    const g = node({ id: 'g', type: 'generator', kind: 'image', modelId: 'kie/gpt-image-2-5' });
+    const fr = node({ id: 'fr', type: 'frame' });
+    const f = flow([resize, g, fr], [
+      { id: 'to-ref', from: 'rs', to: 'g', port: 'ref' },
+      { id: 'to-frame', from: 'rs', to: 'fr', port: 'video' },
+    ]);
+    expect(dropStaleEdges(f, 'rs').edges.map((e) => e.id)).toEqual(['to-frame']);
+    expect(dropStaleEdges(f, 'g')).toBe(f);
+  });
+
+  it('импортированный flow со старой связью: видео во вход картинки и картинка во вход «Видео» — причина, не запуск', () => {
+    const resize = node({ id: 'rs', type: 'resize', kind: 'video', mediaId: 'm-vid' });
+    const g = node({ id: 'g', type: 'generator', kind: 'image', modelId: 'kie/gpt-image-2-5', text: 'x' });
+    const plan = planRun(flow([resize, g], [{ id: 'e', from: 'rs', to: 'g', port: 'ref' }]), 'g', mediaOf);
+    expect(plan.refs).toEqual([]);
+    expect(plan.problems.join(' ')).toContain('отдаёт видео');
+    const img = node({ id: 'ri', type: 'resize', kind: 'image', mediaId: 'm-img' });
+    const fr = node({ id: 'fr', type: 'frame' });
+    expect(frameInput(flow([img, fr], [{ id: 'e', from: 'ri', to: 'fr', port: 'video' }]), 'fr', mediaOf)).toEqual({ mediaId: null, problemRu: '«Размер · 1080×1920» отдаёт картинку, а сюда нужно видео.' });
+  });
+
+  it('удалённый файл библиотеки уходит из нод: файл ноды и картинка-источник', () => {
+    const f = flow([node({ id: 'v', type: 'video', mediaId: 'm-del' }), node({ id: 'i', type: 'image', source: { type: 'media', mediaId: 'm-del' } }), node({ id: 'k', type: 'image', source: { type: 'media', mediaId: 'm-keep' } })], []);
+    const next = forgetMedia(f, ['m-del']);
+    expect(next.nodes.map((n) => [n.mediaId, n.source])).toEqual([[null, null], [null, null], [null, { type: 'media', mediaId: 'm-keep' }]]);
+    expect(forgetMedia(f, ['m-other'])).toBe(f);
+  });
+
+  it('отпечаток снятого проводка остаётся, пока его референс в черновике: вернёшь ту же картинку — не перезальётся', () => {
+    const input = (key: string, signature: string): SeedanceInput => ({ nodeId: key, key, label: key, source: { type: 'media', mediaId: signature }, signature, kind: 'frame', note: null });
+    const previous = { 'cv-a': 'sig-a', 'cv-b': 'sig-b', 'cv-gone': 'sig-g' };
+    // Проводок к «b» снят, «gone» удалён из черновика, «c» новый и не залился.
+    expect(nextRefSync(previous, [input('cv-a', 'sig-a2'), input('cv-c', 'sig-c')], new Set(['cv-c']), ['cv-a', 'cv-b', 'cv-c'])).toEqual({ 'cv-a': 'sig-a2', 'cv-b': 'sig-b' });
   });
 });

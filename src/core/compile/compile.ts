@@ -140,7 +140,8 @@ export function compileShot(input: ShotCompileInput, pack: VerbatimPack): { para
   const structure = shooting?.structure ?? 'one-take';
   // Метод гайда и один дубль — формула формата дословная. Иначе формат собирается из зачина режима и монтажа.
   const guideFormat = (mode === undefined || mode.source === 'guide') && structure === 'one-take';
-  const derived = mode !== undefined && mode.source !== 'guide';
+  // Блок «не из гайда», если не из гайда хоть что-то в нём: режим или формула склеек при методе гайда (находка ревью PR #1).
+  const derived = shooting !== undefined && !guideFormat;
   const blockOrigin: CompiledParagraph['origin'] = derived ? 'derived' : 'verbatim';
   const duration = input.durationSec ?? 30;
   const PACK_ASPECT = 'Vertical 9:16';

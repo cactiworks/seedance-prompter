@@ -167,6 +167,18 @@ describe('склейки: несколько шотов в одной генер
     expect(b.prompt).toContain('Hyperrealistic cinematic documentary, indistinguishable from real footage. Vertical 9:16 aspect ratio. One 30-second edited sequence of 2 shots');
     expect(b.prompt).toContain('unstabilized handheld camera');
     expect(b.prompt).not.toContain('no cuts, no edits');
+    // Формула склеек не из гайда — блок не может называться дословным (находка ревью PR #1).
+    expect(b.paragraphs.find((p) => p.kind === 'style' || p.kind === 'format')?.origin).toBe('derived');
+    expect(build({ shooting: { mode: 'handheld-doc', structure: 'one-take', operation: '', language: '' } }).paragraphs.find((p) => p.kind === 'style' || p.kind === 'format')?.origin).toBe('verbatim');
+  });
+
+  it('кадр раскадровки с людьми — не «предмет с человеком»', () => {
+    const people = { hasPeople: true, hasText: false, studioBackdrop: false };
+    const { project } = make();
+    const refs = project.refs.map((r) => (r.key === 'f1' ? { ...r, flags: people } : r));
+    expect(rules(build({}, { refs }))).not.toContain('REF_PEOPLE_ON_OBJECT_REF');
+    const asObject = refs.map((r) => (r.key === 'f1' ? { ...r, kind: 'object' as const } : r));
+    expect(rules(build({}, { refs: asObject }))).toContain('REF_PEOPLE_ON_OBJECT_REF');
   });
 
   it('склейки с одним шотом — предупреждение', () => {

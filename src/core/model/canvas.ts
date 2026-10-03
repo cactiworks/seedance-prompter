@@ -100,6 +100,35 @@ export const isCanvasDraft = (slug: string): boolean => slug.startsWith('cv-');
 export const portAccepts = (port: InputPort, output: 'text' | 'image' | 'video'): boolean =>
   port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : port === 'media' ? output !== 'text' : output === 'image';
 
+/**
+ * Связи из ноды, которые её выход больше не принимают. Выход «Размера» и апскейла меняет вид вслед за входом
+ * (картинка ↔ видео) — без этой чистки видео ушло бы во вход картинки без предупреждения (находка ревью PR #1).
+ */
+export function dropStaleEdges(flow: Flow, nodeId: string): Flow {
+  const node = flow.nodes.find((n) => n.id === nodeId);
+  if (node === undefined) return flow;
+  const edges = flow.edges.filter((e) => e.from !== nodeId || portAccepts(e.port, outputOf(node)));
+  return edges.length === flow.edges.length ? flow : { ...flow, edges };
+}
+
+/** Файл удалён из библиотеки: ноды, которые на него смотрели, остаются без файла и просят выбрать заново. */
+export function forgetMedia(flow: Flow, mediaIds: readonly string[]): Flow {
+  const gone = new Set(mediaIds);
+  let changed = false;
+  const nodes = flow.nodes.map((n) => {
+    if (n.mediaId !== null && gone.has(n.mediaId)) {
+      changed = true;
+      return { ...n, mediaId: null };
+    }
+    if (n.source?.type === 'media' && gone.has(n.source.mediaId)) {
+      changed = true;
+      return { ...n, source: null };
+    }
+    return n;
+  });
+  return changed ? { ...flow, nodes } : flow;
+}
+
 /** Размеры площадок — пресеты ноды «Размер». */
 export const RESIZE_PRESETS: readonly { labelRu: string; width: number; height: number }[] = [
   { labelRu: '9:16 · рилс, сторис', width: 1080, height: 1920 },

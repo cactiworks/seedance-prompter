@@ -77,7 +77,9 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
     if (from === undefined) continue;
     const role = ROLE_OF[edge.port];
     if (from.type === 'frame' || from.type === 'resize') {
-      if (from.mediaId === null) problems.push(from.type === 'frame' ? `Сначала извлеки кадр в ноде «${nodeTitle(from)}».` : `Сначала подгони размер в ноде «${nodeTitle(from)}».`);
+      // «Размер» мог сменить вид после того, как связь провели (импортированный flow): видео во вход картинки не идёт.
+      if (outputOf(from) === 'video') problems.push(`«${nodeTitle(from)}» отдаёт видео — во вход картинки оно не подаётся.`);
+      else if (from.mediaId === null) problems.push(from.type === 'frame' ? `Сначала извлеки кадр в ноде «${nodeTitle(from)}».` : `Сначала подгони размер в ноде «${nodeTitle(from)}».`);
       else refs.push({ label: nodeTitle(from), source: { type: 'media', mediaId: from.mediaId }, role });
     } else if (from.type === 'image') {
       if (from.source === null) problems.push(`В ноде «${nodeTitle(from)}» нет картинки.`);
@@ -107,6 +109,7 @@ export function frameInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) 
   const edge = flow.edges.find((e) => e.to === nodeId && e.port === 'video');
   const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
   if (from === undefined) return { mediaId: null, problemRu: 'Подключи ко входу «Видео» генератор видео или обрезку.' };
+  if (outputOf(from) !== 'video') return { mediaId: null, problemRu: `«${nodeTitle(from)}» отдаёт картинку, а сюда нужно видео.` };
   if (from.type === 'trim') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала обрежь видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
   if (from.type === 'video') return from.mediaId === null ? { mediaId: null, problemRu: `Выбери видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
   if (from.type === 'resize') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала подгони размер в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };

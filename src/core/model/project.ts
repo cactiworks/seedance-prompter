@@ -34,6 +34,11 @@ export function needsAgent(ru: string, en: string, enFor: string | undefined, le
 
 /** frame — кадр раскадровки: с него открывается отрезок (шот) сценария. */
 export const REF_KINDS = ['location', 'character', 'object', 'gear', 'frame', 'other'] as const;
+/**
+ * Референс предмета (вещь, техника, прочее): не локация, не персонаж и не кадр раскадровки. Кадр — снимок сцены, на нём
+ * законно есть люди, и техникой-реквизитом он не бывает (находка ревью PR #1).
+ */
+export const isObjectRef = (ref: { kind: (typeof REF_KINDS)[number] }): boolean => ref.kind === 'object' || ref.kind === 'gear' || ref.kind === 'other';
 
 export const RefSchema = z.object({
   key,

@@ -4,7 +4,7 @@ import { pendingLabels, staleFields } from './compose.ts';
 import type { AgentShooting } from './llm/buildWriter.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
-import { activeStates, CUSTOM_SHOOTING, durationOf, GUIDE_SHOOTING, shootingOf, type Project, type Shot, type Structure } from './model/project.ts';
+import { activeStates, CUSTOM_SHOOTING, durationOf, GUIDE_SHOOTING, isObjectRef, shootingOf, type Project, type Shot, type Structure } from './model/project.ts';
 
 /** Всё, что ядру нужно знать о режиме съёмки. Код правил гайда не знает — он исполняет pack. */
 export interface PackBundle {
@@ -259,7 +259,7 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     const ref = project.refs.find((r) => r.key === refKey);
     if (ref === undefined) continue;
     if (ref.flags.hasText) structural.push({ id: ref.key, ruleId: 'REF_TEXT_ON_REF', family: 'refs', severity: 'warning', evidence: ref.label, messageRu: `На референсе «${ref.label}» есть читаемый текст — надписи могут просочиться в кадр.`, fixHintRu: 'Гайд, панель Кадра 1: карточка со спецификациями ненадёжна, чистое фото предмета лучше.' });
-    if (ref.flags.hasPeople && ref.kind !== 'location' && ref.kind !== 'character') structural.push({ id: ref.key, ruleId: 'REF_PEOPLE_ON_OBJECT_REF', family: 'refs', severity: 'warning', evidence: ref.label, messageRu: `На референсе предмета «${ref.label}» есть человек — модель может забрать и его.`, fixHintRu: 'Гайд: у пикапа рядом стоял человек — нужна оговорка «only the vehicle» или картинка без людей.' });
+    if (ref.flags.hasPeople && isObjectRef(ref)) structural.push({ id: ref.key, ruleId: 'REF_PEOPLE_ON_OBJECT_REF', family: 'refs', severity: 'warning', evidence: ref.label, messageRu: `На референсе предмета «${ref.label}» есть человек — модель может забрать и его.`, fixHintRu: 'Гайд: у пикапа рядом стоял человек — нужна оговорка «only the vehicle» или картинка без людей.' });
     if (ref.flags.studioBackdrop && !project.entities.some((e) => e.refKey === ref.key)) structural.push({ id: ref.key, ruleId: 'REF_STUDIO_BACKDROP', family: 'refs', severity: 'warning', evidence: ref.label, messageRu: `У «${ref.label}» студийный задник, а сущности с этим референсом нет — клаузу «do not take the background» поставить некуда.`, fixHintRu: 'Привяжи референс к герою в секции «Герои и предметы» и вводи его кнопкой-плейсхолдером.' });
   }
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { modelsOf, paramsFor, type MediaKind } from '../../core/gen/models.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import { wouldCycle } from '../../core/canvas/plan.ts';
 import { cloneSeedance } from '../../core/canvas/seedance.ts';
 
@@ -262,11 +262,17 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const source = flow.nodes.find((n) => n.id === from);
       const kind = source === undefined ? 'image' : outputOf(source) === 'video' ? 'video' : 'image';
       const retype = (n: CanvasNode): CanvasNode => (n.kind === kind ? n : { ...n, kind, mediaId: null, jobIds: [], selected: 0 });
-      get().update((f) => ({
-        ...f,
-        nodes: port === 'media' ? f.nodes.map((n) => (n.id === to ? retype(n) : n)) : f.nodes,
-        edges: [...f.edges.filter((e) => !replace(e)), { id: newId('e'), from, to, port }],
-      }));
+      // Выход сменил вид — связи дальше, которые его больше не принимают, снимаются.
+      get().update((f) =>
+        dropStaleEdges(
+          {
+            ...f,
+            nodes: port === 'media' ? f.nodes.map((n) => (n.id === to ? retype(n) : n)) : f.nodes,
+            edges: [...f.edges.filter((e) => !replace(e)), { id: newId('e'), from, to, port }],
+          },
+          to,
+        ),
+      );
       return null;
     },
     disconnect: (edgeId) => get().update((f) => ({ ...f, edges: f.edges.filter((e) => e.id !== edgeId) })),

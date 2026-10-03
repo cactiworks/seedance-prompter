@@ -3,7 +3,7 @@ import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } f
 import { seedanceInputs } from '../../core/canvas/seedance.ts';
 import { findModel, formatCost, modelsOf, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import { inputsOf, RESIZE_PRESETS, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
-import { extractFrame, hasRefsConsent, importMedia, isActive, measureInput, mediaUrl, resizeMedia, thumbOf, trimVideo, uploadImage, useGen, type MeasuredInput } from '../gen/genStore.ts';
+import { extractFrame, hasRefsConsent, importMedia, isActive, measureInput, mediaUrl, resizeMedia, savedMediaOf, thumbOf, trimVideo, uploadImage, useGen, type MeasuredInput } from '../gen/genStore.ts';
 import { ParamField } from '../studio/Controls.tsx';
 import { STATUS_RU } from '../studio/JobTile.tsx';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
@@ -160,10 +160,7 @@ function ResizeBody({ node }: { node: CanvasNode }) {
   const { jobs, loadLibrary } = useGen();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mediaOf = (jobId: string): string | null => {
-    const job = jobs.find((j) => j.id === jobId);
-    return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
-  };
+  const mediaOf = (jobId: string): string | null => savedMediaOf(jobs, jobId);
   const input = flow === null ? null : mediaInput(flow, node.id, mediaOf);
   const preset = RESIZE_PRESETS.findIndex((p) => p.width === node.width && p.height === node.height);
   const setSize = (patch: Partial<Pick<CanvasNode, 'width' | 'height' | 'fit'>>): void => patchNode(node.id, { ...patch, mediaId: null }, `resize:${node.id}`);
@@ -251,10 +248,6 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
   }, [mine, node.id, node.jobIds, patchNode]);
 
   const inputs = flow === null ? null : seedanceInputs(flow, node.id, jobLookup);
-  const current = node.jobIds[node.selected];
-  const job = current === undefined ? undefined : jobs.find((j) => j.id === current);
-  const media = job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
-
   const open = async (): Promise<void> => {
     setBusy(true);
     setNotes([]);
@@ -281,35 +274,7 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
         </Text>
       )}
 
-      <div className={styles.nodeResult}>
-        {media !== null ? (
-          <video src={mediaUrl(media)} controls muted loop playsInline />
-        ) : (
-          <div className={`${styles.nodeDrop} lab-hatch`}>
-            <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
-              {job === undefined ? 'Видео появится здесь после генерации в промптере' : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
-            </Text>
-            {job?.error !== null && job?.error !== undefined && (
-              <Text variant="caption" tone="secondary">
-                {job.error.messageRu}
-              </Text>
-            )}
-          </div>
-        )}
-        {node.jobIds.length > 1 && (
-          <div className={styles.iterations}>
-            <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
-              <Icon name="chevron-back" size={0.875} />
-            </button>
-            <Text variant="caption" tone="secondary">
-              {node.selected + 1} / {node.jobIds.length}
-            </Text>
-            <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
-              <Icon name="chevron-forward" size={0.875} />
-            </button>
-          </div>
-        )}
-      </div>
+      <VariantResult node={node} kind="video" emptyRu="Видео появится здесь после генерации в промптере" />
 
       <Button variant="dark" size="s" icon={<Icon name="options" size={1} />} loading={busy} onClick={() => void open()}>
         Открыть промптер
@@ -326,6 +291,50 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
   );
 }
 
+/** Выход ноды с запусками (генератор, апскейл, Seedance-промптер): выбранный вариант или статус задачи, листалка ‹ n/N ›. */
+function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image' | 'video'; emptyRu: string }) {
+  const { patchNode } = useCanvas();
+  const jobs = useGen((s) => s.jobs);
+  const current = node.jobIds[node.selected];
+  const job = current === undefined ? undefined : jobs.find((j) => j.id === current);
+  const media = current === undefined ? null : savedMediaOf(jobs, current);
+  return (
+    <div className={styles.nodeResult}>
+      {media !== null ? (
+        kind === 'image' ? (
+          <img src={mediaUrl(media)} alt="Результат" />
+        ) : (
+          <video src={mediaUrl(media)} controls muted loop playsInline />
+        )
+      ) : (
+        <div className={`${styles.nodeDrop} lab-hatch`}>
+          <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
+            {job === undefined ? emptyRu : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
+          </Text>
+          {job?.error !== null && job?.error !== undefined && (
+            <Text variant="caption" tone="secondary">
+              {job.error.messageRu}
+            </Text>
+          )}
+        </div>
+      )}
+      {node.jobIds.length > 1 && (
+        <div className={styles.iterations}>
+          <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
+            <Icon name="chevron-back" size={0.875} />
+          </button>
+          <Text variant="caption" tone="secondary">
+            {node.selected + 1} / {node.jobIds.length}
+          </Text>
+          <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
+            <Icon name="chevron-forward" size={0.875} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Вход апскейла (решение 39): сервер мерит его тем же кодом, что при запуске (длинная сторона картинки или секунды видео),
  * нода хранит замер в params с ключом источника. Сменился вход — мерим заново; без замера запуск закрыт.
@@ -337,10 +346,7 @@ function UpscaleSource({ node }: { node: CanvasNode }) {
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(node);
   latest.current = node;
-  const mediaOf = (jobId: string): string | null => {
-    const job = jobs.find((j) => j.id === jobId);
-    return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
-  };
+  const mediaOf = (jobId: string): string | null => savedMediaOf(jobs, jobId);
   const source = flow === null ? null : mediaInput(flow, node.id, mediaOf).source;
   const key = source === null ? null : sourceKey(source);
   const modelId = upscaleModelOf(node.kind).id;
@@ -400,10 +406,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   const [error, setError] = useState<string | null>(null);
   const ports = portsOf(node);
 
-  const mediaOf = (jobId: string): string | null => {
-    const job = jobs.find((j) => j.id === jobId);
-    return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
-  };
+  const mediaOf = (jobId: string): string | null => savedMediaOf(jobs, jobId);
 
   const setImage = async (f: File): Promise<void> => {
     try {
@@ -415,9 +418,6 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   };
 
   const plan = flow === null || (node.type !== 'generator' && node.type !== 'upscale') ? null : planRun(flow, node.id, mediaOf);
-  const current = node.jobIds[node.selected];
-  const job = current === undefined ? undefined : jobs.find((j) => j.id === current);
-  const resultMedia = current === undefined ? null : mediaOf(current);
 
   // Запускается только эта нода: ниже по графу ничего само не стартует (у connxn стартовало — и тратило деньги).
   const start = async (consent: boolean): Promise<void> => {
@@ -462,39 +462,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   // Выход платной ноды (генератор, апскейл): выбранный вариант ‹ n/N ›, причины, кнопка с ценой.
   const runOutput = (
     <>
-      <div className={styles.nodeResult}>
-        {resultMedia !== null ? (
-          node.kind === 'image' ? (
-            <img src={mediaUrl(resultMedia)} alt="Результат" />
-          ) : (
-            <video src={mediaUrl(resultMedia)} controls muted loop playsInline />
-          )
-        ) : (
-          <div className={`${styles.nodeDrop} lab-hatch`}>
-            <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
-              {job === undefined ? 'Результата пока нет' : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
-            </Text>
-            {job?.error !== null && job?.error !== undefined && (
-              <Text variant="caption" tone="secondary">
-                {job.error.messageRu}
-              </Text>
-            )}
-          </div>
-        )}
-        {node.jobIds.length > 1 && (
-          <div className={styles.iterations}>
-            <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
-              <Icon name="chevron-back" size={0.875} />
-            </button>
-            <Text variant="caption" tone="secondary">
-              {node.selected + 1} / {node.jobIds.length}
-            </Text>
-            <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
-              <Icon name="chevron-forward" size={0.875} />
-            </button>
-          </div>
-        )}
-      </div>
+      <VariantResult node={node} kind={node.kind} emptyRu="Результата пока нет" />
 
       {plan !== null && plan.problems.length > 0 && (
         <Text variant="caption" tone="secondary" className={styles.nodeProblems}>

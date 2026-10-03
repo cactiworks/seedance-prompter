@@ -1,8 +1,8 @@
-import { applySeedanceInputs, inputsToUpload, seedanceInputs, seedanceSummary, type JobLookup, type SeedanceInput } from '../../core/canvas/seedance.ts';
+import { applySeedanceInputs, inputsToUpload, nextRefSync, seedanceInputs, seedanceSummary, type JobLookup, type SeedanceInput } from '../../core/canvas/seedance.ts';
 import { seedanceSlug, type CanvasNode } from '../../core/model/canvas.ts';
 import { durationOf, shootingOf, type Project } from '../../core/model/project.ts';
 import { CUSTOM_KIT, shootingModeOf } from '../../core/pipeline.ts';
-import { thumbOf, useGen } from '../gen/genStore.ts';
+import { savedMediaOf, thumbOf, useGen } from '../gen/genStore.ts';
 import { downscale, useStore } from '../store.ts';
 import { useCanvas } from './canvasStore.ts';
 
@@ -18,9 +18,10 @@ async function json<T>(res: Response): Promise<T> {
 
 /** Задача генератора → файл и промпт: из ленты задач, которую canvas уже держит. */
 export const jobLookup: JobLookup = (jobId) => {
-  const job = useGen.getState().jobs.find((j) => j.id === jobId);
+  const { jobs } = useGen.getState();
+  const job = jobs.find((j) => j.id === jobId);
   if (job === undefined) return null;
-  return { mediaId: job.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null, prompt: job.prompt };
+  return { mediaId: savedMediaOf(jobs, jobId), prompt: job.prompt };
 };
 
 /**
@@ -78,12 +79,7 @@ export async function openSeedanceNode(nodeId: string): Promise<string[]> {
     }
   }
   // Не залилась — при следующем открытии попробуем снова: отпечаток остаётся прежним.
-  const refSync: Record<string, string> = {};
-  for (const input of inputs) {
-    const previous = node.refSync[input.key];
-    if (!failed.has(input.key)) refSync[input.key] = input.signature;
-    else if (previous !== undefined) refSync[input.key] = previous;
-  }
+  const refSync = nextRefSync(node.refSync, inputs, failed, draft.refs.map((r) => r.key));
   canvas.patchNode(node.id, { slug: draft.slug, shotId, copyFrom: '', refSync }, false);
 
   useStore.getState().openInHost(draft, shotId, { kind: 'canvas', flowId: flow.id, nodeId: node.id }, (project) => applySeedanceInputs(project, shotId, inputs, files, Object.keys(node.refSync)));

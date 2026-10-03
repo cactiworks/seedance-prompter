@@ -16,6 +16,7 @@ import { findModel, modelsOf, sourceTitleRu } from '../core/gen/models.ts';
 import type { FewShot } from '../core/llm/buildWriter.ts';
 import { buildRegionPrompt, regionProblems, type Box } from '../core/gen/regionEdit.ts';
 import { buildEditInstructionUser, EDIT_INSTRUCTION_SCHEMA, EDIT_INSTRUCTION_SYSTEM, needsTranslation, validateEditInstruction, type EditInstructionOutput } from '../core/llm/buildEditInstruction.ts';
+import { forgetMedia } from '../core/model/canvas.ts';
 import { LearningSchema, MoodboardSchema, RefSourceSchema, VerdictSchema } from '../core/model/media.ts';
 import { durationOf, newProject, ProjectSchema, storyboardFrames } from '../core/model/project.ts';
 import { agentShooting, buildShot, type PackBundle } from '../core/pipeline.ts';
@@ -99,6 +100,16 @@ export function createApp(options: AppOptions) {
   const store = createStore(options.dataDir);
   const gen = options.gen ?? createGenRuntime({ dataDir: options.dataDir });
   const flows = createFlows(options.dataDir);
+  /** Удалённые файлы библиотеки — вон из сохранённых flows: ноды остаются без файла, а не со ссылкой в никуда. */
+  const forgetInFlows = async (mediaIds: string[]): Promise<void> => {
+    if (mediaIds.length === 0) return;
+    for (const item of await flows.list()) {
+      const flow = await flows.get(item.id);
+      if (flow === undefined) continue;
+      const next = forgetMedia(flow, mediaIds);
+      if (next !== flow) await flows.save(next.id, next);
+    }
+  };
   const moodboards = createMoodboards(options.dataDir);
   const journal = createJournal(options.dataDir);
   const app = new Hono();
@@ -524,8 +535,10 @@ export function createApp(options: AppOptions) {
       const job = await gen.jobs.get(c.req.param('id'));
       if (job === undefined) return c.json({ error: 'NOT_FOUND', messageRu: 'Задача не найдена.' }, 404);
       if (['submitting', 'queued', 'running', 'downloading'].includes(job.status)) return c.json({ error: 'ACTIVE', messageRu: 'Задача ещё идёт — дождись результата или ошибки.' }, 409);
-      for (const mediaId of job.mediaIds) if (mediaId !== null) await gen.library.remove(mediaId);
+      const removed = job.mediaIds.filter((m): m is string => m !== null);
+      for (const mediaId of removed) await gen.library.remove(mediaId);
       await gen.jobs.remove(job.id);
+      await forgetInFlows(removed);
       return c.json({ ok: true });
     })
     .get('/api/gen/jobs/:id', async (c) => {
@@ -783,6 +796,7 @@ export function createApp(options: AppOptions) {
         else await gen.jobs.put({ ...job, mediaIds });
       }
       await journal.verdicts.update((list) => list.filter((v) => v.mediaId !== id));
+      await forgetInFlows([id]);
       return c.json({ ok: true });
     })
     // Выгрузка для монтажа: копии выбранных файлов в data/exports/<дата> с понятными именами + Finder. Оригиналы на месте.

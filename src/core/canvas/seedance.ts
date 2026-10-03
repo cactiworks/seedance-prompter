@@ -75,6 +75,18 @@ export function seedanceInputs(flow: Flow, nodeId: string, jobOf: JobLookup): { 
   return { inputs, problems };
 }
 
+/**
+ * node.refSync после открытия. Залитые входы — с новым отпечатком, не залившиеся — с прежним (попробуем снова).
+ * Отпечатки снятых проводков остаются, пока в черновике есть их референс: вернёшь ту же картинку — она не перезальётся
+ * и флаги vision не сбросятся (находка ревью PR #1). Пока проводок снят, картинка вне панели — как и при первом снятии.
+ */
+export function nextRefSync(previous: Record<string, string>, inputs: readonly SeedanceInput[], failed: ReadonlySet<string>, refKeys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, signature] of Object.entries(previous)) if (refKeys.includes(key)) out[key] = signature;
+  for (const input of inputs) if (!failed.has(input.key)) out[input.key] = input.signature;
+  return out;
+}
+
 /** Входы, чей файл в панели надо (пере)залить: новые или с другим источником. `synced` — node.refSync. */
 export function inputsToUpload(inputs: SeedanceInput[], synced: Record<string, string>, project: Project | null): SeedanceInput[] {
   return inputs.filter((input) => {

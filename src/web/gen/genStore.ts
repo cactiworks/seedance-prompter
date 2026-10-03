@@ -1,9 +1,28 @@
 import { create } from 'zustand';
 import { estimate, findModel, modelsOf, paramsFor, validateGen, type GenParams, type MediaKind, type ParamValue, type ProviderId, type RefRole } from '../../core/gen/models.ts';
 import type { Folder, GenJob, MediaItem, RefSource, StudioSession } from '../../core/model/media.ts';
+import { forgetMedia } from '../../core/model/canvas.ts';
+import { useCanvas } from '../canvas/canvasStore.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
 const ACTIVE = new Set<GenJob['status']>(['submitting', 'queued', 'running', 'downloading']);
+
+/**
+ * Сервер уже вычистил удалённые файлы из сохранённых flows; открытый flow держит клиент — его чистим здесь, иначе
+ * автосейв вернул бы ссылки в никуда обратно на диск.
+ */
+function forgetInOpenFlow(mediaIds: readonly string[]): void {
+  const canvas = useCanvas.getState();
+  if (canvas.flow === null || mediaIds.length === 0) return;
+  const next = forgetMedia(canvas.flow, mediaIds);
+  if (next !== canvas.flow) canvas.update(() => next, false);
+}
+
+/** Файл выбранного варианта задачи — когда она сохранена в библиотеку; иначе null. */
+export function savedMediaOf(jobs: readonly GenJob[], jobId: string): string | null {
+  const job = jobs.find((j) => j.id === jobId);
+  return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
+}
 const CONSENT_KEY = 'sp-refs-consent';
 
 async function json<T>(res: Response): Promise<T> {
@@ -301,10 +320,13 @@ export const useGen = create<GenState>((set, get) => {
     },
     deleteMedia: async (mediaIds) => {
       for (const id of mediaIds) await json(await fetch(`/api/library/${id}`, { method: 'DELETE', headers: HEADERS }));
+      forgetInOpenFlow(mediaIds);
       await Promise.all([get().loadLibrary(), get().loadJobs()]);
     },
     deleteJob: async (jobId) => {
+      const removed = (get().jobs.find((j) => j.id === jobId)?.mediaIds ?? []).filter((m): m is string => m !== null);
       await json(await fetch(`/api/gen/jobs/${jobId}`, { method: 'DELETE', headers: HEADERS }));
+      forgetInOpenFlow(removed);
       await Promise.all([get().loadLibrary(), get().loadJobs()]);
     },
     exportMedia: (mediaIds) => post<{ dir: string; files: string[] }>('/api/library/export', { mediaIds }),

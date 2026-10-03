@@ -673,4 +673,41 @@ describe('апскейл видео Topaz (решение 39)', () => {
     expect(((await empty.json()) as { messageRu: string }).messageRu).toContain('нужно входное видео');
     expect(mock.calls.submit).toHaveLength(2);
   });
+
+  it('видео длиннее предела — отказ, а не цена за 5 с по умолчанию (находка ревью PR #1)', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-topaz-long-'));
+    const mock = mockProvider();
+    const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, probe: async () => ({ durationSec: 900.5, width: 480, height: 854 }) });
+    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    const imported = await app.request('/api/library/import?name=long.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) });
+    const video = (await imported.json()) as MediaItem;
+    const refs = [{ source: { type: 'media', mediaId: video.id } }];
+    const measured = await post('/api/gen/measure', { modelId: 'kie/topaz-video-upscale', refs });
+    expect(measured.status).toBe(422);
+    expect(((await measured.json()) as { messageRu: string }).messageRu).toContain('901 с');
+    // Клиент, считающий по умолчанию (5 с → 40 кр), не проходит: задача не создаётся.
+    expect((await post('/api/gen/jobs', { modelId: 'kie/topaz-video-upscale', prompt: '', params: { upscaleFactor: '2' }, refs, confirmCredits: 40, refsConsent: true })).status).toBe(422);
+    expect(mock.calls.submit).toHaveLength(0);
+  });
+});
+
+describe('удаление файла чистит canvas (находка ревью PR #1)', () => {
+  it('нода «Видео» и картинка-источник в сохранённом flow остаются без файла, а не со ссылкой в никуда', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-forget-'));
+    const gen = createGenRuntime({ dataDir, providers: {} });
+    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const req = (method: string, url: string, body?: unknown) => app.request(url, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const imported = await app.request('/api/library/import?name=clip.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) });
+    const video = (await imported.json()) as MediaItem;
+    const flow = (await (await req('POST', '/api/canvas/flows', { name: 't' })).json()) as { id: string };
+    const nodes = [
+      { id: 'v', type: 'video', x: 0, y: 0, mediaId: video.id },
+      { id: 'i', type: 'image', x: 0, y: 0, source: { type: 'media', mediaId: video.id } },
+    ];
+    expect((await req('PUT', `/api/canvas/flows/${flow.id}`, { ...(await (await req('GET', `/api/canvas/flows/${flow.id}`)).json()), nodes })).status).toBe(200);
+    expect((await req('DELETE', `/api/library/${video.id}`)).status).toBe(200);
+    const after = (await (await req('GET', `/api/canvas/flows/${flow.id}`)).json()) as { nodes: { id: string; mediaId: string | null; source: unknown }[] };
+    expect(after.nodes.map((n) => [n.id, n.mediaId, n.source])).toEqual([['v', null, null], ['i', null, null]]);
+  });
 });

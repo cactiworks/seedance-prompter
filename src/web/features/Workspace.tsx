@@ -3,7 +3,7 @@ import { pendingLabels } from '../../core/compose.ts';
 import { buildShot, CUSTOM_KIT, holderName, shootingModeOf, type PackBundle } from '../../core/pipeline.ts';
 import { isCanvasRefKey } from '../../core/model/canvas.ts';
 import { plural } from '../../core/canvas/seedance.ts';
-import { activeStates, ASPECT_RATIOS, CUSTOM_SHOOTING, durationOf, emptyUnit, eventBudget, needsAgent, REF_KINDS, segmentNeedsWriter, shootingOf, storyboardFrames, syncPanel, type AspectRatio, type Ref, type Segment, type Shooting, type Shot, type Structure } from '../../core/model/project.ts';
+import { activeStates, ASPECT_RATIOS, CUSTOM_SHOOTING, durationOf, emptyUnit, eventBudget, isObjectRef, needsAgent, REF_KINDS, segmentNeedsWriter, shootingOf, storyboardFrames, syncPanel, type AspectRatio, type Ref, type Segment, type Shooting, type Shot, type Structure } from '../../core/model/project.ts';
 import { Button, Card, Icon, Meter, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { currentShot, downscale, slugify, useStore } from '../store.ts';
 import { Attempts } from './Attempts.tsx';
@@ -106,7 +106,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   const kits = Object.values(pack.kits).sort((a, b) => Number(a.source !== 'guide' && a.source !== undefined) - Number(b.source !== 'guide' && b.source !== undefined));
   const kit = pack.kits[shot.kitId];
   const isCustom = shot.kitId === CUSTOM_KIT;
-  const gearRefs = shot.panel.flatMap((key) => { const ref = project.refs.find((r) => r.key === key); return ref !== undefined && ref.kind !== 'location' && ref.kind !== 'character' ? [ref] : []; });
+  const gearRefs = shot.panel.flatMap((key) => { const ref = project.refs.find((r) => r.key === key); return ref !== undefined && isObjectRef(ref) ? [ref] : []; });
   const characters = project.entities.filter((e) => e.kind === 'character');
   const setRole = (patch: Partial<NonNullable<Shot['roleSplit']>>): void => store.updateShot((s) => (s.roleSplit === null ? s : { ...s, roleSplit: { ...s.roleSplit, ...patch } }));
   const setWorld = (field: 'place' | 'weather', ru: string): void => store.update((p) => ({ ...p, world: { ...p.world, [field]: { ...p.world[field], ru } } }));
