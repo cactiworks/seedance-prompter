@@ -1,5 +1,6 @@
 import { keyProblem, readSecret, KEYCHAIN } from '../secrets.ts';
 import { GenError, type GenProvider, type PollResult, type PollState } from './provider.ts';
+import { uploadHiggsfieldFile } from './higgsfieldUpload.ts';
 
 // Официальный API: docs.higgsfield.ai (quickstart, authentication, models/soul-2). Сверено 27.09.2026.
 // Отдельный продукт с балансом в USD — кредиты подписки higgsfield.ai здесь не тратятся (решение 21).
@@ -42,7 +43,7 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
     headers.set('authorization', `Key ${key()}`);
     let res: Response;
     try {
-      res = await doFetch(`${API}${path}`, { ...init, headers, signal: AbortSignal.timeout(90_000) });
+      res = await doFetch(`${API}${path}`, { ...init, headers, signal: AbortSignal.timeout(90_000), redirect: 'error' });
     } catch {
       throw new GenError('NETWORK', 'Higgsfield не отвечает — проверь интернет и повтори.');
     }
@@ -60,9 +61,9 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
     hasKey: () => keyProblem('higgsfield', getKey()) === null,
     keyProblem: () => keyProblem('higgsfield', getKey()),
 
-    // Soul 2 картинок на вход не принимает; загрузка понадобится для тренировки Soul ID.
-    async upload() {
-      throw new GenError('INVALID', 'Эта модель Higgsfield не принимает картинки на вход.');
+    async upload(bytes, _name, mime) {
+      try { return await uploadHiggsfieldFile(bytes, mime, (path, body) => call(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), doFetch); }
+      catch { throw new GenError('NETWORK', 'Не удалось загрузить reference сцены в Higgsfield. Генерация не отправлена.'); }
     },
 
     async submit(endpoint, input) {

@@ -139,22 +139,23 @@ const GENERATORS: readonly GenModel[] = [
       aspect(['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'], '9:16'),
       { key: 'styleId', labelRu: 'Мудборд', type: 'style', default: '', pattern: UUID_RE, hintRu: 'Готовый мудборд Higgsfield. Свой мудборд через API не создаётся — только в вебе Higgsfield.' },
       { key: 'soulId', labelRu: 'Soul ID', type: 'text', default: '', pattern: UUID_RE, hintRu: 'Готовый персонаж Soul ID v2 из API-аккаунта Higgsfield. Можно выбрать «Без персонажа».' },
-      { key: 'enhancePrompt', labelRu: 'Улучшать промпт', type: 'bool', default: false },
+      { key: 'enhancePrompt', labelRu: 'Улучшать промпт', type: 'bool', default: false, hintRu: 'В image-to-image всегда включено API. Переключатель влияет на генерацию без reference.' },
       { key: 'seed', labelRu: 'Seed', type: 'seed', min: 0, max: 1_000_000, default: 0, hintRu: 'Тот же seed с тем же промптом — та же композиция, но не те же пиксели. Пусто — случайный.' },
     ],
-    refs: { max: 0, roles: [] },
+    refs: { max: 1, roles: ['ref'], maxBytes: 30 * 1024 * 1024 },
     promptRefs: 'image-n',
     // POST /estimate на аккаунте владельца, 27.09.2026: 720p — $0.004, 1080p — $0.006 (формат и enhance_prompt
     // на цену не влияют, batch_size 4 — ×4). Страница модели пишет $0.0032 / $0.0057 — это без округления вверх.
     credits: (p) => priceOf({ '720p': 0.004, '1080p': 0.006 }, str(p, 'resolution')),
-    target: () => 'higgsfield-ai/soul/v2/standard',
+    target: (_p, roles) => roles.length ? 'higgsfield-ai/soul/v2/image-to-image' : 'higgsfield-ai/soul/v2/standard',
     // Seed к моменту отправки уже конкретный (resolveSeeds); явный null API не принимает, 0 не отправляем.
     // Поля с расходящимися умолчаниями — явно.
-    input: (prompt, p) => ({
+    input: (prompt, p, refs) => ({
       prompt,
       aspect_ratio: str(p, 'aspectRatio'),
       resolution: str(p, 'resolution'),
-      enhance_prompt: p.enhancePrompt === true,
+      enhance_prompt: refs.length > 0 || p.enhancePrompt === true,
+      ...(refs[0] ? { image_url: refs[0].url } : {}),
       batch_size: 1,
       ...(num(p, 'seed') > 0 ? { seed: num(p, 'seed') } : {}),
       ...(str(p, 'styleId') !== '' ? { style_id: str(p, 'styleId') } : {}),

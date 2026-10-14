@@ -12,7 +12,7 @@ export function record(run: ProductionRun, now: number, message: string): void {
 }
 export function newRun(id: string, input: RunInput, now: number, delay: number): ProductionRun {
   return { ...input, id, rev: 0, createdAt: iso(now), updatedAt: iso(now), paused: false, planned: false, dueAt: now + delay,
-    shots: [], artifacts: [], approvals: [], events: [{ at: iso(now), message: input.planningMode === 'codex' ? 'Запущена подготовка Codex. Медиа и QC остаются mock; медиа-кредиты не расходуются.' : 'Запущена mock-серия. Внешние сервисы не вызываются; стоимость 0.' }],
+    shots: [], artifacts: [], approvals: [], events: [{ at: iso(now), message: input.planningMode === 'codex' ? input.mode === 'photos' ? 'Codex готовит сцену и prompts. Фото запустятся только после подтверждения стоимости.' : 'Запущена подготовка Codex. Медиа и QC остаются mock; медиа-кредиты не расходуются.' : 'Запущена mock-серия. Внешние сервисы не вызываются; стоимость 0.' }],
     ...(input.planningMode === 'codex' ? { preparation: { status: 'running' as const, stage: 'scene' as const, attempt: 1, startedAt: iso(now), error: null, calls: [] } } : {}) };
 }
 export function completePreparation(source: ProductionRun, now: number, delay: number): ProductionRun {
@@ -25,7 +25,7 @@ export function completePreparation(source: ProductionRun, now: number, delay: n
   }));
   run.planned = true;
   run.preparation!.status = 'complete';
-  record(run, now, `Codex подготовил сцену и prompts для ${run.shots.length} кадров. Дальше — только mock-медиа и mock QC.`);
+  record(run, now, `Codex подготовил сцену и prompts для ${run.shots.length} кадров. ${run.mode === 'photos' ? 'Ожидается подтверждение стоимости реальных фото.' : 'Дальше — только mock-медиа и mock QC.'}`);
   return run;
 }
 function makeArtifact(run: ProductionRun, shot: ProductionShot, kind: Artifact['kind'], now: number): Artifact {
@@ -47,6 +47,7 @@ function makeArtifact(run: ProductionRun, shot: ProductionShot, kind: Artifact['
 }
 /** Pure state transitions. There is intentionally no provider, network, or LLM dependency. */
 export function advanceRun(source: ProductionRun, now: number, delay: number): ProductionRun {
+  if (source.mode === 'photos') return source;
   if (source.paused) return source;
   const run = structuredClone(source);
   if (!run.planned) {
@@ -98,10 +99,12 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
   const run = structuredClone(source);
   if (action.type === 'pause' || action.type === 'resume') {
     run.paused = action.type === 'pause';
+    if (run.photos?.status === 'running' && run.paused) run.photos.status = 'stopped';
     record(run, now, run.paused ? 'Производство поставлено на паузу.' : 'Производство продолжено с сохранённого этапа.');
     return run;
   }
   if (run.paused) throw new ProductionError('INVALID', 'Сначала продолжи серию.');
+  if (run.mode === 'photos' && !['approvePhotos', 'retryPreparation'].includes(action.type)) throw new ProductionError('INVALID', 'В этой серии доступны только реальные фото. Видео, upscale и mock-правки отключены.');
   if (action.type === 'retryPreparation') throw new ProductionError('INVALID', 'Повтор подготовки выполняется сервером.');
   if (action.type === 'approvePhotos' || action.type === 'approveVideos') {
     const photo = action.type === 'approvePhotos';
@@ -110,12 +113,14 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
     for (const id of ids) {
       const shot = run.shots.find((s) => (photo ? s.photoId : s.videoId) === id);
       const artifact = currentArtifact(run, id);
-      if (!shot || !artifact || artifact.qc !== 'pass' || shot.step !== (photo ? 'photoReview' : 'videoReview')) throw new ProductionError('INVALID', 'Принимать можно только текущие проверенные результаты этого milestone.');
-      if (photo) { shot.acceptedPhotoId = id; shot.step = 'videos'; }
+      if (!shot || !artifact || (artifact.qc !== 'pass' && !(run.mode === 'photos' && artifact.qc === 'review' && artifact.mediaId)) || shot.step !== (photo ? 'photoReview' : 'videoReview')) throw new ProductionError('INVALID', 'Принимать можно только текущие проверенные результаты этого milestone.');
+      if (photo) { shot.acceptedPhotoId = id; shot.step = run.mode === 'photos' ? 'ready' : 'videos'; }
       else { shot.acceptedVideoId = id; shot.step = 'upscale'; }
       shot.dueAt = now + delay;
       run.approvals.push({ kind: photo ? 'photo' : 'video', artifactId: id, at: iso(now) });
+      if (run.mode === 'photos') { artifact.qc = 'pass'; artifact.qcNote = 'Фотография принята владельцем. Автоматическая визуальная оценка не выполнялась.'; }
     }
+    if (run.photos && run.shots.every((s) => s.step === 'ready')) run.photos.status = 'complete';
     record(run, now, `${photo ? 'Milestone 1: приняты фотографии' : 'Milestone 2: приняты видео до Topaz'} — ${ids.size}. Остальные ветви остаются на своём этапе.`);
     return run;
   }

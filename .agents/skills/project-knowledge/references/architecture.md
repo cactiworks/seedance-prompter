@@ -64,7 +64,7 @@ rename. Конкурентные изменения проекта, Canvas, sess
 | задачи генерации | `data/jobs/<id>.json` |
 | готовые файлы | `data/library/<yyyy-mm>/<id>.<ext>` + `<id>.json` (промпт, модель, параметры, рефы, taskId, кредиты, sha256, исходная ссылка) |
 | flows canvas | `data/canvas/` |
-| серии Production (Codex-подготовка, mock-медиа) | `data/production-mock/<id>.json`: rev, preparation/calls, scenePlan, promptPlan, shots, artifacts, approvals и events; fixtures в `src/web/public/production-mock/` |
+| серии Production (Codex, photos / mock) | `data/production-mock/<id>.json`: rev, preparation/calls, scenePlan, promptPlan, shots, artifacts, approvals и events; fixtures в `src/web/public/production-mock/` |
 | сессии студии | `data/studio/` |
 | свои мудборды, оценки, правила владельца | `data/moodboards.json`, `data/verdicts.json`, `data/learnings.json` |
 | выгрузка для монтажа | `data/exports/<дата время>/` |
@@ -147,17 +147,17 @@ vision, prompter, region-edit), `gen/*` (jobs, measure, status, styles), `librar
 Каждый `/api/*` проверяет `Host` и `Origin`, мутирующие запросы — ещё и заголовок `x-sp-client`: иначе
 любая страница в браузере владельца могла бы тратить квоту и читать референсы.
 
-## Production: Codex и mock-медиа
+## Production: Codex и фото
 
 `ProductionRuntime` исполняет чистые переходы `core/production/engine.ts`, записывая состояние
 атомарно. Общая очередь сериализует ticks и actions, `rev` защищает от конкурентного изменения.
-Приёмка проверяет точные ID текущих версий с пройденным mock QC. Каждая ветвь стоит на своём
+В demo приёмка проверяет точные ID текущих версий с пройденным mock QC. Каждая ветвь стоит на своём
 milestone до действия владельца; выбранная часть может идти дальше независимо от остальных.
 Правка создаёт новую photo-версию и сбрасывает актуальные approvals/потомков этой ветви;
 прежние артефакты и записи приёмки остаются в истории. Manifest содержит только актуальные
 принятые фото и прошедшие финальный QC клипы.
 
-`mode: mock` — жёсткая граница медиа; `planningMode: codex` отдельно включает две роли через
+`mode: mock` сохраняет demo; `mode: photos` блокирует mock-переходы и требует Codex-план; `planningMode: codex` отдельно включает две роли через
 `server/production/agents.ts` и существующий `runCodex` (injected `Runner` в тестах). Модель:
 `SP_PRODUCTION_MODEL` → `SP_LLM_MODEL` → default. Схемы `core/production/plan.ts` ограничивают
 1–8 кадров; код назначает shot IDs, проверяет цитаты сценария, покрытие ID и длину/refs prompts.
@@ -169,11 +169,19 @@ repair; ошибки провайдера не повторяются автом
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет
 незавершённую роль. Пауза abort-ит вызов и защищает состояние от позднего ответа; resume не запускает
 Codex. Async `start()` помечает незавершённые вызовы interrupted, без автоповтора после рестарта.
-Runtime не импортирует media adapters/секреты. Выбор Soul ID передаётся проверенным snapshot
-через HTTP-слой. Применение identity к кадрам, media API, vision QC и upscale не подключены;
-fixtures циклически назначаются кадрам, всегда 4 с/480p, не иллюстрируют реальный shot plan.
-Старые серии без planningMode остаются mock. У клиента отдельный Zustand store и polling,
-выбор серии — sessionStorage. Файлы строятся `scripts/production/build-mock-media.mjs`.
+Runtime принимает общий `GenRuntime`; секреты не читает. `server/production/photos.ts` хранит
+intent перед submit, связывает GenJob по id/tag, импортирует только saved/readable image в artifacts.
+Порядок: master T2I → каждый кадр I2I с master image_url; Soul ID отдельным custom_reference_id.
+Quote включает master+n; POST `/:id/photos/start` принимает rev, UUID requestId, confirmUsd,
+refsConsent=true. Числовой гейт проверяется до job creation; повтор UUID идемпотентен. Выбор Soul ID
+проверяется HTTP-слоем и фиксируется после начала фото. Ошибка останавливает будущие отправки.
+Pause/restart требуют новой цены на pending; известные задачи продолжают poll/download.
+Retry `/:id/photos/retry` только для download_failed/POLL_TIMEOUT. Unknown не пересоздаётся.
+Artifact qc=review — ручной milestone; принятие переводит ветвь в ready, видео/upscale запрещены.
+`/:id/fork-photos` копирует готовый Codex-план без LLM/artifacts/approvals, с дедупликацией requestId.
+Старые планы без masterPrompt используют establishing-вариант первого prompt. Новые требуют поле.
+Старые mock-серии без planningMode остаются mock. Zustand хранит выбор в sessionStorage, draft в
+localStorage. Fixtures `scripts/production/build-mock-media.mjs` используются только в demo.
 
 
 ## Soul ID (14.10.2026)

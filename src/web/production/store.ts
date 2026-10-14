@@ -8,8 +8,8 @@ const DRAFT_KEY = 'sp-production-draft';
 const REQUEST_KEY = 'sp-production-create-request';
 const DraftSchema = CreateRunSchema.extend({ title: z.string().max(100), script: z.string().max(12_000), direction: z.string().max(3000) });
 function savedDraft(): RunInput {
-  try { const raw = localStorage.getItem(DRAFT_KEY); if (raw) return DraftSchema.parse(JSON.parse(raw)); } catch { /* use starter brief */ }
-  return { ...DEMO_INPUT, planningMode: 'codex' };
+  try { const raw = localStorage.getItem(DRAFT_KEY); if (raw) { const draft = DraftSchema.parse(JSON.parse(raw)); return draft.planningMode === 'codex' ? { ...draft, mode: 'photos', scenario: 'normal' } : draft; } } catch { /* use starter brief */ }
+  return { ...DEMO_INPUT, mode: 'photos', planningMode: 'codex', scenario: 'normal' };
 }
 function createRequestId(): string {
   try { const old = localStorage.getItem(REQUEST_KEY); if (old) return old; } catch { /* memory fallback */ }
@@ -36,6 +36,7 @@ interface State {
   runs: ProductionRun[]; run: ProductionRun | null; activeId: string | null; initialized: boolean; busy: boolean; error: string | null;
   load: () => Promise<void>; refresh: () => Promise<void>; select: (id: string) => void; newForm: () => void;
   create: (input: RunInput) => Promise<void>; act: (action: Command) => Promise<boolean>;
+  photoCommand: (endpoint: 'photos/start' | 'photos/retry' | 'fork-photos', body: object) => Promise<boolean>;
   setCharacter: (characterId: string | null) => Promise<boolean>;
 }
 export const useProduction = create<State>((set, get) => ({
@@ -93,6 +94,18 @@ export const useProduction = create<State>((set, get) => ({
     } catch (error) {
       set({ error: String(error), busy: false }); await get().refresh(); return false;
     } finally { set({ busy: false }); }
+  },
+  photoCommand: async (endpoint, body) => {
+    const run = get().run;
+    if (!run || get().busy) return false;
+    set({ busy: true, error: null });
+    try {
+      const next = await request<ProductionRun>(`/api/production/${run.id}/${endpoint}`, body);
+      set({ runs: mergeRuns(get().runs, [next]), ...(get().activeId === run.id ? { run: next, activeId: next.id } : {}) });
+      if (get().activeId === next.id) rememberActive(next.id);
+      return true;
+    } catch (error) { set({ error: String(error) }); return false; }
+    finally { set({ busy: false }); await get().refresh(); }
   },
   setCharacter: async (characterId) => {
     const run = get().run;

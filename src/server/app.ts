@@ -151,7 +151,7 @@ export function createApp(options: AppOptions) {
 
   const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
   app.route('/api/characters', characterRoutes(characters));
-  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm }), characters));
+  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, gen }), characters));
 
   const routes = app
     .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION }))

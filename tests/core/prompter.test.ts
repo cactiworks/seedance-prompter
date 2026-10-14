@@ -115,8 +115,8 @@ describe('промптер: референсы владельца', () => {
   const end: PrompterRef = { role: 'end', commentRu: '' };
   const sent = (model: GenModel, refs: PrompterRef[]) => routeRefs(model, refs).map((r) => (r.sentAs === null ? 'words' : r.sentAs === 'ref' ? `ref${r.n}` : r.sentAs));
 
-  it('маршрут картинок детерминирован: Soul 2 — словами, GPT — по номерам, Kling — только кадры, Seedance — кадры вытесняют рефы', () => {
-    expect(sent(soul, [me, look])).toEqual(['words', 'words']);
+  it('маршрут картинок детерминирован: Soul 2 — один reference, GPT — по номерам, Kling — только кадры, Seedance — кадры вытесняют рефы', () => {
+    expect(sent(soul, [me, look])).toEqual(['ref1', 'words']);
     expect(sent(gpt, [me, look])).toEqual(['ref1', 'ref2']);
     expect(sent(kling, [start, me, end])).toEqual(['start', 'words', 'end']);
     expect(sent(kling, [end, me])).toEqual(['words', 'words']);

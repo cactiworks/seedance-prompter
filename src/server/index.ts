@@ -42,7 +42,7 @@ async function main(): Promise<void> {
   // Фоновый опрос задач генерации: продолжает незаконченные после перезапуска и скачивает результаты.
   const gen = createGenRuntime({ dataDir });
   await gen.start();
-  const production = createProductionRuntime({ dataDir });
+  const production = createProductionRuntime({ dataDir, gen });
   await production.start();
   const app = createApp({ rootDir: ROOT, dataDir, gen, production });
   const apiListener = getRequestListener(app.fetch);

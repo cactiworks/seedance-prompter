@@ -116,9 +116,11 @@ describe('проверки ролей и параметров', () => {
     expect(validateGen(seedance, 'x', defaults(seedance), ['end']).join(' ')).toContain('без стартового');
   });
 
-  it('Kling не принимает референсы, Soul 2 — картинки вообще', () => {
+  it('Kling не принимает референсы, Soul 2 принимает только один reference', () => {
     expect(validateGen(kling, 'x', defaults(kling), ['ref']).join(' ')).toContain('«Реф» не поддерживается');
-    expect(validateGen(soul, 'x', defaults(soul), ['ref']).join(' ')).toContain('не принимает картинки');
+    expect(validateGen(soul, 'x', defaults(soul), ['ref'])).toEqual([]);
+    expect(validateGen(soul, 'x', defaults(soul), ['ref', 'ref'])).not.toEqual([]);
+    expect(validateGen(soul, 'x', defaults(soul), ['start'])).not.toEqual([]);
   });
 
   it('длительность, разрешение, формат, пустой промпт', () => {

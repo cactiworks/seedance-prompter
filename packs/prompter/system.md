@@ -73,7 +73,7 @@ generations, [provisional] no official guide exists — treat as a starting poin
    - Every image that is sent must be named in the prompt with its purpose, the way the card says
      ("Keep the face and identity of the person in image 1", "Use the location from image 2 as the setting").
    - `character`: identity comes from the image. Sent → name it and say what to keep (face, hair, build) and
-     what may change (clothing, pose) per the comment; do not re-describe the face in words. Not sent (Soul 2)
+     what may change (clothing, pose) per the comment; do not re-describe the face in words. Not sent (as specified by the per-model reference route)
      → the face cannot be transferred: describe only styling and build if the comment asks, and say in
      `weakSpotsRu` that his face needs Soul ID or a model that receives the photo.
    - `style`: take the look, not the content — palette, light, contrast, grain, lens feel, era. Sent → "Apply

@@ -7,11 +7,13 @@ import { StoredRunSchema } from '../../core/production/persistence.ts';
 import type { CharacterSelection } from '../../core/production/character.ts';
 import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
+import type { GenRuntime } from '../gen/runtime.ts';
+import { createPhotoProduction } from './photos.ts';
 import { agentError, directScene, writePrompts, type AgentOptions } from './agents.ts';
 
 const ID = /^pr-[a-z0-9-]{6,70}$/;
-/** Codex prepares text; media stays mock. No media provider or credentials are accepted. */
-export function createProductionRuntime(options: { dataDir: string; now?: () => number; delayMs?: number; runLlm?: Runner; model?: string }) {
+/** Durable series with explicit, cost-confirmed photo dispatch. Legacy demo runs stay mock. */
+export function createProductionRuntime(options: { dataDir: string; now?: () => number; delayMs?: number; runLlm?: Runner; model?: string; gen?: GenRuntime }) {
   const dir = path.join(options.dataDir, 'production-mock');
   const now = options.now ?? Date.now;
   const delay = options.delayMs ?? 1300;
@@ -53,6 +55,10 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     }
     return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
+  const photos = createPhotoProduction({ get: read, update: (id, change) => exclusive(async () => {
+    const run = await read(id); const rev = run.rev;
+    await change(run); return run.rev === rev ? run : write(run);
+  }) }, options.gen, now);
   async function tick(): Promise<void> {
     await exclusive(async () => {
       for (const run of await list()) {
@@ -60,6 +66,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
         if (next !== run) await write(next);
       }
     });
+    for (const run of await list()) if (run.mode === 'photos' && run.photos) await photos.tick(run.id);
   }
   async function updatePreparation(id: string, attempt: number, change: (run: ProductionRun) => ProductionRun | void, includeStopped = false): Promise<void> {
     await exclusive(async () => {
@@ -111,17 +118,33 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     });
   }
   return {
-    get: read, list, tick,
+    get: read, list, tick, photos,
+    forkPhotos: (id: string, rev: number, requestId: string): Promise<ProductionRun> => exclusive(async () => {
+      const existing = (await list()).find((r) => r.requestId === requestId);
+      if (existing) {
+        if (existing.planSourceId !== id) throw new ProductionError('CONFLICT', 'Этот запрос уже использован для другой серии.');
+        return existing;
+      }
+      const source = await read(id);
+      if (source.rev !== rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Повтори создание серии фото.');
+      if (!source.planned || !source.scenePlan || !source.promptPlan || !source.preparation) throw new ProductionError('INVALID', 'Нужен завершённый план Codex.');
+      const fresh = newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, { mode: 'photos', requestId, planningMode: 'codex', title: source.title, script: source.script, direction: source.direction, style: source.style, scenario: 'normal', characterId: source.characterId }, now(), delay);
+      fresh.character = source.character; fresh.scenePlan = source.scenePlan; fresh.promptPlan = source.promptPlan; fresh.planSourceId = id;
+      fresh.preparation = { ...source.preparation, calls: [] };
+      fresh.events = [{ at: fresh.createdAt, message: 'Создана отдельная серия по сохранённому Codex-плану. Новых вызовов LLM не было; mock-файлы и приёмки не перенесены.' }];
+      return write(completePreparation(fresh, now(), delay));
+    }),
     issues: () => [...damaged].map(([file, message]) => `${file}: ${message}`),
     waitForPreparation: async (id: string): Promise<void> => { await pending.get(id)?.done; },
     create: async (input: RunInput, character: CharacterSelection | null = null): Promise<ProductionRun> => {
       if ((input.characterId ?? null) !== (character?.id ?? null)) throw new ProductionError('INVALID', 'Персонаж серии не проверен.');
+      if (input.mode === 'photos' && input.planningMode !== 'codex') throw new ProductionError('INVALID', 'Для реальных фото нужен план Codex.');
       let created = false;
       const run = await exclusive(async () => {
         if (input.requestId) {
           const existing = (await list()).find((r) => r.requestId === input.requestId);
           if (existing) {
-            const keys = ['title', 'script', 'direction', 'style', 'scenario', 'planningMode', 'characterId'] as const;
+            const keys = ['title', 'script', 'direction', 'style', 'scenario', 'planningMode', 'characterId', 'mode'] as const;
             if (keys.some((key) => (existing[key] ?? null) !== (input[key] ?? null))) throw new ProductionError('CONFLICT', 'Этот запрос уже сохранён с другим содержимым. Открой существующую серию.');
             return existing;
           }
@@ -136,8 +159,9 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     setCharacter: (id: string, rev: number, character: CharacterSelection | null): Promise<ProductionRun> => exclusive(async () => {
       const run = await read(id);
       if (run.rev !== rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Повтори выбор персонажа.');
+      if (run.photos) throw new ProductionError('INVALID', 'Персонаж зафиксирован для начатой генерации. Создай новую серию по этому плану.');
       run.character = character; run.characterId = character?.id ?? null;
-      record(run, now(), character ? `Выбран персонаж «${character.name}». Mock-кадры не меняются; сходство лица не проверялось.` : 'Персонаж отвязан от серии. Mock-кадры не меняются.');
+      record(run, now(), run.mode === 'photos' ? (character ? `Выбран персонаж «${character.name}» для генерации фото.` : 'Серия будет без Soul ID.') : character ? `Выбран персонаж «${character.name}». Mock-кадры не меняются; сходство лица не проверялось.` : 'Персонаж отвязан от серии. Mock-кадры не меняются.');
       return write(run);
     }),
     act: async (id: string, action: RunAction): Promise<ProductionRun> => {
@@ -172,14 +196,15 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
           await write(run);
         }
       });
+      for (const run of await list()) if (run.mode === 'photos' && run.photos && options.gen) await photos.recover(run.id);
       timer = setInterval(() => {
         if (ticking) return;
         ticking = true;
-        void tick().catch((error: unknown) => console.error('Production mock:', error)).finally(() => { ticking = false; });
+        void tick().catch((error: unknown) => console.error('Production:', error)).finally(() => { ticking = false; });
       }, 450);
       timer.unref();
     },
-    stop(): void { if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
+    stop(): void { photos.stop(); if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
   };
 }
 export type ProductionRuntime = ReturnType<typeof createProductionRuntime>;

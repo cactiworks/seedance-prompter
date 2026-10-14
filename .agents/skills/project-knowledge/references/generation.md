@@ -97,7 +97,7 @@ Seedream и upscale. Расширение каталога и эти новые 
 Canvas хранит выбор независимо в каждой ноде; Studio запоминает его в localStorage и возвращает
 после reload/смены модели. Другие модели Soul ID не получают. Старый UUID вне списка не стирается
 автоматически: UI предлагает синхронизацию или новый выбор. Polling персонажей работает только
-в открытом picker. Production-медиа остаются mock, выбор персонажа не делает их реальными.
+в открытом picker. В Production mode photos выбор применяется к master и всем кадрам; mode mock остаётся demo.
 
 Создание персонажа отдельно от mock-медиа: `POST /v1/custom-references`, обязательно
 `model_version: v2`. Принимаются 1–100 локальных JPG/PNG/WebP, до 30 МБ (локальный лимит).
@@ -127,3 +127,20 @@ Uploads/import проверяются по содержимому и декод�
 прежние неточные файлы. Trim проверяет длительность источника, минимум 0.2 s и хранит точные start/end
 в params; cache использует эти числа. Resize принимает чётные стороны 16–8192 px, без скрытого округления.
 ffmpeg/ffprobe теперь нужны также для проверки входящих файлов.
+
+## Production photos (15.10.2026)
+
+После Codex и отдельного cost/refs-consent gate создаётся master Soul 2 standard, затем кадры
+Soul 2 image-to-image. `image_url` — общий master, `custom_reference_id` — выбранный ready/v2 Soul ID.
+1080p/9:16, batch_size=1; I2I требует enhance_prompt=true. Price gate из общего каталога:
+$0.006 × (1 master + 1–8 кадров); без утверждения фактического списания. Оба стиля — Soul 2.
+Поддержка одного ref и signed upload также доступны общему Soul 2 adapter. Signed PUT получает
+только upload_headers, без API authorization, без redirects/retry. Soul ID использует тот же helper.
+Опорная сцена помогает continuity, но не доказывает её. На milestone — только saved файлы;
+visual QC ручной. Видео, upscale, платные reruns и editing в Production пока отключены.
+
+Контракты проверены по [T2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/standard/api-reference)
+и [I2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/api-reference).
+[Прайс I2I](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/playground)
+указывает $0.0057 при 1080p; каталог хранит округлённую оценку $0.006 из account /estimate.
+Платной проверки текущего маршрута не было.

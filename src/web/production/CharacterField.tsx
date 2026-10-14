@@ -41,7 +41,7 @@ export function CharacterField({ value, name, disabled = false, target = 'series
       ? 'Soul ID ещё не готов или недоступен. Обнови статус перед генерацией.'
       : generation
         ? value ? 'Лицо персонажа будет использовано в Soul 2.' : 'Выбери готовый Soul ID v2 или генерируй без персонажа.'
-        : value ? 'Персонаж выбран для серии. Mock-кадры не используют лицо.' : 'Создай персонажа из своих фото или выбери готового.';
+        : value ? 'Soul ID выбран. В режиме реальных фото он передаётся в Higgsfield; demo его не использует.' : 'Создай персонажа из своих фото или выбери готового.';
   async function upload(files: FileList | null): Promise<void> {
     if (!files || locked) return;
     const batch = Array.from(files);
@@ -81,7 +81,7 @@ export function CharacterField({ value, name, disabled = false, target = 'series
       <Button variant="border" disabled={disabled} onClick={() => { setChosen(value); setCreating(false); setOpen(true); setLocalError(null); void load(); }}>{value ? 'Сменить персонажа' : 'Выбрать персонажа'}</Button>
     </section>
     <Dialog open={open} onOpenChange={(next) => { if (!locked) setOpen(next); }} title={creating ? 'Новый персонаж · Soul ID' : title} size="l"
-      description={creating ? 'Фотографии одного человека. Они отправятся в Higgsfield только после подтверждения.' : generation ? 'Выбери готовый Soul ID v2 из своего API-аккаунта Higgsfield. Он будет применён к генерации Soul 2.' : 'Для серии доступен готовый Soul ID версии v2. Генерация кадров остаётся mock.'}
+      description={creating ? 'Фотографии одного человека. Они отправятся в Higgsfield только после подтверждения.' : generation ? 'Выбери готовый Soul ID v2 из своего API-аккаунта Higgsfield. Он будет применён к генерации Soul 2.' : 'Выбери готовый Soul ID v2. В режиме реальных фото он передаётся в Higgsfield; demo его не использует.'}
       footer={<div className={styles.footer}>
         {creating ? <><Button variant="ghost" disabled={locked} onClick={() => setCreating(false)}>К списку</Button><Button variant="primary" loading={busy} disabled={locked || !characterName.trim() || !photos.length || !consent || !cost} onClick={() => void submit()}>Создать Soul ID · цена неизвестна</Button></>
           : <><Button variant="ghost" disabled={locked} onClick={() => setOpen(false)}>Закрыть</Button><Button variant="primary" loading={saving} disabled={locked || disabled || (chosen !== null && (!selected || !characterReady(selected)))} onClick={() => void choose()}>{generation ? 'Использовать персонажа' : 'Выбрать для серии'}</Button></>}
@@ -104,7 +104,7 @@ export function CharacterField({ value, name, disabled = false, target = 'series
         </> : <>
           <div className={styles.toolbar}><Button variant="border" disabled={locked} onClick={() => { setCreating(true); setLocalError(null); }}>Новый персонаж</Button><Button variant="ghost" loading={loading} disabled={locked} onClick={() => void refresh(true)}>Обновить из Higgsfield</Button></div>
           <div className={styles.list} role="radiogroup" aria-label="Доступные персонажи">
-            <label className={styles.item}><input type="radio" name={radioName} checked={chosen === null} disabled={locked} onChange={() => setChosen(null)} /><div><Text variant="label" medium>Без персонажа</Text><Text variant="caption" tone="secondary">{generation ? 'Генерация без привязки к лицу.' : 'Пройти mock-серию без привязки лица.'}</Text></div></label>
+            <label className={styles.item}><input type="radio" name={radioName} checked={chosen === null} disabled={locked} onChange={() => setChosen(null)} /><div><Text variant="label" medium>Без персонажа</Text><Text variant="caption" tone="secondary">{generation ? 'Генерация без привязки к лицу.' : 'Серия без привязки лица.'}</Text></div></label>
             {items.map((character) => <label key={character.id} className={styles.item}>
               <input type="radio" name={radioName} checked={chosen !== null && chosen === characterKey(character)} disabled={locked || !characterReady(character)} onChange={() => setChosen(characterKey(character))} />
               {character.uploadIds[0] && <img className={styles.avatar} src={`/api/uploads/${character.uploadIds[0]}`} alt="" />}

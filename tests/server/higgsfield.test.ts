@@ -89,3 +89,26 @@ describe('готовые мудборды Soul 2', () => {
     expect(seen[0]).toMatchObject({ url: 'https://api.higgsfield.ai/v1/text2image/soul-styles/v2', method: 'GET', auth: `Key ${KEY}` });
   });
 });
+
+describe('Higgsfield scene upload', () => {
+  it('uses signed storage headers, never sends API auth to storage, and returns the public URL', async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      return requests.length === 1 ? json({ upload_url: 'https://storage.example/put', public_url: 'https://storage.example/image.png', upload_headers: { 'content-type': 'image/png', 'x-upload-test': 'signed' } }) : new Response(null, { status: 200 });
+    }) as typeof fetch;
+    const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch: fetchImpl });
+    expect(await hf.upload(new Uint8Array([1, 2, 3]), 'scene.png', 'image/png')).toBe('https://storage.example/image.png');
+    expect(requests[0]!.url).toBe('https://api.higgsfield.ai/files/generate-upload-url');
+    expect(new Headers(requests[0]!.init!.headers).get('authorization')).toBe(`Key ${KEY}`);
+    expect(new Headers(requests[1]!.init!.headers).get('authorization')).toBeNull();
+    expect(new Headers(requests[1]!.init!.headers).get('x-upload-test')).toBe('signed');
+    expect(requests[1]!.init).toMatchObject({ method: 'PUT', redirect: 'error' });
+  });
+  it('rejects a signed upload containing API authorization without sending the file', async () => {
+    const { fetch, seen } = fakeFetch(json({ upload_url: 'https://storage.example/put', public_url: 'https://storage.example/image.png', upload_headers: { Authorization: 'do-not-forward' } }));
+    const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch });
+    await expect(hf.upload(new Uint8Array([1]), 'scene.png', 'image/png')).rejects.toThrow();
+    expect(seen).toHaveLength(1);
+  });
+});

@@ -4,6 +4,7 @@ import { Button, Dialog, Icon, Tag, Text, TextField } from '../ui/components/ind
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 import { Preparation } from './Preparation.tsx';
+import { PhotoRunView, ReusePlan } from './PhotoRunView.tsx';
 import { CharacterField } from './CharacterField.tsx';
 
 function eventLabel(message: string): string {
@@ -15,7 +16,7 @@ export function ProductionList() {
   const { runs, activeId, busy, newForm, select } = useProduction();
   return <>
     <Button variant="border" icon={<Icon name="plus" size={1} />} onClick={newForm} disabled={busy}>Новая серия</Button>
-    <Text variant="caption" tone="tertiary" className={styles.sideTitle}>Производство · mock</Text>
+    <Text variant="caption" tone="tertiary" className={styles.sideTitle}>Производство</Text>
     <nav className={styles.runList} aria-label="Серии производства">
       {runs.map((run) => <button type="button" key={run.id} className={styles.runItem} aria-current={run.id === activeId ? 'page' : undefined} onClick={() => select(run.id)} disabled={busy}>
         <span>{run.title}</span><small>{runLabel(run)}</small>
@@ -27,18 +28,18 @@ export function ProductionList() {
 function NewRun() {
   const { draft: input, setDraft: setInput, create, busy } = useProduction();
   return <div className={styles.start} data-guide="production-start">
-    <Tag tone="outline">Production · mock-медиа</Tag>
+    <Tag tone="outline">Production</Tag>
     <Text as="h1" variant="title-l">От сценария к подборке кадров</Text>
-    <Text tone="secondary">Задай направление. Codex подготовит единую сцену, план кадров и prompts. Затем можно пройти оба milestone на mock-медиа.</Text>
+    <Text tone="secondary">Задай направление. Codex подготовит единую сцену, план кадров и prompts. После подготовки подтверди стоимость фото — серия создастся в Higgsfield и придёт на приёмку. Видео и upscale пока отключены.</Text>
     <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void create(input); }}>
       <TextField label="Название серии" value={input.title} maxLength={100} required onChange={(e) => setInput({ ...input, title: e.target.value })} />
       <TextField multiline label="Сценарий" rows={4} value={input.script} maxLength={12000} required onChange={(e) => setInput({ ...input, script: e.target.value })} />
       <TextField multiline label="Визуальный вектор" rows={3} value={input.direction} maxLength={3000} required onChange={(e) => setInput({ ...input, direction: e.target.value })} />
       <CharacterField value={input.characterId ?? null} disabled={busy} onChange={(characterId) => setInput({ ...input, characterId })} />
       <fieldset className={styles.choices}><legend>Как снято</legend>{([['phone', 'Phone / UGC'], ['cinema', 'Cinematic']] as const).map(([style, label]) => <label key={style}><input type="radio" name="production-style" checked={input.style === style} onChange={() => setInput({ ...input, style })} />{label}</label>)}</fieldset>
-      <fieldset className={styles.choices}><legend>Подготовка серии</legend>{([['codex', 'Codex — реальная подготовка'], ['mock', 'Только mock']] as const).map(([planningMode, label]) => <label key={planningMode}><input type="radio" name="production-planning" checked={input.planningMode === planningMode} onChange={() => setInput({ ...input, planningMode })} />{label}</label>)}</fieldset>
-      <label className={styles.check}><input type="checkbox" checked={input.scenario === 'repair'} onChange={(e) => setInput({ ...input, scenario: e.target.checked ? 'repair' : 'normal' })} />Показать локальную правку одного кадра</label>
-      <div className={styles.notice}><Text variant="label" medium>{input.planningMode === 'codex' ? 'Codex расходует квоту ChatGPT · медиа 0 кредитов' : 'Демонстрация процесса · без вызовов моделей'}</Text><Text variant="caption" tone="secondary">{input.planningMode === 'codex' ? 'По кнопке отправятся только сценарий, вектор и выбранная манера съёмки. Два вызова Codex, до четырёх при исправлении ответов. Агент выберет 1–8 кадров. Фото, видео, QC и upscale остаются mock; твоё лицо не отправляется.' : 'Тексты сохранятся без анализа. Сцена, три кадра и prompts фиксированы; внешние сервисы не вызываются.'}</Text></div>
+      <fieldset className={styles.choices}><legend>Подготовка серии</legend>{([['codex', 'Codex → реальные фото'], ['mock', 'Демо без генераций']] as const).map(([planningMode, label]) => <label key={planningMode}><input type="radio" name="production-planning" checked={input.planningMode === planningMode} onChange={() => setInput({ ...input, planningMode, mode: planningMode === 'codex' ? 'photos' : 'mock' })} />{label}</label>)}</fieldset>
+      {input.planningMode !== 'codex' && <label className={styles.check}><input type="checkbox" checked={input.scenario === 'repair'} onChange={(e) => setInput({ ...input, scenario: e.target.checked ? 'repair' : 'normal' })} />Показать локальную правку одного кадра</label>}
+      <div className={styles.notice}><Text variant="label" medium>{input.planningMode === 'codex' ? 'Codex расходует квоту ChatGPT · фото запускаются отдельно' : 'Демонстрация процесса · без вызовов моделей'}</Text><Text variant="caption" tone="secondary">{input.planningMode === 'codex' ? 'По кнопке отправятся только сценарий, вектор и выбранная манера съёмки. Два вызова Codex, до четырёх при исправлении ответов. Агент выберет 1–8 кадров. Затем появятся стоимость и отдельная кнопка запуска фото. Выбранный Soul ID используется только при генерации в Higgsfield.' : 'Тексты сохранятся без анализа. Сцена, три кадра и prompts фиксированы; внешние сервисы не вызываются.'}</Text></div>
       <Button type="submit" variant="primary" size="m" loading={busy} disabled={!input.title.trim() || !input.script.trim() || !input.direction.trim()}>{input.planningMode === 'codex' ? 'Подготовить с Codex' : 'Запустить mock-серию'}</Button>
     </form>
   </div>;
@@ -136,6 +137,7 @@ function RunView({ run }: { run: ProductionRun }) {
   return <>
     <header className={styles.header}><div><div className={styles.eyebrow}><Tag tone="outline">{run.planningMode === 'codex' ? 'Codex + mock-медиа' : 'Mock · 0 кредитов'}</Tag><Text as="span" variant="caption" tone="secondary">Серия · {total ? `${total} кадров` : 'планируется'}</Text></div><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}><Tag tone={allReady ? 'success' : 'neutral'} dot>{runLabel(run)}</Tag>{!allReady && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Продолжить' : 'Пауза'}</Button>}</div></header>
     <div className={styles.mockNote}>{run.planningMode === 'codex' ? 'Сцена, shot plan и prompts — Codex. Картинки и клипы — условные локальные макеты, они не изображают этот план. Медиа, проверки качества и upscale остаются mock, без вызовов генерации KIE и Higgsfield.' : 'Локальная демонстрация процесса. Кадры условные, проверки смоделированы. Генерация и LLM не вызываются. Soul ID управляется отдельно.'}</div>
+    {run.planned && run.promptPlan && <ReusePlan run={run} />}
     <CharacterField value={run.characterId ?? null} name={run.character?.name} disabled={busy} onChange={setCharacter} />
     <nav className={styles.overview} aria-label="Этапы серии">{[['photoReview', '01', 'Принятие фото'], ['videoReview', '02', 'До Topaz'], ['ready', '03', 'Выдача']] .map(([id, n, label]) => <button type="button" key={id} onClick={() => { const target = document.getElementById(`production-${id}`); const button = target?.querySelector('button'); if (button?.getAttribute('aria-expanded') === 'false') button.click(); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span>{n}</span><Text as="span" variant="label">{label}</Text><Text as="span" variant="caption" tone="tertiary">{stageProgress(run, id as StageId).done} / {total || '—'}</Text></button>)}</nav>
     {run.paused && <div className={styles.notice} role="status">Серия на паузе. Состояние сохранено; продолжение вернётся к текущим этапам.</div>}
@@ -159,6 +161,6 @@ export function Production() {
     {error && <div className={`${styles.error} ${styles.globalError}`} role="alert">{error}<Button variant="border" onClick={() => void load()}>Обновить</Button></div>}
     {connectionError && <Text tone="accent">{connectionError}</Text>}
     {warnings.map((warning) => <Text key={warning} tone="accent">{warning}</Text>)}
-    {!initialized ? <Text tone="secondary">Открываю производство…</Text> : run ? <RunView key={run.id} run={run} /> : <NewRun />}
+    {!initialized ? <Text tone="secondary">Открываю производство…</Text> : run ? run.mode === 'photos' ? <PhotoRunView key={run.id} run={run} /> : <RunView key={run.id} run={run} /> : <NewRun />}
   </div></main>;
 }

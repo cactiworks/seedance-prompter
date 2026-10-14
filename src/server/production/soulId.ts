@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uploadHiggsfieldFile } from '../gen/higgsfieldUpload.ts';
 import { KEYCHAIN, keyProblem, readSecret } from '../secrets.ts';
 
 const API = 'https://api.higgsfield.ai';
@@ -42,15 +43,8 @@ export function createSoulIdProvider(options: { apiKey?: () => string | null; fe
   };
   return {
     async upload(bytes, mime) {
-      const signed = z.object({ public_url: z.url().startsWith('https://'), upload_url: z.url().startsWith('https://'), upload_headers: z.record(z.string(), z.string()) }).safeParse(await call('/files/generate-upload-url', { content_type: mime }));
-      if (!signed.success) throw new SoulIdError('Higgsfield не вернул адрес загрузки.');
-      const headers = new Headers(signed.data.upload_headers);
-      if (['authorization', 'hf-api-key', 'hf-secret', 'cookie'].some((name) => headers.has(name))) throw new SoulIdError('Некорректные заголовки загрузки.');
-      let response: Response;
-      try { response = await doFetch(signed.data.upload_url, { method: 'PUT', headers, body: bytes as Uint8Array<ArrayBuffer>, signal: AbortSignal.timeout(90_000), redirect: 'error' }); }
-      catch { throw new SoulIdError('Не удалось отправить фото в хранилище Higgsfield.'); }
-      if (!response.ok) throw new SoulIdError('Хранилище Higgsfield отклонило фото.');
-      return signed.data.public_url;
+      try { return await uploadHiggsfieldFile(bytes, mime, call, doFetch); }
+      catch (error) { throw error instanceof SoulIdError ? error : new SoulIdError(error instanceof Error ? error.message : 'Не удалось загрузить фото.'); }
     },
     create: async (name, urls) => reference(await call('/v1/custom-references', { name, model_version: 'v2', input_images: urls.map((image_url) => ({ type: 'image_url', image_url })) })),
     get: async (id) => reference(await call(`/v1/custom-references/${encodeURIComponent(z.uuid().parse(id))}`)),

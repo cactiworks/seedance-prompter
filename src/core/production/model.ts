@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
 import { CHARACTER_ID, type CharacterSelection } from './character.ts';
+import type { PhotoState } from './photos.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
 export const CreateRunSchema = z.object({
-  mode: z.literal('mock').default('mock'),
+  mode: z.enum(['mock', 'photos']).default('mock'),
   requestId: z.string().min(8).max(100).optional(),
   planningMode: z.enum(['mock', 'codex']).optional(),
   characterId: z.string().regex(CHARACTER_ID).nullable().optional(),
@@ -30,7 +31,8 @@ export type RunAction = z.infer<typeof ActionSchema>;
 export interface Artifact {
   id: string; shotId: string; kind: 'photo' | 'video' | 'final'; version: number; sourceId: string | null;
   url: string; poster: string; prompt: string; model: string; taskId: string; createdAt: string;
-  qc: 'pending' | 'pass' | 'repair'; qcNote: string; note: string; cost: 0;
+  qc: 'pending' | 'pass' | 'repair' | 'review'; qcNote: string; note: string; cost: number;
+  mediaId?: string; generationJobId?: string; providerModel?: string;
 }
 export interface ProductionShot {
   id: string; title: string; framing: string; action: string; step: ShotStep;
@@ -39,6 +41,8 @@ export interface ProductionShot {
   dueAt: number; error: string | null; editNote: string; editSourceId: string | null;
 }
 export interface ProductionRun extends RunInput {
+  photos?: PhotoState;
+  planSourceId?: string;
   character?: CharacterSelection | null;
   id: string; rev: number; createdAt: string; updatedAt: string; paused: boolean;
   planned: boolean; dueAt: number; shots: ProductionShot[]; artifacts: Artifact[];
@@ -74,6 +78,11 @@ export function isAutomatic(step: ShotStep): boolean { return !['photoReview', '
 export function runLabel(run: ProductionRun): string {
   if (run.paused) return 'На паузе';
   if (run.preparation?.status === 'failed' || run.preparation?.status === 'interrupted') return 'Подготовка остановлена';
+  if (run.mode === 'photos' && run.planned) {
+    if (!run.photos) return 'Готов к генерации фото';
+    if (run.photos.status === 'stopped') return 'Генерация остановлена';
+    if (run.photos.status === 'review') return 'Принять фотографии';
+  }
   if (run.planned && run.shots.every((s) => s.step === 'ready')) return 'Готово';
   if (run.shots.some((s) => s.error !== null)) return 'Нужна проверка';
   if (!run.planned || run.shots.some((s) => isAutomatic(s.step))) return 'В работе';

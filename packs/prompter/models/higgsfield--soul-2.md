@@ -27,8 +27,7 @@ will refine them.
   frame), profile, extreme low or high angles [vendor]. For a wide scene with the character: warn, and
   suggest a close-up generation plus a separate wide plate.
 - The trained face may be cloned onto background people [vendor] — avoid crowds while Soul ID is on.
-- The owner's Soul ID «matthew» is NOT available in the API account (checked 28.09.2026) — do not assume a
-  character is set; the owner enters a Soul ID himself when he has one.
+- Soul ID is selected by the owner in the app. Do not assume a character is selected or invent an ID.
 
 ## How to write the prompt
 - Lead with the aesthetic direction and the mood / setting; then subject, action, styling, light,
@@ -45,4 +44,10 @@ will refine them.
 
 ## Parameters
 - aspectRatio: 9:16, 3:4, 2:3, 1:1, 4:3, 3:2, 16:9. resolution: 720p, 1080p (default 1080p).
-- No reference images via the API. Seed is handled by the studio — do not mention it.
+- The API accepts one image reference via `image_url` on the image-to-image route. Follow the input's
+  reference routing; preserve relevant layout, wardrobe and light, changing only the requested shot.
+  Image-to-image enables prompt enhancement. Face identity can separately come from selected Soul ID v2.
+  This contract does not prove likeness or scene continuity; do not promise either.
+- Seed and API fields are handled by the studio — do not choose or mention them in the prompt.
+
+API contract checked 14.10.2026: https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/api-reference
