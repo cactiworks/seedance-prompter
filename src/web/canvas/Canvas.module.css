@@ -67,8 +67,22 @@
   cursor: pointer;
 }
 
-.flowItem:hover .flowDelete {
+.flowItem:hover .flowDelete,
+.flowItem:focus-within .flowDelete {
   display: grid;
+}
+
+.sidebarTemplates {
+  margin-top: var(--lab-space-8);
+  padding-top: var(--lab-space-4);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.sidebarTemplates summary {
+  padding: var(--lab-space-4);
+  color: var(--lab-text-secondary);
+  font-size: var(--lab-type-label-size);
+  cursor: pointer;
 }
 
 /* ——— страница ——— */
@@ -79,6 +93,10 @@
   justify-content: center;
   gap: var(--lab-space-6);
   height: 100%;
+  min-height: 0;
+  padding: var(--lab-space-12);
+  overflow-y: auto;
+  text-align: center;
 }
 
 .canvas {
@@ -88,6 +106,8 @@
 }
 
 .head {
+  position: relative;
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: var(--lab-space-3);
@@ -99,7 +119,7 @@
 }
 
 .name {
-  width: 9rem;
+  width: min(18rem, 100%);
   padding: var(--lab-space-2) var(--lab-space-3);
   border: 1px solid transparent;
   border-radius: var(--lab-radius-s);
@@ -118,6 +138,87 @@
 
 .grow {
   flex: 1;
+}
+
+.flowIdentity {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-4);
+  min-width: 0;
+}
+
+.addMenu {
+  position: static;
+}
+
+.addTrigger {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-3);
+  padding: var(--lab-space-4) var(--lab-space-6);
+  border-radius: var(--lab-radius-full);
+  background: var(--lab-accent);
+  color: var(--lab-text-on-accent);
+  font-size: var(--lab-type-label-size);
+  font-weight: var(--lab-weight-medium);
+  list-style: none;
+  cursor: pointer;
+}
+
+.addTrigger::-webkit-details-marker {
+  display: none;
+}
+
+.addPanel {
+  position: absolute;
+  top: calc(100% + var(--lab-space-4));
+  right: var(--lab-space-6);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--lab-space-4);
+  width: min(39rem, calc(100% - var(--lab-space-6) * 2));
+  padding: var(--lab-space-6);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-xl);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-l);
+}
+
+.addGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  min-width: 0;
+}
+
+.addGroup > :first-child {
+  padding: var(--lab-space-2) var(--lab-space-4);
+}
+
+.addGroup button {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-3);
+  padding: var(--lab-space-4);
+  border: 0;
+  border-radius: var(--lab-radius-m);
+  background: none;
+  color: var(--lab-text-primary);
+  font: inherit;
+  font-size: var(--lab-type-label-size);
+  text-align: left;
+  cursor: pointer;
+}
+
+.addGroup button:hover {
+  background: var(--lab-fill-4);
+}
+
+.addGroup button:focus-visible,
+.addTrigger:focus-visible,
+.templateCard:focus-visible {
+  outline: 2px solid var(--lab-accent);
+  outline-offset: 2px;
 }
 
 .board {
@@ -199,27 +300,17 @@
   align-items: center;
   gap: var(--lab-space-4);
   width: min(42rem, 90%);
+  max-height: calc(100% - 5rem);
+  overflow-y: auto;
   text-align: center;
   transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.emptyIcon {
-  display: grid;
-  place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  margin-bottom: var(--lab-space-4);
-  border-radius: var(--lab-radius-xl);
-  background: var(--lab-bg-surface);
-  color: var(--lab-accent);
-  box-shadow: var(--lab-shadow-m);
+  pointer-events: auto;
 }
 
 .emptyActions {
   display: flex;
   gap: var(--lab-space-6);
-  margin-top: var(--lab-space-6);
+  margin-block: var(--lab-space-4);
   pointer-events: auto;
 }
 
@@ -347,7 +438,7 @@
 /* ——— шаблоны ——— */
 .emptyTemplates {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--lab-space-4);
   width: 100%;
   max-width: 42rem;
@@ -368,6 +459,39 @@
 
 .templateCard:hover {
   border-color: var(--lab-accent-muted);
+}
+
+@media (width <= 760px) {
+  .emptyPage {
+    padding: var(--lab-space-8);
+    justify-content: flex-start;
+  }
+
+  .head {
+    padding-inline: var(--lab-space-4);
+  }
+
+  .flowIdentity {
+    width: 100%;
+  }
+
+  .emptyTemplates {
+    grid-template-columns: 1fr;
+  }
+
+  .addPanel {
+    grid-template-columns: 1fr;
+    width: min(20rem, calc(100% - var(--lab-space-6) * 2));
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .zoom {
+    right: var(--lab-space-4);
+    left: var(--lab-space-4);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 }
 
 /* ——— нода «Обрезка видео» ——— */

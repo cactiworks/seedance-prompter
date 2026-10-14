@@ -181,9 +181,9 @@ export function Workspace({ pack }: { pack: PackBundle }) {
     store.update((p) => ({ ...p, refs: p.refs.map((r) => (r.key === ref.key ? { ...r, file: `${fileName}?v=${Date.now()}` } : r)) }));
   };
 
-  // Гейт «наружу»: картинка уходит в Anthropic только после явного согласия, один раз на сессию.
+  // Гейт «наружу»: картинка уходит в OpenAI только после явного согласия, один раз на сессию.
   const confirmVision = (key: string): void => {
-    if (!visionAgreed && !window.confirm('Уменьшенная копия этой картинки уйдёт в Anthropic для анализа (тот же получатель, что у сессий Claude Code). На референсе может быть твоё лицо. Отправить?')) return;
+    if (!visionAgreed && !window.confirm('Уменьшенная копия этой картинки уйдёт в OpenAI через Codex для анализа. На референсе может быть твоё лицо. Отправить?')) return;
     setVisionAgreed(true);
     void store.analyzeRef(key);
   };

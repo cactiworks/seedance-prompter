@@ -1,0 +1,66 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Конкурентные UX-patterns для AI production</title><style>@font-face{font-family:Geist;src:url('prototype/fonts/geist-cyrillic-wght-normal.woff2');font-weight:100 900;unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}@font-face{font-family:Geist;src:url('prototype/fonts/geist-latin-wght-normal.woff2');font-weight:100 900;unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2191,U+2193}*{box-sizing:border-box}body{margin:0;background:#f7f7fa;color:#17171b;font:16px/1.65 Geist,system-ui,sans-serif}header{padding:18px 5vw;background:white;border-bottom:1px solid #e7e7ed;display:flex;gap:22px;align-items:center;flex-wrap:wrap}header a{font-size:14px}a{color:#0069d9;text-decoration:none}a:hover{text-decoration:underline}main{max-width:1260px;margin:auto;padding:44px 5vw 100px}h1{font-size:36px;line-height:1.2;letter-spacing:-1.2px;font-weight:500;max-width:1000px}h2{font-size:25px;line-height:1.25;font-weight:500;letter-spacing:-.5px;margin:56px 0 20px}h3{font-size:19px;font-weight:500;margin-top:30px}p,li{max-width:900px}p{margin:16px 0}strong{font-weight:500}table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;line-height:1.55;margin:24px 0}td,th{text-align:left;vertical-align:top;padding:15px;border-bottom:1px solid #e8e8ee;min-width:120px}th{background:#f0f0f5;font-weight:500}.table-wrap{overflow:auto}pre{background:#fff;border:1px solid #e8e8ee;border-radius:12px;padding:24px;overflow:auto;line-height:1.5;font-size:14px}code{font-size:.88em}img{max-width:100%;border-radius:12px}aside{padding:20px 24px;background:white;border:1px solid #e7e7ed;border-radius:14px;margin:28px 0}aside a{display:inline-block;margin:4px 18px 4px 0;font-size:14px}.pill{padding:8px 14px;background:#17171b;color:white;border-radius:99px}.meta{color:#74747f;font-size:13px}.local-source{color:#555;overflow-wrap:anywhere}footer{font-size:13px;color:#777;margin-top:60px}@media(max-width:700px){main{padding:26px 20px 70px}h1{font-size:29px}h2{font-size:23px}header{padding:14px 20px;gap:12px}td,th{padding:12px}.pill{display:inline-block}}</style></head><body><header><a href="research.html">Исследование</a><a href="onboarding.html">Onboarding</a><a href="competitors.html">Конкуренты</a><a href="current-product-audit.html">Аудит</a><a class="pill" href="prototype/">Открыть интерактивный черновик ↗</a></header><main><h1>Конкурентные UX-patterns для AI production</h1>
+<p>Дата проверки: <strong>2026-10-11</strong>. Первый сегмент: AI-креаторы, делающие рекламу и контент для клиентов. Целевой цикл: references → image → edit → video → trim/assembly → delivery → клиентская правка.</p>
+<p><strong>Уровень Ф3</strong> в этом файле означает: исследователь лично открыл официальный первичный документ и проверил описанную механику. Это утверждение производителя о продукте, а не hands-on проверка функции, её качества, надёжности или востребованности. Конкурентные patterns помогают сформулировать гипотезы; они не заменяют интервью и тесты с пользователями Seedance Prompter.</p>
+<p>Отдельная проверка ведущего исследователя в Yab: открыты Higgsfield Canvas landing, список templates и форма Image. Генерации и workflow не запускались. Эта проверка подтверждает наличие видимых экранов, но не весь описанный ниже функционал.</p>
+<aside aria-label="Содержание"><a href="#section-1">Матрица: шесть платформ</a><a href="#section-2">Дополнительные механики клиентской работы — Ф3</a><a href="#section-3">Website и API: границы обещаний</a><a href="#section-4">Пять выводов для Seedance Prompter — проектные гипотезы</a></aside><h2 id="section-1">Матрица: шесть платформ</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Платформа</th>
+<th>Что документировано — Ф3</th>
+<th>Что полезно проверить в своём UX</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Higgsfield Canvas</strong></td>
+<td>Цепочка prompt → image → video → edit; запуск nodes отдельно или последовательно; сравнение моделей; Assets и reusable templates. Семантика references различается: подключённая картинка у Kling — start frame; character reference требует Element/tag. У Seedance роль reference нужно описывать в prompt. <a href="https://higgsfield.ai/creator-hub/help-center/tools/how-do-i-use-canvas">Canvas help</a></td>
+<td>Явный выбор роли reference и проверка совместимости до запуска. Визуально одинаковая связь не должна скрывать разное поведение моделей.</td>
+</tr>
+<tr>
+<td><strong>FLORA</strong></td>
+<td>В проект встроен timeline для trim, arrangement и render; параметры экспорта зависят от плана. <a href="https://flora.ai/updates/in-canvas-video-editor-a-faster-canvas">Timeline</a>. Reusable technique принимает выбранный Element; export node поддерживает download и bulk rename. <a href="https://flora.ai/updates/elements-in-techniques-smarter-exports">Elements/export</a></td>
+<td>Доведение выбранных генераций до deliverable без переноса в отдельный сервис. Повторное использование товара/персонажа как входа workflow.</td>
+</tr>
+<tr>
+<td><strong>Freepik Spaces / Magnific</strong></td>
+<td>Официальные Spaces docs перенаправляют на Magnific. Dashboard содержит recent spaces, templates и blank canvas. Spotlight показывает действие, capabilities и цену. Из output в пустую область предлагаются совместимые следующие nodes с автоматическим соединением. Есть Run Node / Workflow / Downstream, статусы, history и autosave. <a href="https://www.magnific.com/ru/ai/docs/getting-started-with-spaces">Getting started</a></td>
+<td>Контекстный ответ на «что дальше сделать с этим asset»; видимый scope запуска; понятный вход из шаблона.</td>
+</tr>
+<tr>
+<td><strong>Runway Workflows</strong></td>
+<td>Quick generation отделена от повторяемых workflows. Templates, обязательные inputs, совместимые типы, lock готового node, Active Runs. <a href="https://help.runwayml.com/hc/en-us/articles/45763528999699-Introduction-to-Workflows">Introduction</a>. History позволяет favorite, восстановить старый output и превратить его в отдельный image node. <a href="https://help.runwayml.com/hc/en-us/articles/45769159004691-Building-your-first-Workflows">First workflow</a></td>
+<td>Сохранить approved кадр и пересчитать только следующую операцию; вернуть старый результат без повторной оплаты генерации.</td>
+</tr>
+<tr>
+<td><strong>Krea</strong></td>
+<td>Edit открывается поверх выбранного изображения с уже загруженным asset; history strip хранит промежуточные edits. <a href="https://www.krea.ai/blog/krea-edit">Edit</a>. Node Agent читает текущий canvas, показывает план и стоимость по nodes до запуска, позволяет менять этапы и модели. <a href="https://www.krea.ai/blog/ai-workflow-agent">Node Agent</a></td>
+<td>Prompter учитывает выделенный asset и его задачу. Помощь доступна непосредственно в работе, а цену видно до генерации.</td>
+</tr>
+<tr>
+<td><strong>Figma Weave, ранее Weavy</strong></td>
+<td>Workflow превращается в Tool с выбранными inputs и скрытыми/locked parameters. Получатель видит простой интерфейс без canvas; изменения публикуются отдельно. Версии Tool сохраняются с timestamp. <a href="https://help.weavy.ai/en/articles/12267755-tools">Tools</a></td>
+<td>Шаблон клиентской задачи можно начать с нескольких полей и раскрыть Canvas для тонкой настройки. Canvas остаётся центральной моделью работы, ручная сборка графа не обязательна на старте.</td>
+</tr>
+</tbody></table></div>
+<h2 id="section-2">Дополнительные механики клиентской работы — Ф3</h2>
+<ul>
+<li><strong>Отбор и delivery.</strong> FLORA описывает color tags, фильтрацию результатов и ZIP выбранной группы; Review включает варианты из history. Unified Library и project folders помогают возвращаться к работе. На image result доступны действия remove background, mark up и video; после первого результата появляется contextual nudge о других инструментах. <a href="https://flora.ai/updates/director-1-1-styles-library-tool-first-dashboard-2026-09-11">FLORA, 2026-09-11</a></li>
+<li><strong>Понятные расходы и экспорт.</strong> FLORA позволяет переключать usage между credits и USD, экспортировать в выбранную Drive-папку с именами файлов и предотвращением перезаписи. <a href="https://flora.ai/updates/export-to-drive-document-node-dollar-costs-2026-05-21">FLORA, costs/export</a></li>
+<li><strong>Восстановление контроля.</strong> FLORA описывает cancel текущей генерации с возвратом node к прежнему состоянию, объяснение несовместимых connections и clear output с сохранением prompt/model/settings. Источник не обещает refund при cancel. <a href="https://flora.ai/updates/cancel-mid-run-2026-10-06">FLORA, 2026-10-06</a></li>
+<li><strong>Простой режим поверх графа.</strong> Runway App скрывает выбранные inputs/outputs и фиксирует важные параметры исходного workflow. <a href="https://help.runwayml.com/hc/en-us/articles/47865876793747-Publishing-Workflows-as-Apps">Publishing Workflows as Apps</a></li>
+</ul>
+<h2 id="section-3">Website и API: границы обещаний</h2>
+<p><strong>Higgsfield — Ф3.</strong> API использует отдельный USD balance; web subscription, credits и Unlimited туда не переносятся. API catalog может отличаться от сайта. Официальный help описывает estimate endpoint, asynchronous jobs с polling/webhook, оплату успешных запросов и возврат суммы при failed request. Outputs доступны минимум 7 дней, после чего могут удаляться: для постоянной библиотеки требуется собственное хранение. Standalone audio models в API catalog не заявлены; у некоторых video models есть native audio. <a href="https://higgsfield.ai/creator-hub/help-center/integrations/what-is-the-higgsfield-api">API help, 2026-09-16</a></p>
+<p><strong>KIE — Ф3.</strong> Актуальная открытая документация указывает хранение generated files <strong>14 дней</strong> и рекомендует сохранять результат. Она также описывает загрузку актуальных параметров выбранной модели перед запросом. <a href="https://docs.kie.ai/ai-agent/what-can-do">KIE: What your agent can do</a></p>
+<p><strong>Расхождение с локальными заметками, требует проверки adapter.</strong> В <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/docs/DECISIONS.md:155">DECISIONS.md</span> и <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/docs/research/kie-models.md:34">kie-models.md</span> зафиксированы прежние сообщения о сроке URL 24h одновременно с 14-дневным хранением медиа. Нельзя автоматически считать, что это один и тот же срок: срок ссылки, оригинала и хранения файла могут различаться. Это drift/неуточнённый контракт, который нужно проверить для текущего endpoint в adapter; оснований ослаблять немедленное сохранение outputs нет.</p>
+<p>Наличие Canvas, Studio или иной функции на сайте провайдера не доказывает наличие доступного API endpoint. Для каждого обещанного действия нужна проверка конкретных model, endpoint, inputs и outputs. Постоянное хранение, history, trim и сборку exports следует учитывать как возможности самой платформы, если они реализуются локально.</p>
+<h2 id="section-4">Пять выводов для Seedance Prompter — проектные гипотезы</h2>
+<ol>
+<li><strong>Проект организует работу, Canvas показывает её ход.</strong> Brief, references, shots, variants, jobs и exports принадлежат одному проекту. Images/Video могут быть фильтрами общей библиотеки; пользователю не нужно заново собирать контекст между вкладками.</li>
+<li><strong>Вход начинается с deliverable, продолжение — с выбранного asset.</strong> Шаблоны «Предметный ролик», «Реклама с персонажем», «Серия визуалов», «Оживить кадр» создают стартовую структуру. Действия Edit / Variations / Animate / Trim / Export автоматически передают asset дальше и показывают результат на Canvas.</li>
+<li><strong>Итерация сохраняет одобренное.</strong> Нужны selected/favorite версии, фиксация approved shot, ветка клиентской правки, возврат старого результата и явный scope повторного запуска. Экспорт должен собирать отобранные версии с понятными именами, а не всё содержимое проекта.</li>
+<li><strong>Prompter работает внутри операции.</strong> Он учитывает выделенный asset, роль references и текущий этап: образ для image, движение/camera/timing для video. Перед запуском видны inputs, модель, ограничения и оценка цены. Достаточно начать с contextual assistant; большой автономный agent не является обязательным условием.</li>
+<li><strong>Onboarding ведёт до небольшого законченного результата.</strong> Практический маршрут reference → image → edit → animate → trim/export показывает связь частей. Повторяемый обзор с подсветкой полезен как помощь. Самостоятельное выполнение клиентской правки на следующий день проверяет понимание лучше, чем прохождение tooltip-tour.</li>
+</ol>
+<p>Основной тест для первого сегмента: загрузить товар и style reference → сделать три варианта → выбрать и поправить один → получить video → обрезать → выгрузить final → выполнить правку клиента, сохранив уже одобренные части. Конкурентный research не устанавливает частоту этих потребностей у конкретных пользователей: приоритеты нужно проверить наблюдением за их реальными задачами.</p>
+<footer>Подготовлено 11 октября 2026. Проектные предложения не внедрены в рабочее приложение. <a href="competitors.md">Исходный Markdown</a></footer></main></body></html>

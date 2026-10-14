@@ -1,12 +1,12 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PrompterOutput, PrompterResult } from '../../src/core/llm/buildPrompter.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
 import type { GenProvider } from '../../src/server/gen/provider.ts';
 import { createGenRuntime } from '../../src/server/gen/runtime.ts';
-import type { LlmRequest } from '../../src/server/llm/claudeCli/provider.ts';
+import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
 const headers = { host: `${HOST}:${PORT}`, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };
@@ -43,6 +43,25 @@ const good: PrompterOutput = {
 };
 
 describe('POST /api/llm/prompter', () => {
+  it.each([
+    { common: undefined, role: undefined, expected: 'gpt-6-astra' },
+    { common: 'gpt-shared-test', role: undefined, expected: 'gpt-shared-test' },
+    { common: 'gpt-shared-test', role: 'gpt-role-test', expected: 'gpt-role-test' },
+  ])('выбор LLM: роль $role, общий $common → $expected; медиа остаётся в Higgsfield', async ({ common, role, expected }) => {
+    vi.stubEnv('SP_LLM_MODEL', common);
+    vi.stubEnv('SP_PROMPTER_MODEL', role);
+    try {
+      const { calls, post } = setup([good]);
+      const response = await post({ ideaRu: 'фото со вспышкой', kind: 'image', modelId: 'auto' });
+      expect(response.status).toBe(200);
+      expect(calls[0]?.model).toBe(expected);
+      expect(calls[0]).not.toHaveProperty('fallbackModel');
+      expect(((await response.json()) as { result: PrompterResult }).result.modelId).toBe('higgsfield/soul-2');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('системный промпт = правила + маршрутизация + карточки кандидатов; плохой ответ уходит на ремонт', async () => {
     const { calls, post } = setup([{ ...good, prompt: 'Ночная вечеринка со вспышкой.' }, good]);
     const res = await post({ ideaRu: 'я смеюсь на вечеринке, фото со вспышкой', kind: 'image', modelId: 'auto' });

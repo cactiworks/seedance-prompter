@@ -3,9 +3,11 @@ import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } f
 import { seedanceInputs } from '../../core/canvas/seedance.ts';
 import { findModel, formatCost, modelsOf, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import { inputsOf, RESIZE_PRESETS, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
+import type { MediaItem } from '../../core/model/media.ts';
 import { extractFrame, hasRefsConsent, importMedia, isActive, measureInput, mediaUrl, resizeMedia, savedMediaOf, thumbOf, trimVideo, uploadImage, useGen, type MeasuredInput } from '../gen/genStore.ts';
 import { ParamField } from '../studio/Controls.tsx';
-import { STATUS_RU } from '../studio/JobTile.tsx';
+import { retryable, STATUS_RU } from '../studio/JobTile.tsx';
+import { DownloadMediaButton, MediaPreview } from '../studio/MediaPreview.tsx';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
@@ -19,6 +21,34 @@ export function portsOf(node: CanvasNode): InputPort[] {
 }
 
 const round1 = (v: number): number => Math.round(v * 10) / 10;
+
+/** Один мост из любого сохранённого результата в правку и выдачу файла. */
+function SavedResultActions({ mediaId }: { mediaId: string }) {
+  const { library, addRef } = useGen();
+  const [open, setOpen] = useState<MediaItem | null>(null);
+  const item = library.find((m) => m.id === mediaId);
+  if (item === undefined) return null;
+  return (
+    <>
+      <div className={styles.nodeRow} data-guide="canvas-result" onPointerDown={(event) => event.stopPropagation()}>
+        <Button variant="border" size="xs" onClick={() => setOpen(item)}>
+          Открыть и править
+        </Button>
+        <DownloadMediaButton item={item} size="xs" />
+      </div>
+      <MediaPreview
+        item={open}
+        initialTab="edit"
+        onClose={() => setOpen(null)}
+        onUseAsRef={(source, target) => {
+          addRef(target, { label: 'Из Canvas', source: { type: 'media', mediaId: source.id } });
+          setOpen(null);
+          window.location.hash = target === 'image' ? '/images' : '/video';
+        }}
+      />
+    </>
+  );
+}
 
 /**
  * Обрезка видео (решение 35): начало и конец в секундах, «сейчас» берёт позицию плеера. Правка отрезка сбрасывает
@@ -77,6 +107,7 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
         {problems[0] ?? `${node.end === 0 ? 'Конец 0 — до конца видео. ' : ''}${length === null ? '' : `Отрезок: ${length.toFixed(1)} с`}`}
       </Text>
       {node.mediaId !== null && <video className={styles.nodeVideo} src={mediaUrl(node.mediaId)} controls muted playsInline loop />}
+      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <Button variant="border" size="s" icon={<Icon name="time" size={0.875} />} loading={busy} disabled={problems.length > 0} onClick={() => void cut()}>
         {node.mediaId === null ? 'Обрезать · бесплатно' : 'Обрезать заново'}
       </Button>
@@ -123,6 +154,7 @@ function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
           </Text>
         </div>
       )}
+      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <div className={styles.nodeRow}>
         <input
           ref={file}
@@ -218,6 +250,7 @@ function ResizeBody({ node }: { node: CanvasNode }) {
           </Text>
         </div>
       )}
+      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <Button variant="border" size="s" icon={<Icon name="apps" size={0.875} />} loading={busy} disabled={input?.source == null} onClick={() => void run()}>
         {node.mediaId === null ? 'Подогнать · бесплатно' : 'Подогнать заново'}
       </Button>
@@ -294,10 +327,13 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
 /** Выход ноды с запусками (генератор, апскейл, Seedance-промптер): выбранный вариант или статус задачи, листалка ‹ n/N ›. */
 function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image' | 'video'; emptyRu: string }) {
   const { patchNode } = useCanvas();
-  const jobs = useGen((s) => s.jobs);
+  const { jobs, retry } = useGen();
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const current = node.jobIds[node.selected];
   const job = current === undefined ? undefined : jobs.find((j) => j.id === current);
   const media = current === undefined ? null : savedMediaOf(jobs, current);
+  useEffect(() => setRetryError(null), [current]);
   return (
     <div className={styles.nodeResult}>
       {media !== null ? (
@@ -316,8 +352,30 @@ function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image
               {job.error.messageRu}
             </Text>
           )}
+          {job !== undefined && retryable(job) && (
+            <Button
+              variant="border"
+              size="xs"
+              loading={retrying}
+              onClick={() => {
+                setRetrying(true);
+                setRetryError(null);
+                void retry(job.id)
+                  .catch((error: unknown) => setRetryError(error instanceof Error ? error.message : 'Не удалось повторить проверку.'))
+                  .finally(() => setRetrying(false));
+              }}
+            >
+              {job.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}
+            </Button>
+          )}
+          {retryError !== null && (
+            <Text variant="caption" tone="accent">
+              {retryError}
+            </Text>
+          )}
         </div>
       )}
+      {media !== null && <SavedResultActions mediaId={media} />}
       {node.jobIds.length > 1 && (
         <div className={styles.iterations}>
           <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
@@ -492,7 +550,10 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         if (node.type === 'image') void setImage(f);
         else
           void importMedia(f)
-            .then((item) => patchNode(node.id, { mediaId: item.id, label: f.name }))
+            .then((item) => {
+              patchNode(node.id, { mediaId: item.id, label: f.name });
+              void loadLibrary();
+            })
             .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Видео не загрузилось.'));
       }}
     >
@@ -536,6 +597,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
                 </Text>
               </div>
             )}
+            {node.source?.type === 'media' && <SavedResultActions mediaId={node.source.mediaId} />}
             <div className={styles.nodeRow}>
               <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => event.target.files?.[0] !== undefined && void setImage(event.target.files[0])} />
               <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => file.current?.click()}>
@@ -569,6 +631,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
                 </Text>
               </div>
             )}
+            {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
             <Button variant="border" size="s" icon={<Icon name="layers" size={0.875} />} loading={busy} disabled={frameIn?.mediaId === null || frameIn === null} onClick={() => void extract()}>
               {node.mediaId === null ? 'Извлечь кадр · бесплатно' : 'Извлечь заново'}
             </Button>

@@ -23,9 +23,11 @@ import { agentShooting, buildShot, type PackBundle } from '../core/pipeline.ts';
 import { cropArgs, frameArgs, resizeArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
 import { GEN_HTTP, GenError } from './gen/provider.ts';
 import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
-import type { ImageInput } from './llm/claudeCli/args.ts';
-import { LlmError, runClaude } from './llm/claudeCli/provider.ts';
+import type { ImageInput } from './llm/codexCli/args.ts';
+import { DEFAULT_LLM_MODEL, LlmError, runCodex } from './llm/codexCli/provider.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
+import { createProductionRuntime, type ProductionRuntime } from './production/runtime.ts';
+import { productionRoutes } from './production/routes.ts';
 import { createFlows } from './storage/flows.ts';
 import { createJournal } from './storage/journal.ts';
 import { createMoodboards } from './storage/moodboards.ts';
@@ -64,6 +66,7 @@ export interface AppOptions {
   /** Подменяется в тестах: живой вызов тратит квоту подписки. */
   runLlm?: Runner;
   writerModel?: string;
+  production?: ProductionRuntime;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
   /** Генерация и библиотека. По умолчанию — живые провайдеры, фоновый опрос не запущен (его запускает index.ts). */
@@ -138,6 +141,8 @@ export function createApp(options: AppOptions) {
     return c.json({ error: 'INTERNAL', messageRu: 'Внутренняя ошибка сервера.' }, 500);
   });
 
+  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm })));
+
   const routes = app
     .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION }))
     .get('/api/packs/:id', (c) => c.json(loadPack(options.rootDir, c.req.param('id'))))
@@ -182,8 +187,8 @@ export function createApp(options: AppOptions) {
           pack: loadPack(options.rootDir, project.packId),
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
-          run: options.runLlm ?? runClaude,
-          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus',
+          run: options.runLlm ?? runCodex,
+          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
           signal: c.req.raw.signal,
         });
         return c.json(result);
@@ -203,8 +208,8 @@ export function createApp(options: AppOptions) {
       const asked = items.filter((item) => item.ru !== '');
       if (asked.length === 0) return c.json({ items, output: null, problems: [], meta: null });
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/fields.system.md'), 'utf8');
-      const run = options.runLlm ?? runClaude;
-      const request = { system, jsonSchema: FIELDS_SCHEMA, model: options.writerModel ?? process.env.SP_FIELDS_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'low' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
+      const run = options.runLlm ?? runCodex;
+      const request = { system, jsonSchema: FIELDS_SCHEMA, model: options.writerModel ?? process.env.SP_FIELDS_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
       try {
         const user = buildFieldsUser(project, items);
         let result = await run<FieldsOutput>({ ...request, user });
@@ -235,8 +240,8 @@ export function createApp(options: AppOptions) {
       const system = buildCriticSystem(readFileSync(path.join(packDir, 'prompts/critic.system.md'), 'utf8'), catalog);
       const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries, shooting: agentShooting(shot, pack) });
       try {
-        // Критик читает ~12 тыс. токенов и пишет длинный JSON: на opus это не укладывалось в 240 с, по умолчанию — sonnet.
-        const result = await (options.runLlm ?? runClaude)<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
+        // Критик читает большой контекст и пишет длинный JSON; сохраняем отдельный лимит времени.
+        const result = await (options.runLlm ?? runCodex)<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
         const verified = verifyCritique(result.data, build.resolvedParagraphs);
         return c.json({ critique: { ...verified.critique, prompt: build.prompt, createdAt: new Date().toISOString(), model: result.meta.model, droppedRu: verified.droppedRu }, meta: result.meta });
       } catch (error) {
@@ -274,8 +279,8 @@ export function createApp(options: AppOptions) {
           pack: loadPack(options.rootDir, project.packId),
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
-          run: options.runLlm ?? runClaude,
-          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus',
+          run: options.runLlm ?? runCodex,
+          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
           signal: c.req.raw.signal,
           fix: { symptoms, workedRu: attempt.workedRu, failedRu: attempt.failedRu },
         });
@@ -286,7 +291,7 @@ export function createApp(options: AppOptions) {
       }
     })
     .get('/api/packs/:id/symptoms', (c) => c.json(JSON.parse(readFileSync(path.join(options.rootDir, 'packs', c.req.param('id'), 'symptoms.json'), 'utf8')) as unknown))
-    // Vision-анализ одного референса — только по кнопке: картинка уходит в Anthropic.
+    // Vision-анализ одного референса — только по кнопке: картинка уходит в OpenAI через Codex.
     // Отправляется уменьшенная копия <key>-vision.jpg, которую браузер делает при загрузке.
     .post('/api/llm/vision', async (c) => {
       const body = (await c.req.json()) as { slug?: string; refKey?: string };
@@ -300,12 +305,12 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'NO_VISION_COPY', messageRu: 'Нет уменьшенной копии для анализа — загрузи картинку референса заново.' }, 422);
       }
       try {
-        const result = await (options.runLlm ?? runClaude)<VisionOutput>({
+        const result = await (options.runLlm ?? runCodex)<VisionOutput>({
           system: VISION_SYSTEM,
           user: buildVisionUser(ref),
           images: [{ mediaType: 'image/jpeg', base64: Buffer.from(bytes).toString('base64') }],
           jsonSchema: VISION_SCHEMA,
-          model: process.env.SP_VISION_MODEL ?? 'sonnet',
+          model: process.env.SP_VISION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
           effort: 'low',
           timeoutMs: 90_000,
           signal: c.req.raw.signal,
@@ -330,8 +335,8 @@ export function createApp(options: AppOptions) {
       if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/planner.system.md'), 'utf8');
-      const run = options.runLlm ?? runClaude;
-      const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? 'opus', fallbackModel: 'sonnet', effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
+      const run = options.runLlm ?? runCodex;
+      const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
         const user = buildPlannerUser(project, text, lineIds, durationSec, shooting);
         let result = await run<PlannerOutput>({ ...request, user });
@@ -357,8 +362,8 @@ export function createApp(options: AppOptions) {
       const problems = valid ? regionProblems(boxes, instructionRu) : ['Рамки выделения не прочитаны.'];
       if (problems.length > 0) return c.json({ error: 'BAD_REGION', messageRu: problems.join(' ') }, 422);
       if (!needsTranslation(instructionRu)) return c.json({ prompt: buildRegionPrompt(boxes, instructionRu), instructionEn: instructionRu, meta: null });
-      const run = options.runLlm ?? runClaude;
-      const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: process.env.SP_EDIT_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'low' as const, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
+      const run = options.runLlm ?? runCodex;
+      const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: process.env.SP_EDIT_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
       try {
         const user = buildEditInstructionUser(instructionRu, boxes.length);
         let result = await run<EditInstructionOutput>({ ...request, user });
@@ -458,8 +463,8 @@ export function createApp(options: AppOptions) {
       );
       // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
       const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
-      const run = options.runLlm ?? runClaude;
-      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? 'sonnet', fallbackModel: 'sonnet', effort: 'medium' as const, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
+      const run = options.runLlm ?? runCodex;
+      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
       try {
         const user = buildPrompterUser(request, candidates, styles, camera, template);
         let result = await run<PrompterOutput>({ ...llm, user });

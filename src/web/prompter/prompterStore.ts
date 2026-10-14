@@ -8,7 +8,7 @@ import { downscale } from '../store.ts';
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
 const HISTORY_KEY = 'sp-prompter-history';
 const HISTORY_MAX = 20;
-const CONSENT_KEY = 'sp-prompter-images-consent';
+const CONSENT_KEY = 'sp-prompter-images-consent-openai-v1';
 
 /** Картинка в форме промптера: откуда она, зачем (роль) и что о ней сказал владелец. */
 export interface PrompterFormRef {
@@ -58,7 +58,7 @@ function writeHistory(list: PrompterEntry[]): void {
   }
 }
 
-/** Согласие показывать картинки агенту (они уходят в Claude, Anthropic) — до закрытия вкладки. */
+/** Согласие показывать картинки агенту (они уходят в OpenAI через Codex) — до закрытия вкладки. */
 export function hasImagesConsent(): boolean {
   try {
     return sessionStorage.getItem(CONSENT_KEY) === '1';

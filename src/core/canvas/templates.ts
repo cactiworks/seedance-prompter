@@ -43,8 +43,8 @@ const ROW = 420;
 export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   {
     id: 'storyboard-seedance',
-    titleRu: 'Шоты → Seedance-промптер',
-    descriptionRu: 'Три кадра раскадровки в GPT Image 2.5 сходятся в один Seedance-промптер — ролик собирается по ним. Черновик — в 480p, утверждённый дубль доводит апскейл Topaz.',
+    titleRu: 'Снять видео по раскадровке',
+    descriptionRu: 'Три изображения → Seedance-промптер → видео и апскейл.',
     build: (newId) =>
       assemble(
         newId,
@@ -71,8 +71,8 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   },
   {
     id: 'image-to-video',
-    titleRu: 'Картинка → видео',
-    descriptionRu: 'Кадр в GPT Image 2.5, затем он же — стартовый кадр ролика Kling 3.0.',
+    titleRu: 'Создать и оживить изображение',
+    descriptionRu: 'Сгенерируй изображение и используй его как первый кадр видео.',
     build: (newId) =>
       assemble(
         newId,
@@ -91,8 +91,8 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   },
   {
     id: 'clip-chain',
-    titleRu: 'Сцена из клипов',
-    descriptionRu: 'Три клипа Seedance 2.5 подряд: последний кадр каждого — старт следующего, сцена склеивается.',
+    titleRu: 'Продолжить сцену в клипах',
+    descriptionRu: 'Последний кадр клипа станет началом следующего. Клипы сохраняются отдельно.',
     build: (newId) =>
       assemble(
         newId,
@@ -119,8 +119,8 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   },
   {
     id: 'character-scenes',
-    titleRu: 'Персонаж → сцены',
-    descriptionRu: 'Фото человека → лист персонажа в Seedream 5 Pro → две сцены с ним в GPT Image 2.5 по листу.',
+    titleRu: 'Перенести персонажа в сцены',
+    descriptionRu: 'Фото → лист персонажа → две сцены с общим референсом внешности.',
     build: (newId) =>
       assemble(
         newId,

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="854" viewBox="0 0 480 854">
+    <rect width="480" height="854" fill="#ddd8cb"/>
+    <svg y="65" width="480" height="724" viewBox="0 0 480 854" preserveAspectRatio="xMidYMid slice">
+      <rect width="480" height="854" fill="#d8d5c9"/>
+      <path d="M0 0H350V574L0 660Z" fill="#ebe7dc"/><path d="M350 0H480V654L350 574Z" fill="#c3bfae"/>
+      <path d="M0 660L350 574L480 654V854H0Z" fill="#afa18b"/>
+      <path d="M22 130L182 113V425L22 477Z" fill="#8e9992" stroke="#faf9ef" stroke-width="14"/>
+      <path d="M29 226L178 207M100 125V449" stroke="#faf9ef" stroke-width="8"/>
+      <path d="M34 405L166 359L169 416L34 459Z" fill="#b8c4b8"/>
+      <path d="M183 437L380 390L461 465L236 539Z" fill="#a57f5d"/><path d="M236 539L461 465V482L237 556Z" fill="#705841"/>
+      <path d="M244 552V717M437 491V670" stroke="#645945" stroke-width="16"/>
+      <path d="M271 434L323 420L353 449L292 469Z" fill="#eee7d4" stroke="#6d745f" stroke-width="3"/>
+      <path d="M286 441L322 432M294 451L330 439" stroke="#a49f8c" stroke-width="2"/>
+      <ellipse cx="370" cy="425" rx="20" ry="10" fill="#726a59"/><path d="M350 423V452Q370 470 390 449V423" fill="#e2cdaa"/><ellipse cx="370" cy="423" rx="20" ry="9" fill="#faf1d6"/><ellipse cx="370" cy="424" rx="13" ry="5" fill="#8e6d4f"/>
+      <path d="M389 432C420 419 419 460 389 454" fill="none" stroke="#d1b991" stroke-width="7"/>
+
+      <ellipse cx="180" cy="719" rx="53" ry="10" fill="#8b8170"/>
+      <path d="M137 408Q147 377 174 382Q197 388 205 432L219 555L135 560Z" fill="#364846"/>
+      <path d="M143 548L137 699L160 705L182 576L183 710L207 708L214 549Z" fill="#283835"/>
+      <path d="M197 429Q231 454 275 443" stroke="#364846" stroke-width="30" fill="none" stroke-linecap="round"/>
+      <path d="M270 443L294 438" stroke="#c99575" stroke-width="14" stroke-linecap="round"/>
+      <path d="M154 395L165 374L180 377L184 403" fill="#c99575"/>
+      <ellipse cx="172" cy="349" rx="30" ry="39" fill="#c99575"/>
+      <path d="M142 354Q129 299 177 305Q208 308 203 339L183 331L168 344Z" fill="#3c3931"/>
+      <path d="M361 231L428 250V321L361 306Z" fill="#ece6d5" stroke="#79776c" stroke-width="4"/>
+      <path d="M374 275L394 250L415 296Z" fill="#879084"/>
+    </svg>
+    <text x="24" y="34" font-family="sans-serif" font-size="13" fill="#494c45" letter-spacing="2">PRODUCTION / MOCK</text>
+    <text x="24" y="813" font-family="sans-serif" font-size="16" fill="#494c45">Кадр 01 · правка</text>
+    <text x="24" y="836" font-family="sans-serif" font-size="11" fill="#6d7067">Локальный макет · не результат AI-генерации</text></svg>

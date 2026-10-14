@@ -24,40 +24,39 @@ export function FlowList() {
   }, [loadFlows]);
   return (
     <>
-      <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newFlow} onClick={() => void newFlow()}>
-        Новый flow
+      <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newFlow} onClick={() => void newFlow({ name: 'Новый холст', nodes: [], edges: [] })}>
+        Создать холст
       </Button>
       <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
-        Шаблоны — откроются новым flow
+        Мои холсты
       </Text>
-      <nav className={styles.flowList}>
-        {FLOW_TEMPLATES.map((t) => (
-          <div key={t.id} className={styles.flowItem}>
-            <button type="button" className={styles.flowLabel} title={t.descriptionRu} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
-              <span>{t.titleRu}</span>
-              <Icon name="plus" size={0.875} />
-            </button>
-          </div>
-        ))}
-      </nav>
-      <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
-        Flows
-      </Text>
-      <nav className={styles.flowList}>
+      <nav className={styles.flowList} aria-label="Мои холсты">
         {flows.map((f) => (
           <div key={f.id} className={`${styles.flowItem} ${f.id === flow?.id ? styles.flowItemActive : ''}`}>
-            <button type="button" className={styles.flowLabel} onClick={() => void openFlow(f.id)}>
+            <button type="button" className={styles.flowLabel} aria-current={f.id === flow?.id ? 'page' : undefined} onClick={() => void openFlow(f.id)}>
               <span>{f.name}</span>
               <Text as="span" variant="caption" tone="tertiary">
                 {f.nodes}
               </Text>
             </button>
-            <button type="button" className={styles.flowDelete} title="Удалить flow (файлы генераций останутся в библиотеке)" onClick={() => void deleteFlow(f.id)}>
+            <button type="button" className={styles.flowDelete} aria-label={`Удалить холст «${f.name}»`} title="Удалить холст (файлы генераций останутся в библиотеке)" onClick={() => void deleteFlow(f.id)}>
               <Icon name="bin" size={0.875} />
             </button>
           </div>
         ))}
       </nav>
+      {flows.length === 0 && <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>Здесь будут твои работы.</Text>}
+      <details className={styles.sidebarTemplates}>
+        <summary>Шаблоны холстов</summary>
+        <nav className={styles.flowList} aria-label="Шаблоны холстов">
+          {FLOW_TEMPLATES.map((t) => (
+            <button key={t.id} type="button" className={styles.flowLabel} title={t.descriptionRu} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
+              <span>{t.titleRu}</span>
+              <Icon name="plus" size={0.875} />
+            </button>
+          ))}
+        </nav>
+      </details>
     </>
   );
 }
@@ -99,6 +98,7 @@ export function Canvas() {
   const { library, loadJobs, loadLibrary } = useGen();
   const board = useRef<HTMLDivElement>(null);
   const importer = useRef<HTMLInputElement>(null);
+  const addMenu = useRef<HTMLDetailsElement>(null);
   /** Связь дошла до входа — меню «в пустоту» не нужно. */
   const linked = useRef(false);
   const [linkMenu, setLinkMenu] = useState<{ from: string; screenX: number; screenY: number; x: number; y: number } | null>(null);
@@ -107,6 +107,14 @@ export function Canvas() {
   const [picker, setPicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
   const [consent, setConsent] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    const dismiss = (event: PointerEvent): void => {
+      if (addMenu.current !== null && !addMenu.current.contains(event.target as Node)) addMenu.current.open = false;
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, []);
 
   useEffect(() => {
     void loadJobs();
@@ -187,6 +195,7 @@ export function Canvas() {
     const el = board.current;
     if (el === null) return;
     const onWheel = (event: WheelEvent): void => {
+      if (event.target instanceof Element && event.target.closest(`.${styles.emptyBoard}`) !== null) return;
       event.preventDefault();
       const f = useCanvas.getState().flow;
       if (f === null) return;
@@ -210,6 +219,7 @@ export function Canvas() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const tag = (event.target as HTMLElement | null)?.tagName ?? '';
+      if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]') !== null) return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
       // Поверх холста открыт Seedance-промптер: Delete, ⌘Z и ⌘A относятся к нему, а не к нодам под ним.
       if (useStore.getState().host !== null) return;
@@ -234,7 +244,7 @@ export function Canvas() {
       } else if (mod && key === 'c') {
         const text = copySelected();
         const n = useCanvas.getState().selection.length;
-        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? `Скопировано нод: ${n}, со связями между ними — ⌘V вставит сюда или в другой flow.` : 'Нода скопирована — ⌘V вставит её сюда или в другой flow.'));
+        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? `Скопировано блоков: ${n}, со связями — ⌘V вставит сюда или на другой холст.` : 'Блок скопирован — ⌘V вставит его сюда или на другой холст.'));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -245,6 +255,7 @@ export function Canvas() {
   useEffect(() => {
     const onPaste = (event: ClipboardEvent): void => {
       const tag = (event.target as HTMLElement | null)?.tagName ?? '';
+      if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]') !== null) return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || useCanvas.getState().flow === null || useStore.getState().host !== null) return;
       const at = centerWorld();
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
@@ -269,13 +280,13 @@ export function Canvas() {
     return (
       <div className={styles.emptyPage}>
         <Text variant="title-m" medium>
-          Canvas
+          Вся работа — на одном холсте
         </Text>
         <Text variant="label" tone="secondary">
-          Нодовый воркфлоу: промпты, картинки и генераторы, связанные между собой.
+          Собери референсы, создавай изображения и видео, дорабатывай результат для клиента.
         </Text>
-        <Button variant="primary" size="m" icon={<Icon name="plus" size={1} />} onClick={() => void newFlow()}>
-          Новый flow
+        <Button variant="primary" size="m" icon={<Icon name="plus" size={1} />} data-guide="canvas-create" onClick={() => void newFlow({ name: 'Новый холст', nodes: [], edges: [] })}>
+          Создать холст
         </Button>
         <Text variant="caption" tone="tertiary">
           или начни с шаблона
@@ -314,7 +325,7 @@ export function Canvas() {
     setAct(null);
     if (from === undefined) return;
     if (!portAccepts(port, outputOf(from))) {
-      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается нода промпта.' : port === 'video' ? 'Во вход «Видео» подключается видео: генератор, своё видео или обрезка.' : port === 'media' ? 'Во вход «Файл» подключается картинка или видео.' : 'Во вход картинки подключается картинка, кадр или генератор картинки.');
+      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается блок с текстом промпта.' : port === 'video' ? 'Во вход «Видео» подключается видео: генератор, своё видео или обрезка.' : port === 'media' ? 'Во вход «Файл» подключается изображение или видео.' : 'Во вход изображения подключается изображение, стоп-кадр или генератор изображения.');
       return;
     }
     const problem = connect(from.id, node.id, port);
@@ -328,20 +339,20 @@ export function Canvas() {
     const out = outputOf(from);
     if (out === 'text')
       return [
-        { label: 'Генератор картинки', type: 'generator', kind: 'image', port: 'prompt' },
-        { label: 'Генератор видео', type: 'generator', kind: 'video', port: 'prompt' },
+        { label: 'Создать изображение', type: 'generator', kind: 'image', port: 'prompt' },
+        { label: 'Создать видео', type: 'generator', kind: 'video', port: 'prompt' },
       ];
     if (out === 'video')
       return [
-        { label: 'Кадр из видео', type: 'frame', kind: 'image', port: 'video' },
+        { label: 'Извлечь стоп-кадр', type: 'frame', kind: 'image', port: 'video' },
         { label: 'Обрезка видео', type: 'trim', kind: 'image', port: 'video' },
         { label: 'Размер под площадку', type: 'resize', kind: 'video', port: 'media' },
         { label: 'Апскейл Topaz', type: 'upscale', kind: 'video', port: 'media' },
       ];
     return [
-      { label: 'Генератор картинки · референс', type: 'generator', kind: 'image', port: 'ref' },
-      { label: 'Генератор видео · старт-кадр', type: 'generator', kind: 'video', port: 'start' },
-      { label: 'Seedance-промптер · в панель', type: 'seedance', kind: 'image', port: 'ref' },
+      { label: 'Создать изображение по референсу', type: 'generator', kind: 'image', port: 'ref' },
+      { label: 'Оживить изображение', type: 'generator', kind: 'video', port: 'start' },
+      { label: 'Добавить в Seedance-промптер', type: 'seedance', kind: 'image', port: 'ref' },
       { label: 'Размер под площадку', type: 'resize', kind: 'image', port: 'media' },
       { label: 'Апскейл Topaz', type: 'upscale', kind: 'image', port: 'media' },
     ];
@@ -386,7 +397,16 @@ export function Canvas() {
       });
       await newFlow({ name: parsed.name, nodes, edges });
     } catch {
-      setHint('Это не flow: файл не читается как экспорт canvas.');
+      setHint('Не удалось открыть схему. Выбери JSON-файл, сохранённый кнопкой «Сохранить схему».');
+    }
+  };
+
+  const addBlock = (type: CanvasNode['type'], kind: 'image' | 'video' = 'image'): void => {
+    const at = centerWorld();
+    addNode(type, at.x, at.y, kind);
+    if (addMenu.current !== null) {
+      addMenu.current.open = false;
+      addMenu.current.querySelector('summary')?.focus();
     }
   };
 
@@ -395,47 +415,63 @@ export function Canvas() {
   return (
     <div className={styles.canvas}>
       <header className={styles.head}>
-        <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label="Название flow" />
-        <Text variant="caption" tone="secondary">
-          {flow.nodes.length} нод · {SAVE_RU[save]}
-          {error !== null && save === 'error' ? ` · ${error}` : ''}
-        </Text>
+        <div className={styles.flowIdentity} data-guide="canvas-save">
+          <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label="Название холста" />
+          <Text variant="caption" tone={save === 'error' ? 'primary' : 'tertiary'}>
+            {SAVE_RU[save]}{error !== null && save === 'error' ? ` · ${error}` : ''}
+          </Text>
+        </div>
         <span className={styles.grow} />
-        <Button variant="soft" size="xs" icon={<Icon name="pencil" size={0.875} />} onClick={() => addNode('prompt', centerWorld().x, centerWorld().y)}>
-          Промпт
+        <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title="Скачать схему холста в JSON. Медиафайлы скачиваются из результата.">
+          Сохранить схему
         </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="image" size={0.875} />} onClick={() => addNode('image', centerWorld().x, centerWorld().y)}>
-          Картинка
+        <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title="Открыть сохранённую схему холста из JSON">
+          Открыть схему
         </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="sparkles" size={0.875} />} title="Нода-генератор картинки" onClick={() => addNode('generator', centerWorld().x, centerWorld().y, 'image')}>
-          Ген. картинки
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="video" size={0.875} />} title="Нода-генератор видео" onClick={() => addNode('generator', centerWorld().x, centerWorld().y, 'video')}>
-          Ген. видео
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="options" size={0.875} />} title="Seedance-промптер — полный конструктор кадра «Кадров»: съёмка, камера, рефы по номерам, сценарий по шотам, генерация" onClick={() => addNode('seedance', centerWorld().x, centerWorld().y)}>
-          Seedance-промптер
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="layers" size={0.875} />} title="Первый / последний кадр видео — старт-кадр следующего клипа" onClick={() => addNode('frame', centerWorld().x, centerWorld().y)}>
-          Кадр
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="upload" size={0.875} />} title="Своё видео с диска или из библиотеки — его можно резать и брать кадр" onClick={() => addNode('video', centerWorld().x, centerWorld().y)}>
-          Видео
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="time" size={0.875} />} title="Обрезать видео по времени — бесплатно, локально" onClick={() => addNode('trim', centerWorld().x, centerWorld().y)}>
-          Обрезка
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="apps" size={0.875} />} title="Картинку или видео — под размер площадки (1080×1920 и др.), бесплатно" onClick={() => addNode('resize', centerWorld().x, centerWorld().y)}>
-          Размер
-        </Button>
-        <Button variant="soft" size="xs" icon={<Icon name="push" size={0.875} />} title="Апскейл Topaz картинки или видео — тот же кадр или дубль, больше пикселей; платно, цена на кнопке ноды" onClick={() => addNode('upscale', centerWorld().x, centerWorld().y)}>
-          Апскейл
-        </Button>
+        <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(event) => event.target.files?.[0] !== undefined && void importFlow(event.target.files[0]).finally(() => (event.target.value = ''))} />
+        <details
+          ref={addMenu}
+          className={styles.addMenu}
+          data-guide="canvas-add"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector('summary')?.focus();
+          }}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
+          }}
+        >
+          <summary className={styles.addTrigger}><Icon name="plus" size={1} />Добавить</summary>
+          <div className={styles.addPanel}>
+            <div className={styles.addGroup} role="group" aria-label="Материал">
+              <Text variant="caption" tone="tertiary">Материал</Text>
+              <button type="button" onClick={() => addBlock('image')}><Icon name="image" size={1} />Изображение</button>
+              <button type="button" onClick={() => addBlock('video')}><Icon name="video" size={1} />Видео</button>
+            </div>
+            <div className={styles.addGroup} role="group" aria-label="Создать">
+              <Text variant="caption" tone="tertiary">Создать</Text>
+              <button type="button" onClick={() => addBlock('generator', 'image')}><Icon name="sparkles" size={1} />Изображение</button>
+              <button type="button" onClick={() => addBlock('generator', 'video')}><Icon name="video" size={1} />Видео</button>
+              <button type="button" onClick={() => addBlock('seedance')}><Icon name="options" size={1} />Seedance-промптер</button>
+              <button type="button" onClick={() => addBlock('prompt')}><Icon name="pencil" size={1} />Текст промпта</button>
+            </div>
+            <div className={styles.addGroup} role="group" aria-label="Обработать">
+              <Text variant="caption" tone="tertiary">Обработать</Text>
+              <button type="button" onClick={() => addBlock('frame')}><Icon name="layers" size={1} />Стоп-кадр</button>
+              <button type="button" onClick={() => addBlock('trim')}><Icon name="time" size={1} />Обрезка видео</button>
+              <button type="button" onClick={() => addBlock('resize')}><Icon name="apps" size={1} />Размер под площадку</button>
+              <button type="button" onClick={() => addBlock('upscale')}><Icon name="push" size={1} />Апскейл Topaz</button>
+            </div>
+          </div>
+        </details>
       </header>
 
       <div
         ref={board}
         className={styles.board}
+        data-guide="canvas-board"
         style={{ backgroundPosition: `${viewport.x}px ${viewport.y}px`, backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px` }}
         onPointerDown={(event) => {
           if (event.target !== event.currentTarget) return;
@@ -504,25 +540,23 @@ export function Canvas() {
 
         {flow.nodes.length === 0 && (
           <div className={styles.emptyBoard}>
-            <span className={styles.emptyIcon}>
-              <Icon name="layers" size={1.5} />
-            </span>
             <Text variant="title-m" medium>
-              Собери свой воркфлоу
+              С чего начнём?
             </Text>
             <Text variant="label" tone="secondary">
-              Перетащи картинку на холст, двойной клик — нода промпта. Выход ноды тяни ко входу генератора.
+              Добавь блок или перетащи изображение или видео на холст.
             </Text>
             <div className={styles.emptyActions}>
-              <Button variant="border" size="s" icon={<Icon name="pencil" size={1} />} onClick={() => addNode('prompt', centerWorld().x, centerWorld().y)}>
-                Промпт
-              </Button>
-              <Button variant="border" size="s" icon={<Icon name="sparkles" size={1} />} onClick={() => addNode('generator', centerWorld().x + 320, centerWorld().y, 'image')}>
-                Генератор картинки
+              <Button variant="primary" size="s" icon={<Icon name="plus" size={1} />} onClick={() => {
+                if (addMenu.current === null) return;
+                addMenu.current.open = true;
+                addMenu.current.querySelector('summary')?.focus();
+              }}>
+                Добавить блок
               </Button>
             </div>
             <Text variant="caption" tone="tertiary">
-              или начни с шаблона — он откроется новым flow
+              Или выбери шаблон — откроется на новом холсте
             </Text>
             <TemplateCards />
           </div>
@@ -541,7 +575,7 @@ export function Canvas() {
         {selection.length > 1 && (
           <div className={styles.selectionBar}>
             <Text variant="caption" tone="secondary">
-              Выделено: {selection.length} · перетащи любую — двинется группа · ⌘C / ⌘D / Delete
+              Выделено: {selection.length} · перетащи блок — двинется группа · ⌘C / ⌘D / Delete
             </Text>
           </div>
         )}
@@ -568,12 +602,12 @@ export function Canvas() {
             <Icon name="close" size={0.75} />
           </button>
         )}
-        {/* Плавающая группа, как в дизайн-инструментах: вписать, масштаб, экспорт / импорт. */}
+        {/* Плавающая группа: история, масштаб и оценка генераций. */}
         <div className={styles.zoom}>
           {cost.usd > 0 && (
-            <span className={styles.cost} title="Сумма по одному запуску каждого генератора. Всё разом не запускается — только нода, которую нажал.">
+            <span className={styles.cost} title="Оценка одного запуска каждого генератора. Каждый блок запускается отдельно, с ценой на кнопке.">
               <Text as="span" variant="caption" tone="secondary">
-                прогон всех ≈ ${cost.usd}
+                Генерации ≈ ${cost.usd}
                 {cost.credits > 0 ? ` · ${cost.credits} кр` : ''}
               </Text>
             </span>
@@ -584,7 +618,7 @@ export function Canvas() {
           <button type="button" onClick={redo} disabled={future.length === 0} aria-label="Повторить (⇧⌘Z)" title="Повторить (⇧⌘Z)">
             <Icon name="arrow-redo" size={0.875} />
           </button>
-          <button type="button" onClick={fit} title="Вписать все ноды">
+          <button type="button" onClick={fit} title="Показать все блоки">
             <Text as="span" variant="caption">
               Вписать
             </Text>
@@ -598,17 +632,10 @@ export function Canvas() {
           <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.min(2, viewport.zoom + 0.1) })} aria-label="Увеличить">
             <Icon name="plus" size={0.875} />
           </button>
-          <button type="button" onClick={exportFlow} aria-label="Экспорт flow в JSON" title="Экспорт flow в JSON">
-            <Icon name="download" size={0.875} />
-          </button>
-          <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(event) => event.target.files?.[0] !== undefined && void importFlow(event.target.files[0]).finally(() => (event.target.value = ''))} />
-          <button type="button" onClick={() => importer.current?.click()} aria-label="Импорт flow из JSON" title="Импорт flow из JSON">
-            <Icon name="upload" size={0.875} />
-          </button>
         </div>
       </div>
 
-      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? 'Видео из библиотеки' : 'Картинка из библиотеки'} description="Файлы с диска — ссылки провайдера для них не нужны. Свои файлы добавляются кнопкой «С диска».">
+      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? 'Видео из библиотеки' : 'Картинка из библиотеки'} description="Выбери файл для этого блока. Свои файлы можно добавить в блоке кнопкой «С диска».">
         <div className={styles.pickerGrid}>
           {library
             .filter((m) => m.kind === pickKind)
@@ -637,7 +664,7 @@ export function Canvas() {
         open={consent !== null}
         onOpenChange={(open) => !open && setConsent(null)}
         title="Отправить картинки провайдеру?"
-        description="Входные картинки ноды уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки."
+        description="Изображения этого блока уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки."
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConsent(null)}>
@@ -657,7 +684,7 @@ export function Canvas() {
         }
       >
         <Text variant="label" tone="secondary">
-          Запустится только эта нода.
+          Запустится только этот блок.
         </Text>
       </Dialog>
     </div>

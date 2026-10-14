@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { MediaKind } from '../../core/gen/models.ts';
 import { isCanvasDraft } from '../../core/model/canvas.ts';
 import { ThemeSwitch } from '../features/ThemeSwitch.tsx';
@@ -7,7 +7,8 @@ import { usePrompter } from '../prompter/prompterStore.ts';
 import { useStore } from '../store.ts';
 import { Button, Icon, Text } from '../ui/components/index.ts';
 import styles from './AppShell.module.css';
-import { ROUTE_RU, ROUTES, type Route } from './route.ts';
+import { PRIMARY_ROUTES, ROUTE_HINT, ROUTE_RU, TOOL_ROUTES, type Route } from './route.ts';
+import { CreatorGuide } from './CreatorGuide.tsx';
 
 const SIDEBAR_KEY = 'sp-sidebar';
 
@@ -32,7 +33,7 @@ function SessionList({ kind }: { kind: MediaKind }) {
   return (
     <>
       <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newButton} onClick={() => void newSession(kind)}>
-        Новая сессия
+        Новая подборка
       </Button>
       <Text variant="caption" tone="tertiary" className={styles.listTitle}>
         Недавние
@@ -40,7 +41,7 @@ function SessionList({ kind }: { kind: MediaKind }) {
       <nav className={styles.list}>
         {sessions[kind].length === 0 && (
           <Text variant="caption" tone="tertiary" className={styles.listEmpty}>
-            Сессия создастся сама при первой генерации.
+            Здесь сохраняется история генераций. Можно разделить её на подборки.
           </Text>
         )}
         {sessions[kind].map((session) => (
@@ -182,7 +183,14 @@ function ProviderCards() {
 
 export function AppShell({ route, onRoute, sidebar, children }: { route: Route; onRoute: (r: Route) => void; sidebar?: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
-  const kie = useGen((s) => s.status.kie);
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !toolsRef.current?.contains(event.target) && toolsRef.current) toolsRef.current.open = false;
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, []);
   const toggle = (): void => {
     setCollapsed((c) => {
       try {
@@ -212,7 +220,10 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
           {sidebar ?? (route === 'images' ? <SessionList kind="image" /> : route === 'video' ? <SessionList kind="video" /> : route === 'shots' ? <ProjectList /> : route === 'prompter' ? <PrompterHistory /> : null)}
         </div>
         <div className={styles.sidebarFoot}>
-          <ProviderCards />
+          <details className={styles.connections} data-guide="connections">
+            <summary>Подключения</summary>
+            <ProviderCards />
+          </details>
           <ThemeSwitch />
         </div>
       </aside>
@@ -224,19 +235,27 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
               <Icon name="chevron-forward" size={1} />
             </button>
           )}
-          <nav className={styles.tabs}>
-            {ROUTES.map((r) => (
-              <button key={r} type="button" className={`${styles.tab} ${r === route ? styles.tabActive : ''}`} onClick={() => onRoute(r)}>
+          <nav className={styles.tabs} aria-label="Разделы студии">
+            {PRIMARY_ROUTES.map((r) => (
+              <button key={r} type="button" data-guide={`nav-${r}`} aria-current={r === route ? 'page' : undefined} title={ROUTE_HINT[r]} className={`${styles.tab} ${r === route ? styles.tabActive : ''}`} onClick={() => onRoute(r)}>
                 {ROUTE_RU[r]}
               </button>
             ))}
           </nav>
-          <span className={styles.status}>
-            <span className={`${styles.dot} ${kie?.hasKey === true ? styles.dotOn : ''}`} />
-            <Text variant="caption" tone="secondary">
-              {kie?.hasKey === true ? 'KIE подключён' : 'KIE не подключён'}
-            </Text>
-          </span>
+          <details ref={toolsRef} className={styles.tools} data-guide="nav-tools" onKeyDown={(event) => {
+            if (event.key === 'Escape' && toolsRef.current) { toolsRef.current.open = false; toolsRef.current.querySelector('summary')?.focus(); }
+          }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
+            <summary className={`${styles.tab} ${TOOL_ROUTES.includes(route) ? styles.tabActive : ''}`}>
+              {TOOL_ROUTES.includes(route) ? ROUTE_RU[route] : 'Инструменты'} <Icon name="chevron-down" size={0.875} />
+            </summary>
+            <nav className={styles.toolMenu} aria-label="Инструменты">
+              {TOOL_ROUTES.map((r) => <button key={r} type="button" className={styles.toolItem} aria-current={r === route ? 'page' : undefined} onClick={() => { onRoute(r); if (toolsRef.current) toolsRef.current.open = false; }}>
+                <Text as="span" variant="label" medium>{ROUTE_RU[r]}</Text>
+                <Text as="span" variant="caption" tone="secondary">{ROUTE_HINT[r]}</Text>
+              </button>)}
+            </nav>
+          </details>
+          <div className={styles.help}><CreatorGuide route={route} onRoute={onRoute} /></div>
         </header>
         <div className={styles.content}>{children}</div>
       </div>

@@ -99,4 +99,4 @@ No trailing period, no optical effects, nothing else.
   line per field at most, only about the fields in `write`. Never mention slots that were not requested.
   Empty string when there is nothing to say.
 
-Answer only through structured output.
+Return only the JSON object matching the supplied output schema.

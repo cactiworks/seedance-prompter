@@ -4,6 +4,7 @@ import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace, WorkspaceOverlay } from './features/Workspace.tsx';
 import { Library } from './library/Library.tsx';
+import { Production, ProductionList } from './production/Production.tsx';
 import { Prompter } from './prompter/Prompter.tsx';
 import { AppShell } from './shell/AppShell.tsx';
 import { useRoute } from './shell/route.ts';
@@ -24,7 +25,7 @@ export function App() {
   if (pack === null) {
     return (
       <main style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <Text tone="secondary">{error ?? 'Загружаю правила гайда…'}</Text>
+        <Text tone="secondary">{error ?? 'Открываю студию…'}</Text>
       </main>
     );
   }
@@ -33,7 +34,8 @@ export function App() {
 
   return (
     <>
-      <AppShell route={route} onRoute={setRoute} sidebar={route === 'canvas' ? <FlowList /> : route === 'calibration' ? <CalibrationList /> : undefined}>
+      <AppShell route={route} onRoute={setRoute} sidebar={route === 'production' ? <ProductionList /> : route === 'canvas' ? <FlowList /> : route === 'calibration' ? <CalibrationList /> : undefined}>
+        {route === 'production' && <Production />}
         {route === 'prompter' && <Prompter />}
         {route === 'images' && <Studio kind="image" />}
         {route === 'video' && <Studio kind="video" />}

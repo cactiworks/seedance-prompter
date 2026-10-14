@@ -30,7 +30,7 @@ removes an "average" choice from the model, adds one of those signals, or protec
 5. Each `{{line:Ln}}` listed for a segment appears in that segment exactly once, in the given order.
    Paragraph order is time order.
 6. Write only the segments listed in `write`. Locked segments are context: keep continuity with them.
-7. Answer only through structured output.
+7. Return only the JSON object matching the supplied output schema.
 
 # Shooting mode and editing
 

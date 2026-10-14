@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { estimate, findModel, formatCost, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
@@ -27,16 +27,43 @@ interface PreviewProps {
   onUseAsRef?: (item: MediaItem, target: 'image' | 'video') => void;
   /** Лента, по которой листать стрелками (в порядке показа). */
   list?: MediaItem[];
+  initialTab?: 'info' | 'edit';
+}
+
+/** Локальный файл той же origin: download сохраняет оригинал, не открывая его вместо приложения. */
+export function DownloadMediaButton({ item, size = 's' }: { item: Pick<MediaItem, 'id' | 'file'>; size?: 's' | 'xs' }) {
+  const filename = item.file.split('/').at(-1) ?? item.file;
+  return (
+    <Button
+      variant="border"
+      size={size}
+      title={`Скачать ${filename}`}
+      onClick={() => {
+        const link = document.createElement('a');
+        link.href = mediaUrl(item.id);
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        link.remove();
+      }}
+    >
+      Скачать
+    </Button>
+  );
 }
 
 /**
  * Просмотр работы по образцу карточки Higgsfield: на весь экран, фон — сама работа размытая, слева версии,
  * справа «Инфо» (промпт, параметры, действия) и «Правка» (рецепт починки или своё описание — `EditPanel`).
  */
-export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: PreviewProps) {
+export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialTab = 'info' }: PreviewProps) {
   const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo, deleteMedia } = useGen();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sendMedia = useCanvas((s) => s.sendMedia);
+  const canvasName = useCanvas((s) => s.flow?.name);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const [sendingToCanvas, setSendingToCanvas] = useState(false);
+  const [canvasError, setCanvasError] = useState<string | null>(null);
   const styleNames = new Map((useGen((s) => s.styles.higgsfield) ?? []).map((s) => [s.id, s.name]));
   const [current, setCurrent] = useState<MediaItem | null>(opened);
   const [tab, setTab] = useState<'info' | 'edit'>('info');
@@ -47,9 +74,18 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
 
   useEffect(() => {
     setCurrent(opened);
-    setTab('info');
-    setMode('view');
-  }, [opened]);
+    setTab(initialTab);
+    setMode(initialTab === 'edit' && opened?.kind === 'image' ? 'brush' : 'view');
+    setCanvasError(null);
+  }, [opened, initialTab]);
+  useEffect(() => {
+    if (current === null) return;
+    const previous = document.activeElement;
+    closeButton.current?.focus();
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, [current?.id]);
   // Подтверждение удаления относится к одной работе — при листании сбрасывается.
   useEffect(() => setConfirmDelete(false), [current?.id]);
 
@@ -99,7 +135,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
   ];
 
   return createPortal(
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`Просмотр: ${sourceTitleRu(item.modelId)}`}>
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`Просмотр: ${sourceTitleRu(item.modelId)}`} onPointerDown={(event) => event.stopPropagation()}>
       <div className={styles.backdrop} style={{ backgroundImage: item.kind === 'image' ? `url(${mediaUrl(item.id)})` : undefined }} />
 
       {(versions.done.length > 1 || versions.pending.length > 0) && (
@@ -145,7 +181,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
               {formatDate(item.savedAt)}
             </Text>
           </div>
-          <button type="button" className={styles.close} onClick={onClose} aria-label="Закрыть (Esc)">
+          <button ref={closeButton} type="button" className={styles.close} onClick={onClose} aria-label="Закрыть (Esc)">
             <Icon name="close" size={1} />
           </button>
         </header>
@@ -160,13 +196,50 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
             setMode(next === 'edit' && item.kind === 'image' ? 'brush' : 'view');
           }}
           options={[
-            { value: 'info', label: 'Инфо' },
-            { value: 'edit', label: 'Правка' },
+            { value: 'info', label: 'Результат' },
+            { value: 'edit', label: item.kind === 'image' ? 'Правка' : 'Апскейл' },
           ]}
         />
 
+        <div className={styles.actions}>
+          <DownloadMediaButton item={item} />
+          <Button
+            variant="border"
+            size="s"
+            icon={<Icon name="layers" size={1} />}
+            loading={sendingToCanvas}
+            title={canvasName === undefined ? 'Добавить файл в Canvas для дальнейшей работы' : `Добавить отдельной карточкой в Canvas «${canvasName}»`}
+            onClick={() => {
+              setSendingToCanvas(true);
+              setCanvasError(null);
+              void sendMedia({ id: item.id, kind: item.kind, label: item.modelId === 'local/import' ? item.prompt : sourceTitleRu(item.modelId) })
+                .then(() => {
+                  onClose();
+                  window.location.hash = '/canvas';
+                })
+                .catch((error: unknown) => setCanvasError(error instanceof Error ? error.message : 'Файл не добавился в Canvas.'))
+                .finally(() => setSendingToCanvas(false));
+            }}
+          >
+            В Canvas
+          </Button>
+        </div>
+        <Text variant="caption" tone={canvasError === null ? 'tertiary' : 'accent'}>
+          {canvasError ?? (canvasName === undefined ? 'В Canvas можно связать файл со следующим инструментом.' : `Добавится в Canvas «${canvasName}».`)}
+        </Text>
+
         {tab === 'info' && (
           <div className={styles.panelBody}>
+            {item.kind === 'image' && onUseAsRef !== undefined && (
+              <div className={styles.actions}>
+                <Button variant="border" size="s" title="Открыть генерацию изображения с этим референсом" onClick={() => onUseAsRef(item, 'image')}>
+                  Создать на основе
+                </Button>
+                <Button variant="border" size="s" title="Открыть генерацию видео с этим изображением" onClick={() => onUseAsRef(item, 'video')}>
+                  Анимировать
+                </Button>
+              </div>
+            )}
             <section className={styles.block}>
               <Text variant="caption" tone="tertiary" medium>
                 ОЦЕНКА
@@ -227,30 +300,6 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list }: Previe
                   </Button>
                 </>
               )}
-              {item.kind === 'image' && onUseAsRef !== undefined && (
-                <>
-                  <Button variant="border" size="s" onClick={() => onUseAsRef(item, 'image')}>
-                    Реф для картинки
-                  </Button>
-                  <Button variant="border" size="s" onClick={() => onUseAsRef(item, 'video')}>
-                    Кадр / реф для видео
-                  </Button>
-                </>
-              )}
-              <Button
-                variant="border"
-                size="s"
-                icon={<Icon name="layers" size={1} />}
-                title="Новой нодой в открытый flow canvas"
-                onClick={() => {
-                  void sendMedia({ id: item.id, kind: item.kind, label: item.modelId === 'local/import' ? item.prompt : sourceTitleRu(item.modelId) }).then(() => {
-                    onClose();
-                    window.location.hash = '/canvas';
-                  });
-                }}
-              >
-                В canvas
-              </Button>
               <Button variant="ghost" size="s" icon={<Icon name="star" size={1} />} onClick={() => void toggleFavorite(item.id)}>
                 {favorite ? 'В избранном' : 'В избранное'}
               </Button>

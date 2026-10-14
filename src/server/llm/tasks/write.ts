@@ -2,7 +2,7 @@ import { buildValidationContext, buildWriterSystem, buildWriterUser, fixableSegm
 import { validateWriterOutput, type Violation, type WriterOutput } from '../../../core/llm/validate.ts';
 import type { Project, Shot } from '../../../core/model/project.ts';
 import { agentShooting, buildShot, kitOf, type PackBundle } from '../../../core/pipeline.ts';
-import type { LlmRequest, LlmResult } from '../claudeCli/provider.ts';
+import type { LlmRequest, LlmResult } from '../codexCli/provider.ts';
 
 export type Runner = <T>(request: LlmRequest) => Promise<LlmResult<T>>;
 
@@ -65,7 +65,7 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   };
 
   const call = async (user: string): Promise<WriterOutput> => {
-    const result = await input.run<WriterOutput>({ system, user, jsonSchema: WRITER_SCHEMA, model: input.model, fallbackModel: 'sonnet', effort: 'medium', timeoutMs: 240_000, signal: input.signal });
+    const result = await input.run<WriterOutput>({ system, user, jsonSchema: WRITER_SCHEMA, model: input.model, effort: 'medium', timeoutMs: 240_000, signal: input.signal });
     totals.durationMs += result.meta.durationMs;
     totals.inputTokens += result.meta.inputTokens;
     totals.outputTokens += result.meta.outputTokens;

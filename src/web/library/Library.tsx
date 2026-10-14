@@ -168,7 +168,7 @@ export function Library() {
         )}
       </aside>
 
-      <section className={styles.main}>
+      <section className={styles.main} data-guide="library-items">
         <header className={styles.head}>
           <div>
             <Text as="h1" variant="title-l" medium>
@@ -197,7 +197,7 @@ export function Library() {
               }}
             />
             <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} loading={importing} title="Свои картинки и видео — съёмки, референсы; дальше их можно резать и отдавать в canvas" onClick={() => importer.current?.click()}>
-              Добавить свои
+              Добавить файлы
             </Button>
             {folder !== undefined && (
               <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} title="Удалить папку — файлы останутся" onClick={() => void deleteFolder(folder.id).then(() => setView({ type: 'all' }))}>
@@ -312,7 +312,7 @@ export function Library() {
         {shown.length === 0 ? (
           <div className={`${styles.empty} lab-hatch`}>
             <Text variant="label" tone="tertiary">
-              {library.length === 0 ? 'Здесь появится всё, что ты сгенерируешь, — файлы сразу сохраняются на диск.' : view.type === 'folder' ? 'Папка пуста. Выбери работы и нажми «В папку».' : 'Ничего не нашлось.'}
+              {library.length === 0 ? 'Здесь будут готовые изображения и видео. Свои референсы можно загрузить кнопкой «Добавить файлы».' : view.type === 'folder' ? 'Папка пуста. Выбери работы и нажми «В папку».' : 'Ничего не нашлось.'}
             </Text>
           </div>
         ) : (

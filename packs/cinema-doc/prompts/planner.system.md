@@ -49,4 +49,4 @@ details, do not invent new plot.
 `world` is context: the place and weather the owner described. Use it for physical beats (puddles to
 step around, wind in the clothes), do not restate it in every segment.
 
-Answer only through structured output.
+Return only the JSON object matching the supplied output schema.

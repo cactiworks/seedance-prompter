@@ -6,7 +6,7 @@ import { flagsFromVision, type VisionOutput } from '../../src/core/llm/buildVisi
 import type { Project } from '../../src/core/model/project.ts';
 import { buildShot, type PackBundle } from '../../src/core/pipeline.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
-import type { LlmRequest } from '../../src/server/llm/claudeCli/provider.ts';
+import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
 const host = `${HOST}:${PORT}`;

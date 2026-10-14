@@ -33,6 +33,7 @@
 
 .head,
 .foot {
+  flex-shrink: 0;
   position: sticky;
   z-index: 1;
   display: flex;
@@ -62,7 +63,8 @@
 }
 
 .body {
-  flex: 1;
+  /* Auto basis keeps intrinsic content height in WebKit's fit-content dialog. */
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--lab-space-12);

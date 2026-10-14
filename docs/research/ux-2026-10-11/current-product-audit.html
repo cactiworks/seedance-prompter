@@ -1,0 +1,178 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Аудит текущего продукта: путь AI-креатора</title><style>@font-face{font-family:Geist;src:url('prototype/fonts/geist-cyrillic-wght-normal.woff2');font-weight:100 900;unicode-range:U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}@font-face{font-family:Geist;src:url('prototype/fonts/geist-latin-wght-normal.woff2');font-weight:100 900;unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2191,U+2193}*{box-sizing:border-box}body{margin:0;background:#f7f7fa;color:#17171b;font:16px/1.65 Geist,system-ui,sans-serif}header{padding:18px 5vw;background:white;border-bottom:1px solid #e7e7ed;display:flex;gap:22px;align-items:center;flex-wrap:wrap}header a{font-size:14px}a{color:#0069d9;text-decoration:none}a:hover{text-decoration:underline}main{max-width:1260px;margin:auto;padding:44px 5vw 100px}h1{font-size:36px;line-height:1.2;letter-spacing:-1.2px;font-weight:500;max-width:1000px}h2{font-size:25px;line-height:1.25;font-weight:500;letter-spacing:-.5px;margin:56px 0 20px}h3{font-size:19px;font-weight:500;margin-top:30px}p,li{max-width:900px}p{margin:16px 0}strong{font-weight:500}table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;line-height:1.55;margin:24px 0}td,th{text-align:left;vertical-align:top;padding:15px;border-bottom:1px solid #e8e8ee;min-width:120px}th{background:#f0f0f5;font-weight:500}.table-wrap{overflow:auto}pre{background:#fff;border:1px solid #e8e8ee;border-radius:12px;padding:24px;overflow:auto;line-height:1.5;font-size:14px}code{font-size:.88em}img{max-width:100%;border-radius:12px}aside{padding:20px 24px;background:white;border:1px solid #e7e7ed;border-radius:14px;margin:28px 0}aside a{display:inline-block;margin:4px 18px 4px 0;font-size:14px}.pill{padding:8px 14px;background:#17171b;color:white;border-radius:99px}.meta{color:#74747f;font-size:13px}.local-source{color:#555;overflow-wrap:anywhere}footer{font-size:13px;color:#777;margin-top:60px}@media(max-width:700px){main{padding:26px 20px 70px}h1{font-size:29px}h2{font-size:23px}header{padding:14px 20px;gap:12px}td,th{padding:12px}.pill{display:inline-block}}</style></head><body><header><a href="research.html">Исследование</a><a href="onboarding.html">Onboarding</a><a href="competitors.html">Конкуренты</a><a href="current-product-audit.html">Аудит</a><a class="pill" href="prototype/">Открыть интерактивный черновик ↗</a></header><main><h1>Аудит текущего продукта: путь AI-креатора</h1>
+<p>Дата: 11 октября 2026. Первый рассматриваемый сегмент — креаторы, которые делают рекламные материалы и контент для клиентов. Цель владельца: централизованный рабочий цикл с Canvas как основным пространством, от references и генерации изображения до правки, видео, небольшой обрезки и экспорта.</p>
+<p><strong>Главный вывод:</strong> значительная часть нужных операций уже реализована, но собрать из них законченный рабочий процесс должен сам пользователь. Canvas связывает генерации, однако не является главным входом и не предоставляет полный набор действий над результатом. Onboarding поможет объяснить механику, но сам по себе не устранит эти разрывы.</p>
+<aside aria-label="Содержание"><a href="#section-1">Метод и границы достоверности</a><a href="#section-2">Приоритетные разрывы</a><a href="#section-3">Как сейчас проходит работа</a><a href="#section-4">Сильные стороны, которые стоит сохранить</a><a href="#section-5">Следствия для наброска и onboarding</a><a href="#section-6">Что ещё не установлено</a></aside><h2 id="section-1">Метод и границы достоверности</h2>
+<ul>
+<li><strong>Код:</strong> read-only аудит навигации, React-компонентов, схем данных, переходов между экранами, jobs и экспорта. Прочитаны <code>CLAUDE.md</code>, project-knowledge и относящиеся к задаче references. Ключи, <code>.env</code> и приватные пользовательские assets не читались.</li>
+<li><strong>Браузер:</strong> основной исследователь в этой же задаче увидел начальный экран <code>/shots</code> с заголовком «Промпт, в который верит модель», Canvas пятой вкладкой, шаблон «Картинка → видео» с четырьмя формами, занявшими большую часть экрана при viewport 1280 × 800 (preview снимка 1024 × 640), и кнопку экспорта flow в JSON. Это наблюдения основного исследователя; автор code audit не проводил отдельную hands-on сессию. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/docs/research/ux-2026-10-11/evidence/current-canvas.png">Скриншот Canvas</span>.</li>
+<li><strong>Генерации:</strong> платные запуски не выполнялись. Поведение при ошибках и сохранении исследовано по коду, без искусственного вызова отказов провайдера.</li>
+<li><strong>Пользователи:</strong> usability tests с креаторами ещё не проводились. Ниже «риск» означает экспертный вывод из устройства продукта, а не измеренную частоту затруднений. Приоритеты — предложение для первой итерации, не статистическая оценка.</li>
+</ul>
+<h2 id="section-2">Приоритетные разрывы</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Приоритет</th>
+<th>Подтверждённый факт и источник</th>
+<th>UX-риск / предлагаемая реакция</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P0</td>
+<td>Семь равноправных вкладок; Canvas пятая; маршрут по умолчанию — <code>shots</code>. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/shell/route.ts:4">route.ts:4</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/shell/route.ts:11">route.ts:11</span>. Первый экран объясняет только сборку промпта Seedance. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/features/Home.tsx:29">Home.tsx:29</span>. Подтверждено и браузером.</td>
+<td>Первое впечатление не соответствует обещанию полного рабочего пространства. Сделать входом проект и его Canvas; быстрое создание изображения/видео оставить доступным действием.</td>
+</tr>
+<tr>
+<td>P0</td>
+<td>Результат генерации на Canvas — обычный <code>img</code>/<code>video</code> с переключением вариантов. Общий MediaPreview, правка и экспорт здесь не вызываются. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/NodeView.tsx:294">NodeView.tsx:294</span>. Полный редактор доступен в preview Studio/Library. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/MediaPreview.tsx:153">MediaPreview.tsx:153</span>.</td>
+<td>Путь «создал → исправил → анимировал» требует ухода в библиотеку и ручного возврата. Открывать единый asset inspector из результата ноды и возвращать правку связанной версией.</td>
+</tr>
+<tr>
+<td>P0</td>
+<td>Canvas показывает состояние и ошибку job без retry. Его генерации запускаются без <code>sessionId</code>, а Studio показывает jobs конкретной session. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/NodeView.tsx:294">NodeView.tsx:294</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/NodeView.tsx:428">NodeView.tsx:428</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/Studio.tsx:23">Studio.tsx:23</span>. Retry download/poll реализован в Studio tile. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/JobTile.tsx:35">JobTile.tsx:35</span>.</td>
+<td>По структуре кода recovery для Canvas job не доступен через обычный Studio feed. Нужны одинаковые действия job на всех поверхностях и общая очередь проекта. Runtime-отказ в браузере не воспроизводился.</td>
+</tr>
+<tr>
+<td>P0</td>
+<td>Отдельно существуют legacy projects, Canvas flows, image/video sessions и библиотечные folders. Flow содержит граф и viewport; session — тип и название; folder — список media. У jobs есть legacy <code>origin</code> или <code>sessionId</code>, но нет общего workspace/flow ID. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/canvas.ts:63">canvas.ts:63</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/media.ts:21">media.ts:21</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/media.ts:98">media.ts:98</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/media.ts:137">media.ts:137</span>.</td>
+<td>Нет единого контейнера клиентской работы: brief, references, варианты, расходы и finals приходится связывать вручную. Ввести продуктовую сущность проекта; существующие хранилища можно мигрировать постепенно.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>Универсальный «Промптер» переносит результат исключительно в Studio. Отдельная нода «Seedance-промптер» открывает большой конструктор «Кадров». <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/prompter/Prompter.tsx:96">Prompter.tsx:96</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/NodeView.tsx:234">NodeView.tsx:234</span>.</td>
+<td>Два сходных названия скрывают разные рабочие режимы. Prompt assistant встроить в генерацию; Seedance-конструктор обозначить как расширенную постановку видео.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>Открытие legacy project заменяет общую оболочку; Canvas Seedance раскрывается полноэкранным overlay. Возврат предусмотрен. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/App.tsx:31">App.tsx:31</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/App.tsx:49">App.tsx:49</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/features/Workspace.tsx:207">Workspace.tsx:207</span>.</td>
+<td>Резкая смена контекста осложняет понимание «где я». Сохранять breadcrumb проекта/ноды и ясный возврат с результатом.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>«В canvas» отправляет asset в открытый flow; при его отсутствии загружает flows или создаёт новый. Выбор назначения отсутствует в этом действии. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/MediaPreview.tsx:240">MediaPreview.tsx:240</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/canvasStore.ts:303">canvasStore.ts:303</span>.</td>
+<td>При нескольких клиентских задачах результат может оказаться не в ожидаемом месте. Показывать название проекта назначения, предлагать сменить его.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>Export на Canvas сохраняет JSON графа. Выдача файлов находится в Library: «Выгрузить для монтажа», копирование отдельных files в папку и Finder. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/Canvas.tsx:368">Canvas.tsx:368</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/library/Library.tsx:262">Library.tsx:262</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/server/app.ts:802">app.ts:802</span>.</td>
+<td>Пользователь может ожидать готовый media-файл от значка download. Разделить «Экспорт результата» и «Сохранить workflow», предусмотреть список finals проекта.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>Шаблон «Сцена из клипов» обещает «сцена склеивается», но граф передаёт последний кадр в следующую генерацию. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/canvas/templates.ts:94">templates.ts:94</span>. Среди нод нет concat/timeline; ffmpeg-функции — crop, trim, resize, frame. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/canvas.ts:15">canvas.ts:15</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/server/gen/ffmpeg.ts:49">ffmpeg.ts:49</span>.</td>
+<td>Обещание непрерывности клипов можно принять за монтаж в один файл. Исправить текст; потребность в простом объединении клипов проверить отдельно.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>Вкладка «Правка» у видео содержит Topaz; trim находится только отдельной Canvas-нодой. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/VideoEditPanel.tsx:60">VideoEditPanel.tsx:60</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/NodeView.tsx:24">NodeView.tsx:24</span>.</td>
+<td>Базовая обрезка не находится там, где пользователь уже правит файл. Дать trim в том же inspector и возможность вывести операцию нодой.</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>В просмотренном UI не найден onboarding/tour/help entry. При отсутствии ключа UI сообщает «нет ключа в Keychain»; cards проверяют состояние, но не настраивают ключ. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/shell/AppShell.tsx:154">AppShell.tsx:154</span>.</td>
+<td>Новому креатору требуется помощь владельца ещё до первого результата. Нужны повторно запускаемый demo workflow, контекстные подсказки и понятная настройка providers. Отсутствие внешней документации аудит не утверждает.</td>
+</tr>
+</tbody></table></div>
+<h2 id="section-3">Как сейчас проходит работа</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Этап</th>
+<th>Реализовано</th>
+<th>Где разрывается контекст</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Идея и references</td>
+<td>Русский brief, роли references, moodboards, выбор модели агентом и объяснение выбора. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/prompter/Prompter.tsx:351">Prompter.tsx:351</span>.</td>
+<td>Универсальный Промптер — самостоятельный раздел, выдаёт в Studio.</td>
+</tr>
+<tr>
+<td>Изображение</td>
+<td>Генерация из Studio либо Canvas; refs, параметры, варианты.</td>
+<td>Две истории работы; нет общего клиентского проекта.</td>
+</tr>
+<tr>
+<td>Оценка и правка</td>
+<td>В preview — оценка, recipes, свободное описание, кисть Seedream, crop; исходник не перезаписывается. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/EditPanel.tsx:84">EditPanel.tsx:84</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/EditPanel.tsx:142">EditPanel.tsx:142</span>.</td>
+<td>Из Canvas preview не открывается; новый asset надо вручную вернуть на граф.</td>
+</tr>
+<tr>
+<td>Видео</td>
+<td>Передача изображения как стартового кадра; обычный generator или Seedance-конструктор; templates. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/Canvas.tsx:341">Canvas.tsx:341</span>.</td>
+<td>Нужно понимать разницу generator / Seedance / «Кадры» / «Промптер».</td>
+</tr>
+<tr>
+<td>Доводка</td>
+<td>Canvas: trim, первый/последний кадр, resize, Topaz. VideoPreview: Topaz.</td>
+<td>Операции обнаруживаются в разных местах, единая панель действий отсутствует.</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Bulk export файлов из библиотеки с понятными именами.</td>
+<td>Export графа и delivery media разнесены; отдельного набора утверждённых finals нет в просмотренных схемах.</td>
+</tr>
+</tbody></table></div>
+<h2 id="section-4">Сильные стороны, которые стоит сохранить</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Что уже работает</th>
+<th>Значение для нового UX</th>
+<th>Источник</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Меню следующего шага зависит от типа выхода ноды</td>
+<td>Основа явного «Что дальше»: изменить, анимировать, извлечь кадр, обрезать, resize, upscale</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/Canvas.tsx:324">Canvas.tsx:324</span></td>
+</tr>
+<tr>
+<td>Templates image→video, storyboard→Seedance, character→scenes</td>
+<td>Готовая основа task-first входа и demo onboarding</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/canvas/templates.ts:43">templates.ts:43</span></td>
+</tr>
+<tr>
+<td>Autosave, undo/redo, copy/paste, duplicate, fit/zoom</td>
+<td>Снижают стоимость эксперимента и восстановления работы</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/Canvas.tsx:398">Canvas.tsx:398</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/canvas/Canvas.tsx:581">Canvas.tsx:581</span></td>
+</tr>
+<tr>
+<td>Цена до запуска и серверная проверка подтверждённой стоимости; отдельное согласие на refs</td>
+<td>Сохранять явный контроль денег при упрощении интерфейса</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/server/gen/runtime.ts:208">runtime.ts:208</span></td>
+</tr>
+<tr>
+<td>Состояния queued/running/downloading/saved и разные recovery действия</td>
+<td>Можно переиспользовать в общей очереди, не создавать новую логику</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/JobTile.tsx:8">JobTile.tsx:8</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/studio/JobTile.tsx:72">JobTile.tsx:72</span></td>
+</tr>
+<tr>
+<td>Библиотека: prompt/model/settings, folders, favorites, search, bulk export</td>
+<td>Основа asset management проекта</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/core/model/media.ts:70">media.ts:70</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/library/Library.tsx:65">Library.tsx:65</span></td>
+</tr>
+<tr>
+<td>Специальный Seedance workflow: refs по номерам, storyboard, continuity, lint, attempts</td>
+<td>Сохранить как расширенную постановку видео внутри общего пути</td>
+<td><span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/features/Workspace.tsx:162">Workspace.tsx:162</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/features/Workspace.tsx:197">Workspace.tsx:197</span>, <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/src/web/features/Workspace.tsx:570">Workspace.tsx:570</span></td>
+</tr>
+</tbody></table></div>
+<h2 id="section-5">Следствия для наброска и onboarding</h2>
+<ol>
+<li>Главная единица — <strong>проект клиента</strong>, основная рабочая поверхность — <strong>Canvas</strong>. Существующие assets, sessions и jobs связываются с проектом; это целевая модель, не описание текущей реализации.</li>
+<li>Один asset inspector открывается из ноды и библиотеки. Действия: изменить, сделать вариант, анимировать, обрезать, подготовить формат, экспортировать. Операции возвращают связанную версию и сохраняют исходник.</li>
+<li>Универсальный prompt assistant доступен в выбранной генерации. Seedance-конструктор — расширенный режим видео с ясной кнопкой возврата в проект.</li>
+<li>Images/Video можно сделать фильтрами assets и быстрыми действиями. Calibration — служебная функция для опытного пользователя; её равный вес с Canvas в текущей навигации не следует сохранять автоматически.</li>
+<li>Общая очередь проекта показывает состояние, стоимость, ошибки и безопасный recovery; пользователь видит, к какой ноде относится job.</li>
+<li>Первый onboarding проводит по одному завершённому пути на demo assets: reference → image → правка → video → trim → export. Он не требует платного запуска, не объясняет семь вкладок подряд и доступен повторно через Help. Canvas-механика объясняется в момент действия.</li>
+<li>Первый сегмент следует проверять на клиентских сценариях: продолжить заказ после перерыва, сделать два варианта, сохранить выбранный результат, внести локальную правку, подготовить 9:16/1:1, собрать понятный пакет для передачи. Общий brief, версии и finals — гипотезы требований для проверки с креаторами, а не подтверждённые интервью потребности.</li>
+</ol>
+<h2 id="section-6">Что ещё не установлено</h2>
+<ul>
+<li>Не проверены реальная успешность генераций, качество моделей, latency и списания: платных запусков не было.</li>
+<li>Не измерены время до первого результата, число ошибочных переходов и понятность названий у целевой аудитории.</li>
+<li>Плотность четырёх форм при viewport 1280 × 800 подтверждена одним браузерным наблюдением; это не полный responsive или accessibility audit.</li>
+<li>Текущие docs описывают single-user localhost приложение на Mac. <span class="local-source" title="/Users/matveylytkin/Documents/%D0%B2%D0%B0%D0%B9%D0%B1%D0%BA/seedance-prompter/CLAUDE.md:3">CLAUDE.md:3</span>. Для новой аудитории остаётся продуктовый выбор: локальное приложение со своими ключами либо общий сервис. От него зависят provider setup, доступ и хранение; текущую Keychain-интеграцию нельзя считать завершённым onboarding внешних пользователей.</li>
+</ul>
+<footer>Подготовлено 11 октября 2026. Проектные предложения не внедрены в рабочее приложение. <a href="current-product-audit.md">Исходный Markdown</a></footer></main></body></html>

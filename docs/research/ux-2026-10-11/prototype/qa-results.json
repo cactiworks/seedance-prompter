@@ -1,0 +1,77 @@
+[
+  {
+    "check": "responsive",
+    "viewport": [
+      1440,
+      900
+    ],
+    "pageWidth": 1440,
+    "canvasWidth": 974,
+    "flowWidth": 974,
+    "screenshot": "responsive-1440.png"
+  },
+  {
+    "check": "responsive",
+    "viewport": [
+      1024,
+      768
+    ],
+    "pageWidth": 1024,
+    "canvasWidth": 614,
+    "flowWidth": 920,
+    "screenshot": "responsive-1024.png"
+  },
+  {
+    "check": "responsive",
+    "viewport": [
+      390,
+      844
+    ],
+    "pageWidth": 390,
+    "canvasWidth": 390,
+    "flowWidth": 390,
+    "screenshot": "responsive-390.png"
+  },
+  {
+    "check": "source identity preserved until new edit, then v3 from A",
+    "passed": true
+  },
+  {
+    "check": "Help tour closes to visible Canvas focus",
+    "passed": true
+  },
+  {
+    "check": "7-step onboarding fits viewport, actions and finish work",
+    "passed": true,
+    "screenshot": "tour-1024.png"
+  },
+  {
+    "check": "trim minimum and honest JSON plan download",
+    "passed": true
+  },
+  {
+    "check": "all sidebar views functional",
+    "passed": true
+  },
+  {
+    "check": "mobile tour panel remains within viewport",
+    "passed": true,
+    "screenshot": "tour-390.png"
+  },
+  {
+    "check": "JavaScript runtime errors",
+    "errors": []
+  },
+  {
+    "check": "mobile step2 reference and spotlight clear fixed bottom navigation",
+    "passed": true,
+    "targetTop": 473.21875,
+    "targetBottom": 768.21875,
+    "spotlightBottom": 774.21875,
+    "navTop": 788,
+    "viewport": [
+      390,
+      844
+    ]
+  }
+]

@@ -26,18 +26,16 @@ export function Home() {
   return (
     <main className={styles.page}>
       <header className={styles.hero}>
-        <Text as="h1" variant="display">
-          Промпт, в который <Text as="span" variant="display" tone="accent">верит модель</Text>
-        </Text>
-        <Text tone="secondary">Заполняешь поля кадра тезисно по-русски — агент пишет из них промпт для Seedance 2.5 по правилам гайда: номера референсов, реплики и дословные блоки ставятся сами, линтер ловит ошибки до генерации.</Text>
+        <Text as="h1" variant="title-l">Seedance-сценарий</Text>
+        <Text tone="secondary">Опиши кадры, добавь персонажей и реплики — получишь подробный промпт для видео. Начни с названия ролика.</Text>
       </header>
 
-      <Card padding="l" className={styles.create}>
+      <div data-guide="seedance-create"><Card padding="l" className={styles.create}>
         <TextField label="Новый ролик" placeholder="Например: Три камеры" value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && void create()} />
         <Button variant="primary" size="m" icon={<Icon name="plus" />} loading={busy} disabled={title.trim() === ''} onClick={() => void create()}>
-          Создать
+          Начать сценарий
         </Button>
-      </Card>
+      </Card></div>
       {error !== null && <Text variant="label" tone="secondary">{error}</Text>}
 
       <section className={styles.list}>

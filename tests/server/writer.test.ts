@@ -6,7 +6,7 @@ import { buildWriterSystem, linesInBeats, type FewShot } from '../../src/core/ll
 import { validateWriterOutput, type ValidationContext } from '../../src/core/llm/validate.ts';
 import { newProject, type Project } from '../../src/core/model/project.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
-import type { LlmRequest } from '../../src/server/llm/claudeCli/provider.ts';
+import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 import type { WriteShotResult } from '../../src/server/llm/tasks/write.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { FieldItem, FieldsOutput } from '../../src/core/compose.ts';
 import { newProject, type Project } from '../../src/core/model/project.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
-import type { LlmRequest } from '../../src/server/llm/claudeCli/provider.ts';
+import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
 const headers = { host: `${HOST}:${PORT}`, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };

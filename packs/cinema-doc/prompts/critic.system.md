@@ -122,4 +122,4 @@ Rules for a finding:
 `summaryRu`: two or three sentences — what this take will be, and the one thing that decides whether it
 works. No praise, no filler. Plain text in every field: no markup, no tags, no field names.
 
-Answer only through structured output.
+Return only the JSON object matching the supplied output schema.

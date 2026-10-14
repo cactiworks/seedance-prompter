@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { estimate, findModel, formatCost, paramsFor } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, paramsFor, UNIT } from '../../core/gen/models.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Icon, Text } from '../ui/components/index.ts';
@@ -42,6 +42,8 @@ export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string
   const model = findModel(job.modelId);
   const again = model === undefined ? null : estimate(model, paramsFor(model, job.params), 1, job.refs.length);
   const mediaId = job.mediaIds.find((id): id is string => id !== null);
+  const cost = job.creditsConsumed ?? job.estimateCredits;
+  const costLabel = UNIT[job.provider].labelRu === '$' ? `$${cost}` : `${cost} кр`;
 
   return (
     <article className={styles.tile}>
@@ -103,7 +105,7 @@ export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string
           {model?.titleRu ?? job.modelId}
         </Text>
         <Text variant="caption" tone="tertiary">
-          {job.creditsConsumed !== null ? `${job.creditsConsumed} кр` : `≈ ${job.estimateCredits} кр`}
+          {job.creditsConsumed === null ? `≈ ${costLabel}` : costLabel}
         </Text>
       </footer>
     </article>

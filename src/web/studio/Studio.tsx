@@ -11,7 +11,7 @@ import styles from './Studio.module.css';
 
 /** Картинки / Видео — каркас connxn: лента сессии по центру, composer внизу, параметры справа. */
 export function Studio({ kind }: { kind: MediaKind }) {
-  const { jobs, library, activeSession, composer, loadJobs, loadLibrary, addFiles, addRef } = useGen();
+  const { jobs, library, activeSession, loadJobs, loadLibrary, addFiles, addRef } = useGen();
   const [open, setOpen] = useState<MediaItem | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -22,7 +22,6 @@ export function Studio({ kind }: { kind: MediaKind }) {
 
   const sessionId = activeSession[kind];
   const feed = jobs.filter((job) => job.kind === kind && sessionId !== null && job.sessionId === sessionId);
-  const modelTitle = findModel(composer[kind].modelId)?.titleRu ?? '';
   // Для листания стрелками в просмотре — готовые файлы ленты в порядке показа.
   const feedMedia = feed.flatMap((job) => job.mediaIds.map((id) => library.find((m) => m.id === id)).filter((m): m is MediaItem => m !== undefined));
 
@@ -49,10 +48,10 @@ export function Studio({ kind }: { kind: MediaKind }) {
               <Icon name={kind === 'image' ? 'image' : 'video'} size={1.5} />
             </span>
             <Text variant="title-m" medium>
-              {kind === 'image' ? 'Создай картинку' : 'Создай видео'}
+              {kind === 'image' ? 'Создай изображение' : 'Создай видео'}
             </Text>
             <Text variant="label" tone="secondary">
-              {modelTitle} · результат сразу сохраняется на диск
+              {kind === 'image' ? 'Опиши идею внизу или добавь референс. Модель и формат — справа.' : 'Опиши сцену внизу. Чтобы оживить изображение, добавь его как референс.'}
             </Text>
           </div>
         ) : (
@@ -62,7 +61,7 @@ export function Studio({ kind }: { kind: MediaKind }) {
             ))}
           </div>
         )}
-        <Composer kind={kind} />
+        <div data-guide="studio-composer"><Composer kind={kind} /></div>
         {dragging && (
           <div className={styles.dropHint}>
             <Text variant="title-s" medium>

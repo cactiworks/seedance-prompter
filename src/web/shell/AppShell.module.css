@@ -217,9 +217,10 @@
 .topbar {
   display: flex;
   align-items: stretch;
-  gap: var(--lab-space-6);
-  height: 3.5rem;
-  padding: 0 var(--lab-space-12) 0 var(--lab-space-8);
+  flex: none;
+  gap: var(--lab-space-2);
+  min-height: 3.5rem;
+  padding: 0 var(--lab-space-8);
   border-bottom: 1px solid var(--lab-border-subtle);
   background: var(--lab-bg-page);
 }
@@ -231,11 +232,13 @@
 .tabs {
   display: flex;
   gap: var(--lab-space-2);
+  min-width: 0;
 }
 
 .tab {
   position: relative;
   padding: 0 var(--lab-space-6);
+  white-space: nowrap;
   border: 0;
   background: none;
   color: var(--lab-text-tertiary);
@@ -262,11 +265,106 @@
   background: var(--lab-accent);
 }
 
-.status {
+.help {
   display: flex;
   align-items: center;
   gap: var(--lab-space-3);
   margin-left: auto;
+  padding-left: var(--lab-space-4);
+}
+
+.connections > summary {
+  padding: var(--lab-space-3) var(--lab-space-4);
+  color: var(--lab-text-secondary);
+  font-size: var(--lab-type-label-size);
+  cursor: pointer;
+}
+
+.tools {
+  position: relative;
+  flex: none;
+}
+
+.tools > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-2);
+  height: 100%;
+  list-style: none;
+}
+
+.tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolMenu {
+  position: absolute;
+  top: calc(100% + var(--lab-space-2));
+  right: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  width: 19rem;
+  padding: var(--lab-space-3);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-l);
+}
+
+.toolItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-6);
+  border: 0;
+  border-radius: var(--lab-radius-m);
+  background: none;
+  color: var(--lab-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.toolItem:hover,
+.toolItem[aria-current='page'] {
+  background: var(--lab-fill-4);
+}
+
+@media (width <= 68rem) {
+  .shell:not(.collapsed) {
+    grid-template-columns: 13rem minmax(0, 1fr);
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    padding-block: var(--lab-space-2);
+  }
+
+  .tabs,
+  .tools {
+    min-height: 2.75rem;
+  }
+
+  .help {
+    padding-block: var(--lab-space-2);
+  }
+}
+
+@media (width <= 48rem) {
+  .tabs {
+    flex: 1 0 100%;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding-inline: var(--lab-space-4);
+  }
+
+  .toolMenu {
+    right: auto;
+    left: 0;
+    width: min(19rem, calc(100vw - var(--lab-space-8) * 2));
+  }
 }
 
 .content {

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-/** Имена записей macOS Keychain. Значения не пишутся в файлы, логи и `process.env` (его наследует `claude -p`). */
+/** Имена записей macOS Keychain. Значения не пишутся в файлы, логи и `process.env` (его наследует `codex exec`). */
 export const KEYCHAIN = { kie: 'kie-api-key', higgsfield: 'higgsfield-api-key' } as const;
 
 /** Чем должно быть значение: запись с текстом команды вместо ключа (27.09 так и вышло через `$(pbpaste)`) ловится сразу. */

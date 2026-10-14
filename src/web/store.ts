@@ -78,7 +78,7 @@ interface State {
   proposeFix: (attemptN: number) => Promise<void>;
   acceptProposal: (segmentId: string) => void;
   dismissProposal: (segmentId: string) => void;
-  /** Vision-анализ референса — только по кнопке: картинка уходит в Anthropic. */
+  /** Vision-анализ референса — только по кнопке: картинка уходит в OpenAI через Codex. */
   analyzing: string | null;
   visionReports: Record<string, VisionReport>;
   analyzeRef: (refKey: string) => Promise<void>;

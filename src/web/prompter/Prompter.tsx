@@ -213,10 +213,10 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
 
       <div className={styles.actions}>
         <Button variant="primary" size="m" icon={<Icon name="arrow-forward" size={1} />} onClick={toStudio}>
-          В студию
+          {model.kind === 'image' ? 'В генератор изображений' : 'В генератор видео'}
         </Button>
         <Text variant="caption" tone="tertiary">
-          Промпт, параметры{entry.result.refs.length > 0 ? ' и картинки' : ''} встанут в форму {model.kind === 'image' ? '«Картинок»' : '«Видео»'}; генерация — там, по кнопке с ценой.
+          Промпт, параметры{entry.result.refs.length > 0 ? ' и картинки' : ''} встанут в форму {model.kind === 'image' ? '«Изображений»' : '«Видео»'}; генерация — там, по кнопке с ценой.
         </Text>
       </div>
 
@@ -318,7 +318,7 @@ export function Prompter() {
   const cameraOptions = [{ value: '', label: 'Авто — по идее' }, ...Object.values(kits).map((k) => ({ value: k.id, label: k.titleRu })), { value: 'custom', label: 'Своя — опишу словами' }];
   const canWrite = ideaRu.trim() !== '' && !running;
 
-  /** Картинки уходят агенту (Claude) — один раз за вкладку спрашиваем. */
+  /** Картинки уходят агенту (Codex / OpenAI) — один раз за вкладку спрашиваем. */
   const run = (commentRu?: string): void => {
     if (refs.length > 0 && !hasImagesConsent()) setConsent({ commentRu });
     else void write(commentRu);
@@ -351,10 +351,10 @@ export function Prompter() {
         <div className={styles.formHead}>
           <div className={styles.stack}>
             <Text variant="title-m" medium>
-              Промптер
+              Помощник промптов
             </Text>
             <Text variant="label" tone="secondary">
-              Тезисы по-русски → промпт под конкретную модель
+              Опиши идею по-русски — получишь промпт и настройки модели.
             </Text>
           </div>
           <Button variant="ghost" size="s" icon={<Icon name="plus" size={1} />} onClick={reset} disabled={running}>
@@ -502,7 +502,7 @@ export function Prompter() {
             </Text>
           )}
           <Text variant="caption" tone="tertiary">
-            Агент — Claude по подписке, 20–60 с (⌘Enter). Генерацию он не запускает: промпт уходит в студию по кнопке.
+            Подготовка занимает 20–60 с (⌘Enter). Готовый промпт можно перенести в генератор и проверить перед запуском.
           </Text>
         </div>
       </section>
@@ -525,7 +525,7 @@ export function Prompter() {
         )}
       </section>
 
-      <Dialog open={picker} onOpenChange={setPicker} size="l" title="Картинка из библиотеки" description="Файл с диска — в Claude уйдёт уменьшенная копия.">
+      <Dialog open={picker} onOpenChange={setPicker} size="l" title="Картинка из библиотеки" description="Файл с диска — в OpenAI уйдёт уменьшенная копия.">
         <div className={styles.pickerGrid}>
           {library
             .filter((m) => m.kind === 'image')
@@ -554,7 +554,7 @@ export function Prompter() {
         open={consent !== null}
         onOpenChange={(open) => !open && setConsent(null)}
         title="Показать картинки агенту?"
-        description="Уменьшенные копии (до 1568 px) уйдут в Claude (Anthropic) вместе с идеей — агент смотрит, что на них, чтобы правильно назвать их в промпте. В KIE они уйдут только при генерации, со своим согласием. Согласие — до закрытия вкладки."
+        description="Уменьшенные копии (до 1568 px) уйдут в OpenAI через Codex вместе с идеей — агент смотрит, что на них, чтобы правильно назвать их в промпте. В KIE они уйдут только при генерации, со своим согласием. Согласие — до закрытия вкладки."
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConsent(null)}>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seedance Prompter — Canvas-first UX draft</title>
+  <meta name="description" content="Интерактивный черновик рабочего пространства и onboarding. Локальное демо без API.">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<div class="prototype-banner">Интерактивный черновик · демо без API <span>Все изображения — условные иллюстрации. Генерации и оплаты нет.</span></div>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Навигация">
+    <a class="brand" href="#canvas" aria-label="Seedance Prompter — Canvas"><span class="brand-mark">s</span><span>Seedance<br><small>Prompter</small></span></a>
+    <button class="nav-item" data-view="projects"><span class="nav-icon">▦</span> Проекты</button>
+    <div class="nav-section">ПРОЕКТ FORM</div>
+    <button class="nav-item active" data-view="canvas" aria-current="page"><span class="nav-icon">⌘</span> Canvas</button>
+    <button class="nav-item" id="nav-assets" data-view="assets"><span class="nav-icon">▧</span> Материалы <span class="count">7</span></button>
+    <button class="nav-item" data-view="exports"><span class="nav-icon">↗</span> Экспорты</button>
+    <div class="sidebar-note"><span class="tiny-dot"></span> Один проект — весь цикл<p>Бриф, исходники, варианты и финалы связаны между собой.</p></div>
+    <div class="sidebar-bottom">
+      <button class="nav-item" data-view="connections"><span class="nav-icon">⌁</span> Подключения</button>
+      <button class="nav-item" data-view="help"><span class="nav-icon">?</span> Помощь</button>
+      <div class="identity"><span class="avatar">M</span><span>Моя студия<small>Локальный demo</small></span></div>
+    </div>
+  </aside>
+  <div class="work-area">
+    <header class="topbar" id="project-header">
+      <div class="project-crumb"><span>Проекты</span><span class="slash">/</span><strong>FORM · Запуск аромата</strong><span class="tag">Демо</span></div>
+      <div class="topbar-actions"><span class="saved" id="save-state">Демо в этой вкладке</span><button class="button subtle" id="jobs-button">Задачи <span class="job-count">0</span></button></div>
+    </header>
+    <div class="workspace">
+      <main id="main-content">
+        <section id="canvas-view">
+          <div class="canvas-heading">
+            <div><div class="eyebrow">РАБОЧЕЕ ПРОСТРАНСТВО</div><h1>От брифа к готовому ролику</h1><p>Собери визуал, внеси правки и оживи выбранный кадр.</p></div>
+            <button class="button primary" id="tour-start">Пройти onboarding <span>↗</span></button>
+          </div>
+          <div class="getting-started" id="start-hint"><div><span class="small-orbit">↗</span><strong>Первый проект?</strong><span>Пройди короткий путь на примере рекламы FORM.</span></div><button class="text-button" id="try-alone">Попробовать самостоятельно →</button></div>
+          <div class="canvas-toolbar"><div><span class="canvas-dot"></span> Canvas <span class="quiet">/</span> <span class="quiet">Рекламный ролик · 9:16</span></div><button class="text-button" id="fit-canvas">К началу Canvas ←</button></div>
+          <div class="canvas-scroll" id="canvas-scroll">
+            <div class="flow" id="flow">
+              <svg id="connections" aria-hidden="true"><defs><marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="currentColor"/></marker></defs><g></g></svg>
+              <section class="lane"><div class="lane-label"><span>01</span> Контекст</div>
+                <button class="node brief-node" data-select="brief" id="node-brief"><div class="node-top"><span>Бриф клиента</span><span>↗</span></div><h2>FORM / Stillness</h2><p>Короткая реклама нового аромата. Спокойствие, тактильность, мягкий свет.</p><div class="brief-bottom"><span class="tag">9:16</span><span class="tag">5 секунд</span></div></button>
+                <button class="node" data-select="reference" id="node-reference"><div class="node-top"><span>Продукт · reference</span><span>01</span></div><div class="art art-reference" data-art="reference"></div><div class="node-bottom"><strong>Флакон FORM</strong><span class="pill">Сохранить продукт</span></div></button>
+              </section>
+              <section class="lane"><div class="lane-label"><span>02</span> Поиск образа</div>
+                <div class="node variants-node" id="node-variants"><div class="node-top"><span>Варианты визуала</span><span>3</span></div><div class="variant-grid"><button class="variant" data-variant="A" aria-label="Выбрать вариант A — студия"><div class="art" data-art="A"></div><span>A · Студия</span></button><button class="variant chosen" data-variant="B" aria-label="Выбрать вариант B — камень" aria-pressed="true"><div class="art" data-art="B"></div><span>B · Камень <i>✓</i></span></button><button class="variant wide" data-variant="C" aria-label="Выбрать вариант C — свет"><div class="art" data-art="C"></div><span>C · Свет</span></button></div><div class="node-bottom"><strong id="chosen-label">Выбран вариант B</strong><span class="quiet">Выбери, чтобы продолжить</span></div></div>
+                <div class="flow-note">Разные направления.<br>Один и тот же продукт.</div>
+              </section>
+              <section class="lane"><div class="lane-label"><span>03</span> Правка клиента</div>
+                <button class="node selected" data-select="edit" id="node-edit"><div class="node-top"><span>Изображение · v2</span><span class="status-dot"></span></div><div class="art art-edit" data-art="edit"></div><div class="node-bottom"><strong>Больше воздуха</strong><span class="quiet" id="edit-lineage">Из варианта B · оригинал сохранён</span></div></button>
+                <div class="client-note"><span>КОММЕНТАРИЙ КЛИЕНТА</span><p>«Отлично. Добавим больше воздуха вокруг флакона и уберём лишний камень».</p></div>
+              </section>
+              <section class="lane"><div class="lane-label"><span>04</span> Движение и выдача</div>
+                <button class="node video-node" data-select="video" id="node-video"><div class="node-top"><span>Видео · preview</span><span>5 сек</span></div><div class="art art-video" data-art="video"><span class="play-symbol">▷</span></div><div class="node-bottom"><strong>Плавный наезд камеры</strong><span class="quiet">Из правки v2 · демонстрация</span></div></button>
+                <button class="node export-node" data-select="export" id="node-export"><span class="export-icon">↗</span><div><strong>Передать клиенту</strong><span>Обрезка, формат, финальная версия</span></div></button>
+              </section>
+            </div>
+          </div>
+          <footer class="canvas-footer"><span>Нажми на карточку — действия появятся справа.</span><span>Связи сохраняют происхождение результата</span></footer>
+        </section>
+        <section id="secondary-view" hidden></section>
+      </main>
+      <aside class="inspector" id="inspector" aria-label="Параметры выбранного материала"><div id="inspector-content"></div></aside>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="tour-layer" id="tour-layer" hidden>
+  <div class="spotlight" id="spotlight"></div>
+  <section class="tour-card" id="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body" tabindex="-1">
+    <div class="tour-top"><span id="tour-progress"></span><button class="icon-button" id="tour-close" aria-label="Закрыть onboarding">×</button></div>
+    <div class="tour-dots" id="tour-dots" aria-hidden="true"></div>
+    <h2 id="tour-title"></h2><p id="tour-body"></p>
+    <button class="button tour-action" id="tour-action" hidden></button>
+    <div class="tour-footer"><button class="text-button" id="tour-back">Назад</button><button class="button primary" id="tour-next">Дальше →</button></div>
+    <div class="tour-tip">Можно закрыть сейчас и запустить снова из «Помощи».</div>
+  </section>
+</div>
+</body>
+</html>

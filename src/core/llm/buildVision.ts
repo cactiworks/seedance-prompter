@@ -30,7 +30,7 @@ export interface VisionOutput {
 export const VISION_SYSTEM = `You inspect one reference image for a Seedance 2.5 video prompt. The model copies EVERYTHING from a
 reference unless told otherwise, so your job is to list what could leak into the shot.
 
-Report facts only, never guess identity, never name real people. Answer through structured output.
+Report facts only, never guess identity, never name real people. Return only the JSON object matching the supplied output schema.
 
 - peopleCount: humans visible (0 if none). For a character sheet count the character once.
 - readableText: any legible text, captions, logos or spec tables, verbatim; "" if none. Text leaks into frames.
