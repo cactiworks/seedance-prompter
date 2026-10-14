@@ -24,8 +24,9 @@ Seedream и upscale. Расширение каталога и эти новые 
 | KIE | всё, кроме Soul 2: GPT Image 2.5, Seedream 5 Pro, Kling 3.0, Seedance 2.5, Topaz |
 | Higgsfield API (`api.higgsfield.ai`) | Soul 2 и готовые мудборды (`style_id`, список — с API, кеш на час); ключ в формате `KEY_ID:KEY_SECRET` |
 
-- Higgsfield API — отдельный продукт с балансом в USD, мимо подписки Plus. В текущем UI Soul ID
-  в студии вводится как UUID; Production имеет отдельный flow загрузки/создания/выбора. API поддерживает `GET /v1/custom-references/list?page=1&page_size=20`: проверено
+- Higgsfield API — отдельный продукт с балансом в USD, мимо подписки Plus. Soul ID выбирается по имени
+  в общем picker Studio, Canvas и Production; из него же доступны создание и синхронизация списка.
+  API поддерживает `GET /v1/custom-references/list?page=1&page_size=20`: проверено
   12.10.2026, аккаунт вернул пустой список. Прежнее утверждение об отсутствии list endpoint устарело.
   Soul ID из веба не работал 28.09 (404); нужен completed reference версии v2 того же API-аккаунта.
   Свой мудборд через API не создаётся (решение 27).
@@ -78,7 +79,16 @@ Seedream и upscale. Расширение каталога и эти новые 
 без провайдера (решения 34–36). Тот же отрезок — тот же файл.
 
 
-## Soul ID в Production (14.10.2026)
+## Soul ID в Studio, Canvas и Production (14.10.2026)
+
+Общий `CharacterField` показывает имя, локальное фото (если есть), статус и вариант «Без персонажа».
+Выбор доступен только для completed v2 с referenceId. Неподтверждённая версия обозначается отдельно.
+В Production сохраняется локальный characterId, в параметрах Soul 2 — provider referenceId (`soulId`),
+который адаптер отправляет как `custom_reference_id` со strength 1. При пустом выборе оба поля отсутствуют.
+Canvas хранит выбор независимо в каждой ноде; Studio запоминает его в localStorage и возвращает
+после reload/смены модели. Другие модели Soul ID не получают. Старый UUID вне списка не стирается
+автоматически: UI предлагает синхронизацию или новый выбор. Polling персонажей работает только
+в открытом picker. Production-медиа остаются mock, выбор персонажа не делает их реальными.
 
 Создание персонажа отдельно от mock-медиа: `POST /v1/custom-references`, обязательно
 `model_version: v2`. Принимаются 1–100 локальных JPG/PNG/WebP, до 30 МБ (локальный лимит).

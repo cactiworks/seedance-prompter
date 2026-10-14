@@ -327,6 +327,22 @@ describe('студия: сессии, загрузки, избранное', () 
 });
 
 describe('Soul 2 через Higgsfield: тот же конвейер', () => {
+  it('выбранный Soul ID сохраняется в задаче и уходит как provider reference; «Без персонажа» убирает оба поля', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-soul-selection-'));
+    const hf = mockProvider({ id: 'higgsfield', balance: undefined });
+    const gen = createGenRuntime({ dataDir, providers: { higgsfield: hf.provider } });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen });
+    for (const soulId of ['11111111-1111-4111-8111-111111111111', '']) {
+      const res = await app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify({ modelId: 'higgsfield/soul-2', prompt: 'Portrait', params: { resolution: '720p', soulId }, confirmCredits: 0.004 }) });
+      expect(res.status).toBe(202);
+      const body = await res.json() as { jobs: { params: { soulId: string } }[] };
+      expect(body.jobs[0]?.params.soulId).toBe(soulId);
+    }
+    expect(hf.calls.submit[0]?.input).toMatchObject({ custom_reference_id: '11111111-1111-4111-8111-111111111111', custom_reference_strength: 1 });
+    expect(hf.calls.submit[1]?.input).not.toHaveProperty('custom_reference_id');
+    expect(hf.calls.submit[1]?.input).not.toHaveProperty('custom_reference_strength');
+  });
+
   it('задача уходит провайдеру higgsfield, результат скачивается в библиотеку', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-soul-'));
     let t = Date.parse('2026-09-27T10:00:00Z');

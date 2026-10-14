@@ -23,6 +23,12 @@
 
 .content { gap: var(--lab-space-16); }
 
+.compact {
+  margin: 0;
+  padding: var(--lab-space-8);
+  gap: var(--lab-space-8);
+}
+
 .toolbar,
 .footer {
   display: flex;

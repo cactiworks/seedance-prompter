@@ -138,7 +138,7 @@ const GENERATORS: readonly GenModel[] = [
       resolution(['720p', '1080p'], '1080p'),
       aspect(['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'], '9:16'),
       { key: 'styleId', labelRu: 'Мудборд', type: 'style', default: '', pattern: UUID_RE, hintRu: 'Готовый мудборд Higgsfield. Свой мудборд через API не создаётся — только в вебе Higgsfield.' },
-      { key: 'soulId', labelRu: 'Soul ID', type: 'text', default: '', pattern: UUID_RE, hintRu: 'UUID персонажа из аккаунта API (обучается там же, model_version v2). Пусто — без персонажа.' },
+      { key: 'soulId', labelRu: 'Soul ID', type: 'text', default: '', pattern: UUID_RE, hintRu: 'Готовый персонаж Soul ID v2 из API-аккаунта Higgsfield. Можно выбрать «Без персонажа».' },
       { key: 'enhancePrompt', labelRu: 'Улучшать промпт', type: 'bool', default: false },
       { key: 'seed', labelRu: 'Seed', type: 'seed', min: 0, max: 1_000_000, default: 0, hintRu: 'Тот же seed с тем же промптом — та же композиция, но не те же пиксели. Пусто — случайный.' },
     ],

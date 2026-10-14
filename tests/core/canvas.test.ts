@@ -14,6 +14,19 @@ const gen = (id: string, modelId: string, patch: Partial<CanvasNode> = {}): Canv
 const flow = (nodes: CanvasNode[], edges: Flow['edges']): Flow => ({ id: 'f-test', name: 't', nodes, edges, viewport: { x: 0, y: 0, zoom: 1 }, createdAt: '', updatedAt: '' });
 
 describe('canvas: что уйдёт в модель при запуске ноды', () => {
+  it('Soul ID is independent per node and survives flow serialization in the generation plan', () => {
+    const soulId = '11111111-1111-4111-8111-111111111111';
+    const graph = flow([
+      gen('person', 'higgsfield/soul-2', { text: 'Portrait', params: { soulId } }),
+      gen('none', 'higgsfield/soul-2', { text: 'Landscape' }),
+    ], []);
+    const restored = JSON.parse(JSON.stringify(graph)) as Flow;
+    const person = planRun(restored, 'person', () => null);
+    expect(person.problems).toEqual([]);
+    expect(person.params.soulId).toBe(soulId);
+    expect(planRun(restored, 'none', () => null).params.soulId).toBe('');
+  });
+
   const graph = flow(
     [
       node({ id: 'p1', type: 'prompt', text: 'A woman in a red coat.' }),

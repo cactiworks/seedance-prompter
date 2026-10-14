@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { estimate, findModel, formatCost, modelsOf, paramsFor, type GenModel, type MediaKind, type ParamDef, type ParamValue, type ProviderId } from '../../core/gen/models.ts';
 import { useGen } from '../gen/genStore.ts';
+import { CharacterField } from '../production/CharacterField.tsx';
 import { Icon, SegmentedControl, Select, Switch, Tag, Text, TextField } from '../ui/components/index.ts';
 import { StylePicker } from './StylePicker.tsx';
 import styles from './Studio.module.css';
@@ -22,6 +23,9 @@ function capabilities(model: GenModel): string[] {
  * Поле параметра по описанию из каталога. `provider` нужен мудборду; `compact` — узкий вид для ноды canvas.
  */
 export function ParamField({ def, value, onChange, provider = 'kie', compact = false }: { def: ParamDef; value: ParamValue | undefined; onChange: (v: ParamValue) => void; provider?: ProviderId; compact?: boolean }) {
+  if (def.key === 'soulId') {
+    return <CharacterField target="generation" compact={compact} value={typeof value === 'string' && value !== '' ? value : null} onChange={(id) => onChange(id ?? '')} />;
+  }
   if (def.type === 'style') {
     return (
       <div className={styles.field}>

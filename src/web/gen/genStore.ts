@@ -24,6 +24,12 @@ export function savedMediaOf(jobs: readonly GenJob[], jobId: string): string | n
   return job?.status === 'saved' ? (job.mediaIds.find((id): id is string => id !== null) ?? null) : null;
 }
 const CONSENT_KEY = 'sp-refs-consent';
+const SOUL_ID_KEY = 'sp-studio-soul-id';
+
+function rememberedSoulId(): string {
+  try { return localStorage.getItem(SOUL_ID_KEY) ?? ''; }
+  catch { return ''; }
+}
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -140,7 +146,7 @@ function rememberConsent(): void {
 
 const emptyComposer = (kind: MediaKind): Composer => {
   const model = modelsOf(kind)[0];
-  return { modelId: model?.id ?? '', params: model === undefined ? {} : paramsFor(model, {}), prompt: '', refs: [], count: 1, error: null, sending: false };
+  return { modelId: model?.id ?? '', params: model === undefined ? {} : paramsFor(model, { soulId: rememberedSoulId() }), prompt: '', refs: [], count: 1, error: null, sending: false };
 };
 
 let refSeq = 0;
@@ -214,8 +220,15 @@ interface GenState {
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useGen = create<GenState>((set, get) => {
-  const patchComposer = (kind: MediaKind, patch: Partial<Composer> | ((c: Composer) => Partial<Composer>)): void =>
-    set((s) => ({ composer: { ...s.composer, [kind]: { ...s.composer[kind], ...(typeof patch === 'function' ? patch(s.composer[kind]) : patch) } } }));
+  const patchComposer = (kind: MediaKind, patch: Partial<Composer> | ((c: Composer) => Partial<Composer>)): void => {
+    const previous = get().composer[kind];
+    const next = { ...previous, ...(typeof patch === 'function' ? patch(previous) : patch) };
+    if (typeof next.params.soulId === 'string' && (next.params.soulId !== previous.params.soulId || next.modelId !== previous.modelId)) {
+      try { localStorage.setItem(SOUL_ID_KEY, next.params.soulId); }
+      catch { /* In private mode the current form still keeps the selection. */ }
+    }
+    set((s) => ({ composer: { ...s.composer, [kind]: next } }));
+  };
 
   /** Опрос ленты, пока есть незаконченные задачи: сервер сам доводит их до файла, мы только показываем. */
   const schedulePoll = (): void => {
@@ -339,7 +352,7 @@ export const useGen = create<GenState>((set, get) => {
       const model = findModel(modelId);
       if (model === undefined) return;
       // Общие параметры (формат, разрешение, длительность) переживают смену модели, если новой подходят.
-      patchComposer(kind, (c) => ({ modelId, params: paramsFor(model, c.params), error: null }));
+      patchComposer(kind, (c) => ({ modelId, params: paramsFor(model, { soulId: rememberedSoulId(), ...c.params }), error: null }));
     },
     setParam: (kind, key, value) => patchComposer(kind, (c) => ({ params: { ...c.params, [key]: value }, error: null })),
     setPrompt: (kind, prompt) => patchComposer(kind, { prompt, error: null }),
@@ -382,7 +395,7 @@ export const useGen = create<GenState>((set, get) => {
     applyPrompt: (kind, modelId, params, prompt, refs) => {
       const model = findModel(modelId);
       if (model === undefined) return;
-      patchComposer(kind, (c) => ({ modelId: model.id, params: paramsFor(model, { ...c.params, ...params }), prompt, refs: refs.map((r) => ({ ...r, key: nextKey(), thumb: thumbOf(r.source) })), error: null }));
+      patchComposer(kind, (c) => ({ modelId: model.id, params: paramsFor(model, { soulId: rememberedSoulId(), ...c.params, ...params }), prompt, refs: refs.map((r) => ({ ...r, key: nextKey(), thumb: thumbOf(r.source) })), error: null }));
     },
 
     submit: async (kind, consent = false) => {
