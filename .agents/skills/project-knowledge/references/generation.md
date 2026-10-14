@@ -25,7 +25,7 @@ Seedream и upscale. Расширение каталога и эти новые 
 | Higgsfield API (`api.higgsfield.ai`) | Soul 2 и готовые мудборды (`style_id`, список — с API, кеш на час); ключ в формате `KEY_ID:KEY_SECRET` |
 
 - Higgsfield API — отдельный продукт с балансом в USD, мимо подписки Plus. В текущем UI Soul ID
-  вводится как UUID. API поддерживает `GET /v1/custom-references/list?page=1&page_size=20`: проверено
+  в студии вводится как UUID; Production имеет отдельный flow загрузки/создания/выбора. API поддерживает `GET /v1/custom-references/list?page=1&page_size=20`: проверено
   12.10.2026, аккаунт вернул пустой список. Прежнее утверждение об отсутствии list endpoint устарело.
   Soul ID из веба не работал 28.09 (404); нужен completed reference версии v2 того же API-аккаунта.
   Свой мудборд через API не создаётся (решение 27).
@@ -76,3 +76,23 @@ Seedream и upscale. Расширение каталога и эти новые 
 
 Кадр из видео, обрезка видео, обрезка и изменение размера картинки и видео — ffmpeg на машине владельца,
 без провайдера (решения 34–36). Тот же отрезок — тот же файл.
+
+
+## Soul ID в Production (14.10.2026)
+
+Создание персонажа отдельно от mock-медиа: `POST /v1/custom-references`, обязательно
+`model_version: v2`. Принимаются 1–100 локальных JPG/PNG/WebP, до 30 МБ (локальный лимит).
+Перед внешней отправкой backend проверяет все файлы. Загрузка: `/files/generate-upload-url` →
+PUT с выданными upload_headers без API-ключа → public_url для custom reference.
+Авторизация API — Key из Keychain; credentials не передаются storage/CDN и не кладутся в env.
+
+Цена создания Soul ID не опубликована: UI не обещает нулевую стоимость, сервер требует
+`consent: true` и `costConfirmed: unknown`. Это отдельное подтверждение неизвестной цены обучения;
+существующий числовой cost gate генерации кадров не меняется. Повтор одной requestId не создаёт
+вторую задачу; при потерянном ответе или рестарте повторного POST нет. Ошибки не показывают сырые
+ответы провайдера или signed URL. Проверять реализацию без денег — через injected SoulIdProvider.
+
+Источники: [Soul 2](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/standard/api-reference),
+[Soul ID](https://open.higgsfield.ai/models/soul-id/api-reference),
+[upload](https://docs.higgsfield.ai/docs/concepts/file-uploads.md).
+Общий OpenAPI Soul ID опускает model_version; используется model-specific контракт Soul 2.

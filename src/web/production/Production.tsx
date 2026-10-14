@@ -4,6 +4,7 @@ import { Button, Dialog, Icon, Tag, Text, TextField } from '../ui/components/ind
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 import { Preparation } from './Preparation.tsx';
+import { CharacterField } from './CharacterField.tsx';
 
 function eventLabel(message: string): string {
   return message.replace(/\b(?:photos|photoQc|photoReview|videos|videoQc|videoReview|upscale|finalQc|ready)\b/g,
@@ -34,6 +35,7 @@ function NewRun() {
       <TextField label="Название серии" value={input.title} maxLength={100} required onChange={(e) => setInput({ ...input, title: e.target.value })} />
       <TextField multiline label="Сценарий" rows={4} value={input.script} maxLength={12000} required onChange={(e) => setInput({ ...input, script: e.target.value })} />
       <TextField multiline label="Визуальный вектор" rows={3} value={input.direction} maxLength={3000} required onChange={(e) => setInput({ ...input, direction: e.target.value })} />
+      <CharacterField value={input.characterId ?? null} disabled={busy} onChange={(characterId) => setInput({ ...input, characterId })} />
       <fieldset className={styles.choices}><legend>Как снято</legend>{([['phone', 'Phone / UGC'], ['cinema', 'Cinematic']] as const).map(([style, label]) => <label key={style}><input type="radio" name="production-style" checked={input.style === style} onChange={() => setInput({ ...input, style })} />{label}</label>)}</fieldset>
       <fieldset className={styles.choices}><legend>Подготовка серии</legend>{([['codex', 'Codex — реальная подготовка'], ['mock', 'Только mock']] as const).map(([planningMode, label]) => <label key={planningMode}><input type="radio" name="production-planning" checked={input.planningMode === planningMode} onChange={() => setInput({ ...input, planningMode })} />{label}</label>)}</fieldset>
       <label className={styles.check}><input type="checkbox" checked={input.scenario === 'repair'} onChange={(e) => setInput({ ...input, scenario: e.target.checked ? 'repair' : 'normal' })} />Показать локальную правку одного кадра</label>
@@ -97,7 +99,7 @@ function Gate({ run, kind, onInspect, onEdit }: { run: ProductionRun; kind: 'pho
   </>;
 }
 function RunView({ run }: { run: ProductionRun }) {
-  const { act, busy } = useProduction();
+  const { act, busy, setCharacter } = useProduction();
   const [inspect, setInspect] = useState<Artifact | null>(null);
   useEffect(() => { setInspect((previous) => previous ? currentArtifact(run, previous.id) ?? previous : null); }, [run]);
   const [editing, setEditing] = useState<{ shotId: string; sourceId: string } | null>(null);
@@ -132,7 +134,8 @@ function RunView({ run }: { run: ProductionRun }) {
   }
   return <>
     <header className={styles.header}><div><div className={styles.eyebrow}><Tag tone="outline">{run.planningMode === 'codex' ? 'Codex + mock-медиа' : 'Mock · 0 кредитов'}</Tag><Text as="span" variant="caption" tone="secondary">Серия · {total ? `${total} кадров` : 'планируется'}</Text></div><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}><Tag tone={allReady ? 'success' : 'neutral'} dot>{runLabel(run)}</Tag>{!allReady && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Продолжить' : 'Пауза'}</Button>}</div></header>
-    <div className={styles.mockNote}>{run.planningMode === 'codex' ? 'Сцена, shot plan и prompts — Codex. Картинки и клипы — условные локальные макеты, они не изображают этот план. Медиа, проверки качества и upscale остаются mock, без KIE и Higgsfield.' : 'Локальная демонстрация процесса. Кадры условные, проверки смоделированы. LLM, Higgsfield и KIE не вызываются.'}</div>
+    <div className={styles.mockNote}>{run.planningMode === 'codex' ? 'Сцена, shot plan и prompts — Codex. Картинки и клипы — условные локальные макеты, они не изображают этот план. Медиа, проверки качества и upscale остаются mock, без вызовов генерации KIE и Higgsfield.' : 'Локальная демонстрация процесса. Кадры условные, проверки смоделированы. Генерация и LLM не вызываются. Soul ID управляется отдельно.'}</div>
+    <CharacterField value={run.characterId ?? null} name={run.character?.name} disabled={busy} onChange={setCharacter} />
     <nav className={styles.overview} aria-label="Этапы серии">{[['photoReview', '01', 'Принятие фото'], ['videoReview', '02', 'До Topaz'], ['ready', '03', 'Выдача']] .map(([id, n, label]) => <button type="button" key={id} onClick={() => { const target = document.getElementById(`production-${id}`); const button = target?.querySelector('button'); if (button?.getAttribute('aria-expanded') === 'false') button.click(); target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}><span>{n}</span><Text as="span" variant="label">{label}</Text><Text as="span" variant="caption" tone="tertiary">{stageProgress(run, id as StageId).done} / {total || '—'}</Text></button>)}</nav>
     {run.paused && <div className={styles.notice} role="status">Серия на паузе. Состояние сохранено; продолжение вернётся к текущим этапам.</div>}
     <div className={styles.timeline}>{STAGES.map(([id, title, subtitle], index) => <Stage key={id} run={run} id={id} index={index} title={title} subtitle={id === 'plan' ? run.planningMode === 'codex' ? 'Режиссёр → агент prompts · Codex' : 'Фиксированная сцена · mock' : subtitle}>{body(id)}</Stage>)}</div>

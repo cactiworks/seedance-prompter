@@ -1,0 +1,108 @@
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--lab-space-12);
+  padding: var(--lab-space-12);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  margin: var(--lab-space-8) 0;
+}
+
+.field > div,
+.content,
+.list,
+.itemText {
+  display: grid;
+  gap: var(--lab-space-6);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.content { gap: var(--lab-space-16); }
+
+.toolbar,
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lab-space-8);
+}
+
+.footer {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lab-space-10);
+  padding: var(--lab-space-12);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-m);
+  cursor: pointer;
+}
+
+.item:has(input:checked) { border-color: var(--lab-accent); }
+.item:has(input:disabled) { cursor: default; }
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lab-space-8);
+  font-size: var(--lab-type-label-size);
+  line-height: 1.5;
+  color: var(--lab-text-secondary);
+}
+
+.item input,
+.check input {
+  flex: none;
+  accent-color: var(--lab-accent);
+}
+
+.avatar {
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--lab-radius-m);
+}
+
+.photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--lab-space-10);
+}
+
+.photos figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.photos img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--lab-radius-m);
+}
+
+.photos figcaption {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--lab-type-caption-size);
+  color: var(--lab-text-secondary);
+}
+.fileInput { display: none; }
+
+.error {
+  color: var(--lab-text-primary);
+  background: var(--lab-fill-1);
+  padding: var(--lab-space-12);
+  border-radius: var(--lab-radius-m);
+  font-size: var(--lab-type-label-size);
+}

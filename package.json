@@ -8,7 +8,13 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node src/server/index.ts",
+    "start": "node scripts/start.ts",
+    "start:offline": "SP_SKIP_UPDATE=1 node scripts/start.ts",
+    "sync:source": "node scripts/sync.ts source",
+    "sync:replica": "node scripts/sync.ts replica",
+    "sync:status": "node scripts/sync.ts status",
+    "update": "node scripts/sync.ts update",
+    "publish": "node scripts/sync.ts publish",
     "dev": "node --watch-path=src/server --watch-path=src/core src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

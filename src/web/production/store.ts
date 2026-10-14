@@ -15,6 +15,7 @@ interface State {
   runs: ProductionRun[]; run: ProductionRun | null; activeId: string | null; initialized: boolean; busy: boolean; error: string | null;
   load: () => Promise<void>; refresh: () => Promise<void>; select: (id: string) => void; newForm: () => void;
   create: (input: RunInput) => Promise<void>; act: (action: Command) => Promise<boolean>;
+  setCharacter: (characterId: string | null) => Promise<boolean>;
 }
 export const useProduction = create<State>((set, get) => ({
   runs: [], run: null, activeId: savedActive(), initialized: false, busy: false, error: null,
@@ -57,5 +58,17 @@ export const useProduction = create<State>((set, get) => ({
     } catch (error) {
       set({ error: String(error), busy: false }); await get().refresh(); return false;
     } finally { set({ busy: false }); }
+  },
+  setCharacter: async (characterId) => {
+    const run = get().run;
+    if (!run || get().busy) return false;
+    set({ busy: true, error: null });
+    try {
+      const latest = await request<ProductionRun>(`/api/production/${run.id}`);
+      const next = await request<ProductionRun>(`/api/production/${run.id}/character`, { rev: latest.rev, characterId });
+      set({ runs: get().runs.map((r) => r.id === next.id ? next : r), ...(get().activeId === next.id ? { run: next } : {}) });
+      return true;
+    } catch (error) { set({ error: String(error) }); return false; }
+    finally { set({ busy: false }); }
   },
 }));

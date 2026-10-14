@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { advanceRun, applyRunAction, completePreparation, newRun, ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, RunAction, RunInput } from '../../core/production/model.ts';
+import type { CharacterSelection } from '../../core/production/character.ts';
 import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import { agentError, directScene, writePrompts, type AgentOptions } from './agents.ts';
@@ -105,11 +106,19 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   return {
     get: read, list, tick,
     waitForPreparation: async (id: string): Promise<void> => { await pending.get(id)?.done; },
-    create: async (input: RunInput): Promise<ProductionRun> => {
-      const run = await exclusive(() => write(newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay)));
+    create: async (input: RunInput, character: CharacterSelection | null = null): Promise<ProductionRun> => {
+      if ((input.characterId ?? null) !== (character?.id ?? null)) throw new ProductionError('INVALID', 'Персонаж серии не проверен.');
+      const run = await exclusive(() => write({ ...newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay), character }));
       if (run.preparation) launchPreparation(run.id, run.preparation.attempt);
       return run;
     },
+    setCharacter: (id: string, rev: number, character: CharacterSelection | null): Promise<ProductionRun> => exclusive(async () => {
+      const run = await read(id);
+      if (run.rev !== rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Повтори выбор персонажа.');
+      run.character = character; run.characterId = character?.id ?? null;
+      record(run, now(), character ? `Выбран персонаж «${character.name}». Mock-кадры не меняются; сходство лица не проверялось.` : 'Персонаж отвязан от серии. Mock-кадры не меняются.');
+      return write(run);
+    }),
     act: async (id: string, action: RunAction): Promise<ProductionRun> => {
       const run = await exclusive(async () => {
         const source = await read(id);

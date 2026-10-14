@@ -10,6 +10,7 @@ import type { Runner } from '../../src/server/llm/tasks/write.ts';
 import { DIRECTOR_SYSTEM, directScene, writePrompts } from '../../src/server/production/agents.ts';
 import { createProductionRuntime, type ProductionRuntime } from '../../src/server/production/runtime.ts';
 import { productionRoutes } from '../../src/server/production/routes.ts';
+import { createCharacters } from '../../src/server/production/characters.ts';
 import { SCRIPT, sceneDraft, promptPlan } from './fixtures.ts';
 
 const dirs: string[] = []; const runtimes: ProductionRuntime[] = [];
@@ -82,7 +83,7 @@ describe('durable Codex preparation, always mock media', () => {
     expect(saved.shots.every(s => s.step === 'videoReview')).toBe(true);
     expect(saved.artifacts.some(a => a.kind === 'final')).toBe(false);
     expect(saved.artifacts.find(a => a.kind === 'video')!.prompt).toBe(promptPlan(count).shots[0]!.motionPrompt);
-    const manifest = await productionRoutes(rt).request(`/${saved.id}/manifest`);
+    const manifest = await productionRoutes(rt, createCharacters({ dataDir: directory() })).request(`/${saved.id}/manifest`);
     expect((await manifest.json() as ProductionRun).scenePlan).toEqual(saved.scenePlan);
     expect(network).not.toHaveBeenCalled();
   });

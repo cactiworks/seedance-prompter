@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
+import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
 export const CreateRunSchema = z.object({
   mode: z.literal('mock').default('mock'),
   planningMode: z.enum(['mock', 'codex']).optional(),
+  characterId: z.string().regex(CHARACTER_ID).nullable().optional(),
   title: z.string().trim().min(1).max(100),
   script: z.string().trim().min(1).max(12_000),
   direction: z.string().trim().min(1).max(3000),
@@ -36,6 +38,7 @@ export interface ProductionShot {
   dueAt: number; error: string | null; editNote: string; editSourceId: string | null;
 }
 export interface ProductionRun extends RunInput {
+  character?: CharacterSelection | null;
   id: string; rev: number; createdAt: string; updatedAt: string; paused: boolean;
   planned: boolean; dueAt: number; shots: ProductionShot[]; artifacts: Artifact[];
   approvals: { kind: 'photo' | 'video'; artifactId: string; at: string }[];

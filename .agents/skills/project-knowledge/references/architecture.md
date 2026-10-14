@@ -67,6 +67,7 @@ rename.
 | сессии студии | `data/studio/` |
 | свои мудборды, оценки, правила владельца | `data/moodboards.json`, `data/verdicts.json`, `data/learnings.json` |
 | выгрузка для монтажа | `data/exports/<дата время>/` |
+| Soul ID персонажи | `data/characters/<id>.json`: фото по upload IDs, referenceId, версия, статус, ошибка и ключ дедупликации отправки |
 | картинки студии, загруженные с диска | `data/uploads/<id>.<ext>` (сами не удаляются) |
 | исторические сырые выводы прежнего doctor | `data/logs/doctor/` (новый doctor сюда не пишет) |
 
@@ -167,7 +168,25 @@ repair; ошибки провайдера не повторяются автом
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет
 незавершённую роль. Пауза abort-ит вызов и защищает состояние от позднего ответа; resume не запускает
 Codex. Async `start()` помечает незавершённые вызовы interrupted, без автоповтора после рестарта.
-Runtime не импортирует media adapters/секреты. Identity, media API, vision QC и upscale не подключены;
+Runtime не импортирует media adapters/секреты. Выбор Soul ID передаётся проверенным snapshot
+через HTTP-слой. Применение identity к кадрам, media API, vision QC и upscale не подключены;
 fixtures циклически назначаются кадрам, всегда 4 с/480p, не иллюстрируют реальный shot plan.
 Старые серии без planningMode остаются mock. У клиента отдельный Zustand store и polling,
 выбор серии — sessionStorage. Файлы строятся `scripts/production/build-mock-media.mjs`.
+
+
+## Soul ID (14.10.2026)
+
+`server/production/{soulId,characters,characterRoutes}.ts` — отдельный adapter и хранилище.
+`GET /api/characters` читает локальные записи; `POST /api/characters` создаёт v2 только после
+валидации фото, consent и подтверждения неизвестной стоимости. Одна requestId сохраняется до
+внешней отправки и не создаёт повторную задачу при двойном запросе. Upload и create идут в фоне;
+рестарт не возобновляет POST. Потерянный ответ создания сохраняется как unknown, без автоповтора.
+`POST /api/characters/refresh` только читает статусы; `/sync` постранично читает список аккаунта.
+Проверка статуса выполняется раз в 5 секунд открытым Production при наличии незавершённых задач;
+обучение уже созданного Soul ID продолжается у Higgsfield и без открытой страницы.
+
+`POST /api/production/:id/character` проверяет rev и completed/v2 перед записью выбора; то же
+проверяется при создании серии с characterId. Смена персонажа не меняет mock-артефакты и approvals.
+В manifest попадает snapshot, фотографии и provider-ссылки туда не добавляются. Импорт без
+подтверждённой версии отображается, но не выбирается как Soul 2 v2.

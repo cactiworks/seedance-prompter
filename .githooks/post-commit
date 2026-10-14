@@ -1,0 +1,6 @@
+#!/bin/bash
+# Только основной Mac. pre-commit уже проверил код; ошибки push не отменяют локальный commit.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+if [ "$(git config --local --get seedance.syncRole)" = "source" ]; then
+  node scripts/sync.ts publish || echo 'Commit сохранён локально, GitHub НЕ подтверждён. Повтори: npm run publish'
+fi

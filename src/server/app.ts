@@ -28,6 +28,8 @@ import { DEFAULT_LLM_MODEL, LlmError, runCodex } from './llm/codexCli/provider.t
 import { writeShot, type Runner } from './llm/tasks/write.ts';
 import { createProductionRuntime, type ProductionRuntime } from './production/runtime.ts';
 import { productionRoutes } from './production/routes.ts';
+import { createCharacters, type Characters } from './production/characters.ts';
+import { characterRoutes } from './production/characterRoutes.ts';
 import { createFlows } from './storage/flows.ts';
 import { createJournal } from './storage/journal.ts';
 import { createMoodboards } from './storage/moodboards.ts';
@@ -67,6 +69,7 @@ export interface AppOptions {
   runLlm?: Runner;
   writerModel?: string;
   production?: ProductionRuntime;
+  characters?: Characters;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
   /** Генерация и библиотека. По умолчанию — живые провайдеры, фоновый опрос не запущен (его запускает index.ts). */
@@ -141,7 +144,9 @@ export function createApp(options: AppOptions) {
     return c.json({ error: 'INTERNAL', messageRu: 'Внутренняя ошибка сервера.' }, 500);
   });
 
-  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm })));
+  const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
+  app.route('/api/characters', characterRoutes(characters));
+  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm }), characters));
 
   const routes = app
     .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION }))
