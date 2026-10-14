@@ -45,7 +45,16 @@ export function validatePrompts(plan: PromptPlan, scene: ScenePlan): string[] {
   const errors: string[] = [];
   if (ids.length !== expected.length || new Set(ids).size !== ids.length || expected.some((id) => !ids.includes(id))) errors.push('Нужен ровно один набор prompts для каждого ID из shot plan.');
   for (const shot of plan.shots) {
-    if (shot.imagePrompt.split(/\s+/).length > 200) errors.push(`${shot.shotId}: imagePrompt длиннее 200 слов.`);
+    const words = shot.imagePrompt.split(/\s+/).length;
+    if (words < 40) errors.push(`${shot.shotId}: imagePrompt должен содержать 40–200 слов, включая сцену, действие и свет.`);
+    for (const [name, value] of [['imagePrompt', shot.imagePrompt], ['motionPrompt', shot.motionPrompt]]) {
+      const prose = (value ?? '').replace(/"[^"]*"|«[^»]*»/g, '');
+      if (/[а-яё]/i.test(prose) || !/[a-z]{3}/i.test(prose)) errors.push(`${shot.shotId}: ${name} должен быть на английском; текст в кадре можно оставить в кавычках.`);
+    }
+    const expectedShot = scene.shots.find((item) => item.id === shot.shotId);
+    const intervals = [...shot.motionPrompt.matchAll(/(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)\s*(?:s\b|sec(?:onds)?\b)/gi)].map((match) => [Number(match[1]), Number(match[2])] as const);
+    if (expectedShot && (intervals.length === 0 || intervals[0]?.[0] !== 0 || intervals.at(-1)?.[1] !== expectedShot.durationSec || intervals.some(([start, end], i) => end <= start || (i > 0 && intervals[i - 1]?.[1] !== start)))) errors.push(`${shot.shotId}: интервалы motionPrompt должны непрерывно покрывать 0–${expectedShot.durationSec} s без изменения длительности.`);
+    if (words > 200) errors.push(`${shot.shotId}: imagePrompt длиннее 200 слов.`);
     if (/@Image\d|<<<image_|\{\{(?:ref|intro):/.test(`${shot.imagePrompt} ${shot.motionPrompt}`)) errors.push(`${shot.shotId}: ссылки на неподключённые references запрещены.`);
   }
   return errors;

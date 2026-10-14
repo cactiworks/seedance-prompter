@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { imageSize } from '../gen/imageSize.ts';
+import { validateMediaFile } from '../gen/validateMedia.ts';
 
 export const UPLOAD_ID = /^u-[a-z0-9-]{6,64}$/;
 const UPLOAD_FILE = /^(u-[a-z0-9-]{6,64})\.(png|jpg|webp)$/;
@@ -31,10 +33,14 @@ export function createUploads(dataDir: string) {
     async save(bytes: Uint8Array, mime: string): Promise<Upload | null> {
       const ext = EXT_BY_MIME[mime];
       if (ext === undefined) return null;
+      const size = imageSize(bytes);
+      if (size === null || size.width < 1 || size.height < 1) return null;
       await mkdir(dir, { recursive: true });
       const id = `u-${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
       const fileName = `${id}.${ext}`;
       await writeFile(path.join(dir, `${fileName}.tmp`), bytes);
+      try { await validateMediaFile(path.join(dir, `${fileName}.tmp`), 'image'); }
+      catch { await rm(path.join(dir, `${fileName}.tmp`), { force: true }); return null; }
       await rename(path.join(dir, `${fileName}.tmp`), path.join(dir, fileName));
       return { id, fileName, mime };
     },

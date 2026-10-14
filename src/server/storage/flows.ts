@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { serialize } from './atomic.ts';
+import { StoreError } from './fsStore.ts';
 import { FlowSchema, type Flow } from '../../core/model/canvas.ts';
 
 export const FLOW_ID = /^f-[a-z0-9-]{6,64}$/;
@@ -45,18 +47,35 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
       return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
     async create(name: string): Promise<Flow> {
-      return write({ id: `f-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`, name: name.trim() || 'Новый flow', nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, createdAt: iso(), updatedAt: iso() });
+      return write({ id: `f-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`, name: name.trim() || 'Новый flow', rev: 1, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, createdAt: iso(), updatedAt: iso() });
     },
     /** null — тело не flow или id не совпал. */
     async save(id: string, incoming: unknown): Promise<Flow | null> {
       const parsed = FlowSchema.safeParse(incoming);
       if (!parsed.success || parsed.data.id !== id) return null;
-      return write({ ...parsed.data, updatedAt: iso() });
+      return serialize(fileOf(id), async () => {
+        const current = await get(id);
+        if (current === undefined) throw new StoreError('NOT_FOUND', 'Холст не найден.');
+        if ((parsed.data.rev ?? 0) !== (current.rev ?? 0)) throw new StoreError('CONFLICT', 'Холст изменён в другом окне. Твой черновик сохранён локально; сохрани его копией.');
+        return write({ ...parsed.data, rev: (current.rev ?? 0) + 1, updatedAt: iso() });
+      });
+    },
+    async restore(id: string): Promise<Flow | undefined> {
+      return serialize(fileOf(id), async () => {
+        if (await get(id) !== undefined) throw new StoreError('CONFLICT', 'Холст уже существует.');
+        try { await rename(path.join(dir, 'trash', `${id}.json`), fileOf(id)); }
+        catch { return undefined; }
+        return get(id);
+      });
     },
     async remove(id: string): Promise<boolean> {
-      if ((await get(id)) === undefined) return false;
-      await rm(fileOf(id), { force: true });
-      return true;
+      return serialize(fileOf(id), async () => {
+        if ((await get(id)) === undefined) return false;
+        const trash = path.join(dir, 'trash');
+        await mkdir(trash, { recursive: true });
+        await rename(fileOf(id), path.join(trash, `${id}.json`));
+        return true;
+      });
     },
   };
 }

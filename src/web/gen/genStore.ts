@@ -285,7 +285,7 @@ export const useGen = create<GenState>((set, get) => {
     loadJobs: async () => {
       const before = new Set(get().jobs.filter((j) => j.status === 'saved').map((j) => j.id));
       const jobs = await json<GenJob[]>(await fetch('/api/gen/jobs'));
-      set({ jobs });
+      set((state) => ({ jobs: [...new Map([...state.jobs, ...jobs].map((job) => [job.id, job])).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }));
       if (jobs.some((j) => j.status === 'saved' && !before.has(j.id))) void get().loadLibrary();
       if (jobs.some(isActive)) schedulePoll();
     },

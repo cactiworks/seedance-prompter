@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { currentArtifact, DEMO_INPUT, isAutomatic, runLabel, stageProgress, STAGES, type Artifact, type ProductionRun, type ProductionShot, type RunInput, type StageId } from '../../core/production/model.ts';
+import { currentArtifact, isAutomatic, runLabel, stageProgress, STAGES, type Artifact, type ProductionRun, type ProductionShot, type StageId } from '../../core/production/model.ts';
 import { Button, Dialog, Icon, Tag, Text, TextField } from '../ui/components/index.ts';
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
@@ -25,9 +25,8 @@ export function ProductionList() {
   </>;
 }
 function NewRun() {
-  const [input, setInput] = useState<RunInput>({ ...DEMO_INPUT, planningMode: 'codex' });
-  const { create, busy } = useProduction();
-  return <div className={styles.start}>
+  const { draft: input, setDraft: setInput, create, busy } = useProduction();
+  return <div className={styles.start} data-guide="production-start">
     <Tag tone="outline">Production · mock-медиа</Tag>
     <Text as="h1" variant="title-l">От сценария к подборке кадров</Text>
     <Text tone="secondary">Задай направление. Codex подготовит единую сцену, план кадров и prompts. Затем можно пройти оба milestone на mock-медиа.</Text>
@@ -49,8 +48,10 @@ function Stage({ run, id, index, title, subtitle, children }: { run: ProductionR
   const progress = stageProgress(run, id);
   const active = progress.active > 0;
   const showByDefault = active || (id === 'ready' && progress.done > 0);
-  const [expanded, setExpanded] = useState(showByDefault);
-  useEffect(() => { setExpanded(showByDefault); }, [showByDefault]);
+  const [manualExpanded, setExpanded] = useState<boolean | null>(null);
+  const [revealed, setRevealed] = useState(showByDefault);
+  useEffect(() => { if (showByDefault) setRevealed(true); }, [showByDefault]);
+  const expanded = manualExpanded ?? revealed;
   const completed = progress.total > 0 && progress.done === progress.total;
   const gate = id === 'photoReview' || id === 'videoReview';
   const label = completed ? 'Завершено' : progress.errors ? 'Сбой' : active ? run.paused ? 'На паузе' : gate ? 'Твоё решение' : 'В работе' : progress.done ? 'Частично готово' : 'Ожидает';
@@ -152,10 +153,12 @@ function RunView({ run }: { run: ProductionRun }) {
   </>;
 }
 export function Production() {
-  const { load, refresh, initialized, run, error } = useProduction();
-  useEffect(() => { void load(); const timer = setInterval(() => void refresh(), 800); return () => clearInterval(timer); }, [load, refresh]);
+  const { load, refresh, initialized, run, error, connectionError, warnings } = useProduction();
+  useEffect(() => { void load(); const timer = setInterval(() => void refresh(), 800); const summaries = setInterval(() => void load(), 5000); return () => { clearInterval(timer); clearInterval(summaries); }; }, [load, refresh]);
   return <main className={styles.page} data-production="true"><div className={styles.inner}>
     {error && <div className={`${styles.error} ${styles.globalError}`} role="alert">{error}<Button variant="border" onClick={() => void load()}>Обновить</Button></div>}
+    {connectionError && <Text tone="accent">{connectionError}</Text>}
+    {warnings.map((warning) => <Text key={warning} tone="accent">{warning}</Text>)}
     {!initialized ? <Text tone="secondary">Открываю производство…</Text> : run ? <RunView key={run.id} run={run} /> : <NewRun />}
   </div></main>;
 }

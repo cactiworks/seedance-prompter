@@ -6,6 +6,7 @@ export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQ
 export type ShotStep = (typeof STEP_ORDER)[number];
 export const CreateRunSchema = z.object({
   mode: z.literal('mock').default('mock'),
+  requestId: z.string().min(8).max(100).optional(),
   planningMode: z.enum(['mock', 'codex']).optional(),
   characterId: z.string().regex(CHARACTER_ID).nullable().optional(),
   title: z.string().trim().min(1).max(100),

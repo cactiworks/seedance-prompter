@@ -290,7 +290,12 @@ export function createGenRuntime(options: GenRuntimeOptions) {
         const genError = error instanceof GenError ? error : new GenError('PROVIDER', error instanceof Error ? error.message : 'Задача не создана.');
         // Без кредитов или ключа следующие задачи упадут так же — не стучимся зря.
         if (['NO_CREDITS', 'AUTH', 'NO_KEY', 'INVALID'].includes(genError.code)) fatal = genError;
-        out.push(await fail(job, genError.code, genError.messageRu));
+        const rejected = ['NO_CREDITS', 'AUTH', 'NO_KEY', 'INVALID', 'RATE_LIMIT', 'NOT_FOUND'].includes(genError.code);
+        if (rejected) out.push(await fail(job, genError.code, genError.messageRu));
+        else {
+          out.push(await update(job, { status: 'unknown', error: { code: 'SUBMIT_UNKNOWN', messageRu: 'Ответ на создание задачи потерян. Она могла быть создана и оплачена. Проверь историю провайдера; автоматического повтора нет.' }, finishedAt: iso() }));
+          fatal = new GenError('PROVIDER', 'Оставшиеся задачи не отправлены: исход предыдущего запуска неизвестен.');
+        }
       }
     }
     return { jobs: out, estimate: cost };
@@ -397,13 +402,14 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     for (const job of await jobs.all()) {
       if (job.status !== 'submitting') continue;
       if (job.taskId !== null) await update(job, { status: 'queued', nextCheckAt: now() });
-      else await update(job, { status: 'failed', error: { code: 'SUBMIT_INTERRUPTED', messageRu: 'Сервер остановился во время отправки. Посмотри kie.ai/logs, прежде чем запускать заново: задача могла быть создана и оплачена.' }, finishedAt: iso() });
+      else await update(job, { status: 'unknown', error: { code: 'SUBMIT_INTERRUPTED', messageRu: 'Сервер остановился во время отправки. Проверь историю провайдера: задача могла быть создана и оплачена. Автоматического повтора нет.' }, finishedAt: iso() });
     }
   }
 
   async function retry(id: string): Promise<GenJob> {
     const job = await jobs.get(id);
     if (job === undefined) throw new SubmitError('NOT_FOUND', 422, 'Задача не найдена.');
+    if (job.status === 'unknown') throw new SubmitError('SUBMIT_UNKNOWN', 409, 'Исход отправки неизвестен. Проверь историю провайдера; повтор может привести к двойному списанию.');
     if (job.status === 'download_failed') return update(job, { status: 'downloading', downloadAttempts: 0, error: null, nextCheckAt: now(), finishedAt: null });
     if (job.status === 'failed' && job.error?.code === 'POLL_TIMEOUT' && job.taskId !== null) return update(job, { status: 'running', pollingSince: now(), error: null, nextCheckAt: now(), finishedAt: null });
     throw new SubmitError('NOT_RETRYABLE', 409, 'Эту задачу не повторить без новой генерации — запусти заново (это новые кредиты).');

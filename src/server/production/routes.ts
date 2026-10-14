@@ -22,6 +22,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       const character = input.data.characterId ? await characters.select(input.data.characterId) : null;
       return c.json(await runtime.create(input.data, character), 201);
     })
+    .get('/issues', (c) => c.json(runtime.issues()))
     .get('/:id', async (c) => c.json(await runtime.get(c.req.param('id'))))
     .post('/:id/character', async (c) => {
       const input = z.object({ rev: z.number().int().nonnegative(), characterId: z.string().regex(CHARACTER_ID).nullable() }).strict().safeParse(await c.req.json().catch(() => null));

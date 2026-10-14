@@ -9,6 +9,8 @@ import { GenError, type GenProvider, type PollResult } from '../../src/server/ge
 import { createGenRuntime, POLL_TIMEOUT_MS } from '../../src/server/gen/runtime.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
+const validPng = new Uint8Array(readFileSync(path.join(ROOT, 'src/web/public/production-mock/shot-1.png')));
+const mediaStubs = { validateMedia: async () => undefined, probeVideo: async () => ({ durationSec: 4, width: 480, height: 854 }) };
 const host = `${HOST}:${PORT}`;
 const headers = { host, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };
 
@@ -62,7 +64,7 @@ function setup(patch: Partial<GenProvider> = {}, dataDir = mkdtempSync(path.join
   const mock = mockProvider(patch);
   const cdn = mediaServer();
   const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: clock.now });
-  const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+  const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, reveal: false });
   const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
   return { app, gen, mock, cdn, clock, dataDir, post };
 }
@@ -257,7 +259,7 @@ describe('перезапуск сервера', () => {
 
     const second = setup({}, first.dataDir);
     await second.gen.recover();
-    expect(await second.gen.jobs.get(interrupted.id)).toMatchObject({ status: 'failed', error: { code: 'SUBMIT_INTERRUPTED' } });
+    expect(await second.gen.jobs.get(interrupted.id)).toMatchObject({ status: 'unknown', error: { code: 'SUBMIT_INTERRUPTED' } });
     second.clock.advance(5_000);
     await second.gen.tick();
     expect(second.mock.calls.poll).toEqual(['task-1']);
@@ -289,7 +291,7 @@ describe('студия: сессии, загрузки, избранное', () 
 
   it('загрузка с диска становится референсом задачи; не картинка — 415', async () => {
     const { app, mock, post } = setup();
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 9]);
+    const png = validPng;
     const up = await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: png });
     expect(up.status).toBe(201);
     const { id } = (await up.json()) as { id: string };
@@ -298,14 +300,14 @@ describe('студия: сессии, загрузки, избранное', () 
 
     const res = await post('/api/gen/jobs', imageJob({ refs: [{ label: 'кадр', source: { type: 'upload', uploadId: id } }], refsConsent: true }));
     expect(res.status).toBe(202);
-    expect(mock.calls.upload).toEqual([{ fileName: `${id}.png`, mime: 'image/png', size: 6 }]);
+    expect(mock.calls.upload).toEqual([{ fileName: `${id}.png`, mime: 'image/png', size: validPng.length }]);
     expect(mock.calls.submit[0]).toMatchObject({ model: 'gpt-image-2-5-flare-image-to-image', input: { input_urls: [`https://up.example/${id}.png`] } });
   });
 
   it('Seedream: цена с картинками сверяется на сервере (+0.5 кр за каждую после первой)', async () => {
     const { app, post } = setup();
     const ids: string[] = [];
-    for (let i = 0; i < 3; i += 1) ids.push(((await (await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: new Uint8Array([i]) })).json()) as { id: string }).id);
+    for (let i = 0; i < 3; i += 1) ids.push(((await (await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: validPng })).json()) as { id: string }).id);
     const body = { modelId: 'kie/seedream-5-pro', prompt: 'x', params: { resolution: '2K' }, refs: ids.map((uploadId) => ({ source: { type: 'upload', uploadId } })), refsConsent: true };
     expect((await post('/api/gen/jobs', { ...body, confirmCredits: 14 })).status).toBe(409);
     expect((await post('/api/gen/jobs', { ...body, confirmCredits: 15 })).status).toBe(202);
@@ -331,7 +333,7 @@ describe('Soul 2 через Higgsfield: тот же конвейер', () => {
     const hf = mockProvider({ id: 'higgsfield', balance: undefined });
     const cdn = mediaServer();
     const gen = createGenRuntime({ dataDir, providers: { higgsfield: hf.provider }, fetch: cdn.fetch, now: () => t });
-    const app = createApp({ rootDir: ROOT, dataDir, gen });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen });
     const res = await app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify({ modelId: 'higgsfield/soul-2', prompt: 'Portrait', params: { resolution: '720p' }, confirmCredits: 0.004 }) });
     expect(res.status).toBe(202);
     expect(hf.calls.submit[0]).toMatchObject({ model: 'higgsfield-ai/soul/v2/standard', input: { resolution: '720p', batch_size: 1 } });
@@ -391,7 +393,7 @@ describe('кадр из видео (ffmpeg)', () => {
     const cdn = mediaServer();
     const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: () => t });
     const calls: string[][] = [];
-    const app = createApp({
+    const app = createApp({ ...mediaStubs,
       rootDir: ROOT,
       dataDir,
       gen,
@@ -411,7 +413,8 @@ describe('кадр из видео (ffmpeg)', () => {
     expect(res.status).toBe(201);
     const frame = (await res.json()) as MediaItem;
     expect(frame).toMatchObject({ kind: 'image', modelId: 'local/frame', prompt: 'Последний кадр видео', bytes: 5, creditsConsumed: 0, refs: [{ source: { type: 'media', mediaId: video!.id } }] });
-    expect(calls[0]?.slice(0, 2)).toEqual(['-sseof', '-0.1']);
+    expect(calls[0]).toEqual(expect.arrayContaining(['-fps_mode', 'passthrough', '-update', '1']));
+    expect(calls[0]).not.toContain('-sseof');
 
     const again = await app.request(`/api/library/${video!.id}/frame`, { method: 'POST', headers, body: JSON.stringify({ which: 'last' }) });
     expect(again.status).toBe(200);
@@ -427,7 +430,7 @@ describe('Soul 2: seed сохраняется с задачей, мудборд�
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-seed-'));
     const hf = mockProvider({ id: 'higgsfield', balance: undefined, ...(listStyles === undefined ? {} : { listStyles }) });
     const gen = createGenRuntime({ dataDir, providers: { higgsfield: hf.provider }, fetch: mediaServer().fetch, now: () => Date.parse('2026-09-28T10:00:00Z') });
-    const app = createApp({ rootDir: ROOT, dataDir, gen });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen });
     const post = (body: unknown) => app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify(body) });
     return { app, hf, post };
   };
@@ -477,7 +480,7 @@ describe('инструменты: обрезка (ffmpeg) и апскейл Topa
     const cdn = mediaServer();
     const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: () => t });
     const calls: string[][] = [];
-    const app = createApp({
+    const app = createApp({ ...mediaStubs,
       rootDir: ROOT,
       dataDir,
       gen,
@@ -520,7 +523,7 @@ describe('обрезка видео по времени (ffmpeg)', () => {
     const cdn = mediaServer();
     const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: () => t });
     const calls: string[][] = [];
-    const app = createApp({
+    const app = createApp({ ...mediaStubs,
       rootDir: ROOT,
       dataDir,
       gen,
@@ -540,7 +543,7 @@ describe('обрезка видео по времени (ffmpeg)', () => {
     const res = await post(`/api/library/${video!.id}/trim`, { start: 0.5, end: 3 });
     expect(res.status).toBe(201);
     const cut = (await res.json()) as MediaItem;
-    expect(cut).toMatchObject({ kind: 'video', modelId: 'local/trim', prompt: 'Обрезка 0.5–3.0 с', creditsConsumed: 0, refs: [{ source: { type: 'media', mediaId: video!.id } }] });
+    expect(cut).toMatchObject({ kind: 'video', modelId: 'local/trim', prompt: 'Обрезка 0.50–3.00 с', creditsConsumed: 0, refs: [{ source: { type: 'media', mediaId: video!.id } }] });
     expect(calls[0]).toEqual(expect.arrayContaining(['-ss', '0.50', '-to', '3.00', 'libx264']));
     expect(((await (await post(`/api/library/${video!.id}/trim`, { start: 0.5, end: 3 })).json()) as MediaItem).id).toBe(cut.id);
     expect(calls).toHaveLength(1);
@@ -555,7 +558,7 @@ describe('свои файлы в библиотеку', () => {
   it('видео и картинка импортируются с именем и типом; чужой формат — 415; своё видео режется как сгенерированное', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-import-'));
     const gen = createGenRuntime({ dataDir, providers: {} });
-    const app = createApp({ rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])) });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])) });
     const upload = (type: string, name: string, bytes: Uint8Array) => app.request(`/api/library/import?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': type }, body: bytes as Uint8Array<ArrayBuffer> });
     const video = await upload('video/quicktime', 'съёмка на крыше.mov', new Uint8Array([0, 0, 0, 0x14, 0x66, 0x74, 0x79, 0x70]));
     expect(video.status).toBe(201);
@@ -574,18 +577,19 @@ describe('размер под площадку (ffmpeg)', () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-resize-'));
     const gen = createGenRuntime({ dataDir, providers: {} });
     const calls: string[][] = [];
-    const app = createApp({ rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => { calls.push(args); writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])); } });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, ffmpeg: async (args) => { calls.push(args); writeFileSync(args.at(-1) as string, new Uint8Array([1, 2, 3])); } });
     const video = (await (await app.request('/api/library/import?name=clip.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 8]) })).json()) as MediaItem;
     const post = (body: unknown) => app.request('/api/media/resize', { method: 'POST', headers, body: JSON.stringify(body) });
 
-    const res = await post({ source: { type: 'media', mediaId: video.id }, width: 1081, height: 1920, fit: 'cover' });
+    expect((await post({ source: { type: 'media', mediaId: video.id }, width: 1081, height: 1920, fit: 'cover' })).status).toBe(422);
+    const res = await post({ source: { type: 'media', mediaId: video.id }, width: 1080, height: 1920, fit: 'cover' });
     expect(res.status).toBe(201);
     const out = (await res.json()) as MediaItem;
     expect(out).toMatchObject({ kind: 'video', modelId: 'local/resize', prompt: 'Размер 1080×1920 · заполнить', refs: [{ source: { type: 'media', mediaId: video.id } }] });
     expect(calls[0]).toContain('scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1');
     expect(((await (await post({ source: { type: 'media', mediaId: video.id }, width: 1080, height: 1920, fit: 'cover' })).json()) as MediaItem).id).toBe(out.id);
 
-    const upload = (await (await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) })).json()) as { id: string };
+    const upload = (await (await app.request('/api/uploads', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'image/png' }, body: validPng })).json()) as { id: string };
     const img = await post({ source: { type: 'upload', uploadId: upload.id }, width: 1080, height: 1080, fit: 'contain' });
     expect(img.status).toBe(201);
     expect(((await img.json()) as MediaItem).kind).toBe('image');
@@ -640,7 +644,7 @@ describe('апскейл видео Topaz (решение 39)', () => {
         return { durationSec: 5.04, width: 480, height: 854 };
       },
     });
-    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, reveal: false });
     const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
     const upload = (type: string, name: string, bytes: Uint8Array) => app.request(`/api/library/import?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': type }, body: bytes as Uint8Array<ArrayBuffer> });
     const video = (await (await upload('video/quicktime', 'черновик.mov', new Uint8Array([0, 0, 0, 0x14, 0x66, 0x74, 0x79, 0x70]))).json()) as MediaItem;
@@ -678,7 +682,7 @@ describe('апскейл видео Topaz (решение 39)', () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-topaz-long-'));
     const mock = mockProvider();
     const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, probe: async () => ({ durationSec: 900.5, width: 480, height: 854 }) });
-    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, reveal: false });
     const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
     const imported = await app.request('/api/library/import?name=long.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) });
     const video = (await imported.json()) as MediaItem;
@@ -696,7 +700,7 @@ describe('удаление файла чистит canvas (находка рев
   it('нода «Видео» и картинка-источник в сохранённом flow остаются без файла, а не со ссылкой в никуда', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-forget-'));
     const gen = createGenRuntime({ dataDir, providers: {} });
-    const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+    const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, reveal: false });
     const req = (method: string, url: string, body?: unknown) => app.request(url, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const imported = await app.request('/api/library/import?name=clip.mp4', { method: 'POST', headers: { host, [CLIENT_HEADER]: '1', 'content-type': 'video/mp4' }, body: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) });
     const video = (await imported.json()) as MediaItem;
@@ -709,5 +713,20 @@ describe('удаление файла чистит canvas (находка рев
     expect((await req('DELETE', `/api/library/${video.id}`)).status).toBe(200);
     const after = (await (await req('GET', `/api/canvas/flows/${flow.id}`)).json()) as { nodes: { id: string; mediaId: string | null; source: unknown }[] };
     expect(after.nodes.map((n) => [n.id, n.mediaId, n.source])).toEqual([['v', null, null], ['i', null, null]]);
+  });
+});
+
+describe('B05: ambiguous submission is never offered as a safe retry', () => {
+  it('lost submit response remains unknown through restart and retry does not call provider again', async () => {
+    let submissions = 0;
+    const { post, gen, dataDir } = setup({ submit: async () => { submissions += 1; throw new Error('accepted but response lost'); } });
+    const response = await post('/api/gen/jobs', imageJob());
+    const { jobs } = await response.json() as { jobs: GenJob[] };
+    expect(jobs[0]).toMatchObject({ status: 'unknown', error: { code: 'SUBMIT_UNKNOWN' } });
+    const restarted = createGenRuntime({ dataDir, providers: {} });
+    await restarted.recover();
+    expect((await restarted.jobs.get(jobs[0]!.id))?.status).toBe('unknown');
+    expect((await post(`/api/gen/jobs/${jobs[0]!.id}/retry`, {})).status).toBe(409);
+    expect(submissions).toBe(1); gen.stop();
   });
 });

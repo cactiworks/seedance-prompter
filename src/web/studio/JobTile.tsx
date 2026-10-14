@@ -7,6 +7,7 @@ import styles from './Studio.module.css';
 
 export const STATUS_RU: Record<GenJob['status'], string> = {
   submitting: 'Отправляю…',
+  unknown: 'Исход отправки неизвестен',
   queued: 'В очереди',
   running: 'Генерирую',
   downloading: 'Сохраняю на диск',

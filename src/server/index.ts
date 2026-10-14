@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import { createApp, HOST, PORT } from './app.ts';
 import { createGenRuntime } from './gen/runtime.ts';
 import { createProductionRuntime } from './production/runtime.ts';
+import { acquireDataLock } from './storage/dataLock.ts';
 import { APP_NAME } from '../core/meta.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
   }
 
   const dataDir = process.env.SP_DATA_DIR ?? path.join(ROOT, 'data');
+  const releaseDataLock = await acquireDataLock(dataDir);
   // Фоновый опрос задач генерации: продолжает незаконченные после перезапуска и скачивает результаты.
   const gen = createGenRuntime({ dataDir });
   await gen.start();
@@ -64,7 +66,7 @@ async function main(): Promise<void> {
     gen.stop();
     production.stop();
     void vite.close().finally(() => {
-      httpServer.close(() => process.exit(0));
+      httpServer.close(() => { void releaseDataLock().finally(() => process.exit(0)); });
       setTimeout(() => process.exit(0), 1500).unref();
     });
   };

@@ -37,7 +37,7 @@ export const probeVideo: VideoProbe = (filePath) =>
       try {
         const data = JSON.parse(String(stdout)) as { format?: { duration?: string }; streams?: { width?: number; height?: number }[] };
         const durationSec = Number(data.format?.duration);
-        if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error('no duration');
+        if (!data.streams?.[0]?.width || !data.streams[0].height || !Number.isFinite(durationSec) || durationSec <= 0) throw new Error('no duration');
         resolve({ durationSec, width: data.streams?.[0]?.width ?? null, height: data.streams?.[0]?.height ?? null });
       } catch {
         reject(new Error('Не удалось узнать длительность видео.'));
@@ -85,7 +85,7 @@ export const trimArgs = (input: string, output: string, start: number, end: numb
 
 /**
  * Под размер площадки: cover — заполнить и обрезать края, contain — вписать целиком с чёрными полями. Видео — H.264
- * (стороны чётные — их делает сервер), картинка — PNG.
+ * (стороны чётные — сервер проверяет ввод), картинка — PNG.
  */
 export const resizeArgs = (input: string, output: string, width: number, height: number, fit: 'cover' | 'contain', video: boolean): string[] => {
   const vf =
@@ -97,5 +97,5 @@ export const resizeArgs = (input: string, output: string, width: number, height:
     : ['-i', input, '-vf', vf, '-frames:v', '1', '-update', '1', output];
 };
 
-/** Аргументы для одного кадра: первый — с начала, последний — за 0.1 с до конца (-sseof). */
-export const frameArgs = (input: string, output: string, which: 'first' | 'last'): string[] => [...(which === 'last' ? ['-sseof', '-0.1'] : []), '-i', input, '-frames:v', '1', '-update', '1', output];
+// Decode every frame and replace a single PNG: the last decoded frame remains, also for VFR/short videos.
+export const frameArgs = (input: string, output: string, which: 'first' | 'last'): string[] => ['-i', input, '-map', '0:v:0', ...(which === 'first' ? ['-frames:v', '1'] : ['-fps_mode', 'passthrough']), '-update', '1', output];

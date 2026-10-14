@@ -27,7 +27,7 @@ export type Origin = z.infer<typeof OriginSchema>;
  * failed — провайдер отказал, не приняли задачу или не дождались результата;
  * download_failed — результат есть у провайдера, но скачать его не вышло (ссылка живёт около суток).
  */
-export const JOB_STATUSES = ['submitting', 'queued', 'running', 'downloading', 'saved', 'failed', 'download_failed'] as const;
+export const JOB_STATUSES = ['submitting', 'unknown', 'queued', 'running', 'downloading', 'saved', 'failed', 'download_failed'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export const GenJobSchema = z.object({

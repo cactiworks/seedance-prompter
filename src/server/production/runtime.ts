@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { advanceRun, applyRunAction, completePreparation, newRun, ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, RunAction, RunInput } from '../../core/production/model.ts';
+import { StoredRunSchema } from '../../core/production/persistence.ts';
 import type { CharacterSelection } from '../../core/production/character.ts';
 import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
@@ -17,6 +18,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   let tail: Promise<unknown> = Promise.resolve();
   let timer: ReturnType<typeof setInterval> | undefined;
   let ticking = false;
+  const damaged = new Map<string, string>();
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   const exclusive = <T>(fn: () => Promise<T>): Promise<T> => {
     const result = tail.then(fn); tail = result.catch(() => undefined); return result;
@@ -25,11 +27,11 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     if (!ID.test(id)) throw new ProductionError('NOT_FOUND', 'Серия не найдена.');
     try {
       const run = JSON.parse(await readFile(path.join(dir, `${id}.json`), 'utf8')) as ProductionRun;
-      if (run.id !== id || run.mode !== 'mock' || !Array.isArray(run.shots) || !Array.isArray(run.artifacts)) throw new Error('Неверный файл mock-серии.');
+      if (run?.id !== id || !StoredRunSchema.safeParse(run).success) throw new Error('Неверный файл mock-серии.');
       return run;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new ProductionError('NOT_FOUND', 'Серия не найдена.');
-      throw error;
+      throw new ProductionError('INVALID', 'Файл серии повреждён. Другие серии доступны; исходный файл сохранён для восстановления.');
     }
   }
   async function write(run: ProductionRun): Promise<ProductionRun> {
@@ -43,7 +45,12 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   async function list(): Promise<ProductionRun[]> {
     await mkdir(dir, { recursive: true });
     const files = (await readdir(dir)).filter((f) => f.endsWith('.json') && ID.test(f.slice(0, -5)));
-    const runs = await Promise.all(files.map((f) => read(f.slice(0, -5))));
+    const runs: ProductionRun[] = [];
+    damaged.clear();
+    for (const file of files) {
+      try { runs.push(await read(file.slice(0, -5))); }
+      catch { damaged.set(file, 'Повреждённая серия пропущена; файл сохранён для восстановления.'); }
+    }
     return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   async function tick(): Promise<void> {
@@ -105,11 +112,25 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   }
   return {
     get: read, list, tick,
+    issues: () => [...damaged].map(([file, message]) => `${file}: ${message}`),
     waitForPreparation: async (id: string): Promise<void> => { await pending.get(id)?.done; },
     create: async (input: RunInput, character: CharacterSelection | null = null): Promise<ProductionRun> => {
       if ((input.characterId ?? null) !== (character?.id ?? null)) throw new ProductionError('INVALID', 'Персонаж серии не проверен.');
-      const run = await exclusive(() => write({ ...newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay), character }));
-      if (run.preparation) launchPreparation(run.id, run.preparation.attempt);
+      let created = false;
+      const run = await exclusive(async () => {
+        if (input.requestId) {
+          const existing = (await list()).find((r) => r.requestId === input.requestId);
+          if (existing) {
+            const keys = ['title', 'script', 'direction', 'style', 'scenario', 'planningMode', 'characterId'] as const;
+            if (keys.some((key) => (existing[key] ?? null) !== (input[key] ?? null))) throw new ProductionError('CONFLICT', 'Этот запрос уже сохранён с другим содержимым. Открой существующую серию.');
+            return existing;
+          }
+        }
+        const saved = await write({ ...newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay), character });
+        created = true;
+        return saved;
+      });
+      if (created && run.preparation) launchPreparation(run.id, run.preparation.attempt);
       return run;
     },
     setCharacter: (id: string, rev: number, character: CharacterSelection | null): Promise<ProductionRun> => exclusive(async () => {

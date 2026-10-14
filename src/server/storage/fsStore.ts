@@ -1,5 +1,6 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, copyFile } from 'node:fs/promises';
 import path from 'node:path';
+import { atomicWrite, serialize } from './atomic.ts';
 import { ProjectSchema, type Project } from '../../core/model/project.ts';
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -24,13 +25,6 @@ export function createStore(dataDir: string) {
     if (!SLUG.test(slug)) throw new StoreError('BAD_SLUG', 'Недопустимое имя проекта.');
     return path.join(projectsDir, slug);
   };
-
-  async function atomicWrite(file: string, content: string | Uint8Array): Promise<void> {
-    await mkdir(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
-    await writeFile(tmp, content);
-    await rename(tmp, file);
-  }
 
   async function backup(dir: string): Promise<void> {
     const source = path.join(dir, 'project.json');
@@ -71,23 +65,25 @@ export function createStore(dataDir: string) {
 
     /** Запись целиком с оптимистичной блокировкой: rev клиента обязан совпасть с rev на диске. */
     async write(slug: string, incoming: unknown, expectedRev: number | null): Promise<Project> {
-      const dir = dirOf(slug);
-      const parsed = ProjectSchema.safeParse(incoming);
-      if (!parsed.success) throw new StoreError('INVALID', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
-      if (parsed.data.slug !== slug) throw new StoreError('INVALID', 'slug в теле не совпадает с адресом.');
+      return serialize(path.join(dirOf(slug), 'project.json'), async () => {
+        const dir = dirOf(slug);
+        const parsed = ProjectSchema.safeParse(incoming);
+        if (!parsed.success) throw new StoreError('INVALID', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+        if (parsed.data.slug !== slug) throw new StoreError('INVALID', 'slug в теле не совпадает с адресом.');
 
-      let currentRev: number | null = null;
-      try {
-        currentRev = ProjectSchema.parse(JSON.parse(await readFile(path.join(dir, 'project.json'), 'utf8'))).rev;
-      } catch {
-        currentRev = null;
-      }
-      if (currentRev !== null && expectedRev !== currentRev) throw new StoreError('CONFLICT', `Проект изменён в другом окне (rev ${currentRev}).`);
-      if (currentRev !== null) await backup(dir);
+        let currentRev: number | null = null;
+        try {
+          currentRev = ProjectSchema.parse(JSON.parse(await readFile(path.join(dir, 'project.json'), 'utf8'))).rev;
+        } catch {
+          currentRev = null;
+        }
+        if (currentRev !== null && expectedRev !== currentRev) throw new StoreError('CONFLICT', `Проект изменён в другом окне (rev ${currentRev}).`);
+        if (currentRev !== null) await backup(dir);
 
-      const next: Project = { ...parsed.data, rev: (currentRev ?? 0) + 1 };
-      await atomicWrite(path.join(dir, 'project.json'), `${JSON.stringify(next, null, 1)}\n`);
-      return next;
+        const next: Project = { ...parsed.data, rev: (currentRev ?? 0) + 1 };
+        await atomicWrite(path.join(dir, 'project.json'), `${JSON.stringify(next, null, 1)}\n`);
+        return next;
+      });
     },
 
     async writeRef(slug: string, fileName: string, bytes: Uint8Array): Promise<void> {

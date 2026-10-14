@@ -175,7 +175,7 @@ export function Library() {
               {title}
             </Text>
             <Text variant="label" tone="secondary">
-              показано {shown.length} из {library.length} · файлы на диске, KIE их больше не держит
+              показано {shown.length} из {library.length} · файлы сохранены на этом компьютере
             </Text>
             {importError !== null && (
               <Text variant="caption" tone="accent">

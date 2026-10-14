@@ -1,0 +1,52 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, expect, it } from 'vitest';
+import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
+import { createGenRuntime } from '../../src/server/gen/runtime.ts';
+import { probeVideo, runFfmpeg } from '../../src/server/gen/ffmpeg.ts';
+import type { MediaItem } from '../../src/core/model/media.ts';
+const ROOT = path.join(import.meta.dirname, '../..');
+const dirs: string[] = [];
+afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
+async function setup() {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'sp-real-media-')); dirs.push(dataDir);
+  const gen = createGenRuntime({ dataDir, providers: {} });
+  const app = createApp({ rootDir: ROOT, dataDir, gen, reveal: false });
+  const headers = { host: `${HOST}:${PORT}`, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };
+  const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const upload = (url: string, type: string, bytes: Uint8Array) => app.request(url, { method: 'POST', headers: { ...headers, 'content-type': type }, body: bytes as Uint8Array<ArrayBuffer> });
+  return { dataDir, gen, app, headers, post, upload };
+}
+it('B07/B24: invalid media and malformed JSON are rejected without saved garbage', async () => {
+  const { gen, app, headers, upload } = await setup();
+  for (const type of ['image/png', 'video/mp4']) expect((await upload('/api/library/import', type, new TextEncoder().encode('not media'))).status).toBe(422);
+  expect((await upload('/api/uploads', 'image/png', new TextEncoder().encode('not a PNG'))).status).toBe(415);
+  expect(await gen.library.list()).toHaveLength(0);
+  expect((await app.request('/api/canvas/flows', { method: 'POST', headers, body: '{' })).status).toBe(400);
+});
+it('B08/B09/B10/B11: last frame is exact; trim bounds, precise caching and resize dimensions use real ffmpeg', async () => {
+  const { dataDir, gen, post, upload } = await setup();
+  const input = path.join(dataDir, 'input.mp4');
+  await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=64x64:rate=30:duration=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', input]);
+  const imported = await upload('/api/library/import', 'video/mp4', await readFile(input));
+  expect(imported.status).toBe(201); const video = await imported.json() as MediaItem;
+  const frameResponse = await post(`/api/library/${video.id}/frame`, { which: 'last' });
+  expect(frameResponse.status).toBe(201); const frame = await frameResponse.json() as MediaItem;
+  const exact = path.join(dataDir, 'exact.png');
+  await runFfmpeg(['-i', input, '-vf', 'select=eq(n\\,59)', '-frames:v', '1', exact]);
+  const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+  expect(hash(await readFile(gen.library.pathOf(frame)))).toBe(hash(await readFile(exact)));
+  for (const bounds of [{ start: 10, end: 0 }, { start: 0, end: 9 }, { start: 1.95, end: 0 }]) expect((await post(`/api/library/${video.id}/trim`, bounds)).status).toBe(422);
+  const a = await (await post(`/api/library/${video.id}/trim`, { start: 0.11, end: 0.91 })).json() as MediaItem;
+  const b = await (await post(`/api/library/${video.id}/trim`, { start: 0.14, end: 0.94 })).json() as MediaItem;
+  expect(a.id).not.toBe(b.id); expect(a.params).not.toEqual(b.params);
+  expect((await (await post(`/api/library/${video.id}/trim`, { start: 0.11, end: 0.91 })).json() as MediaItem).id).toBe(a.id);
+  const resize = { source: { type: 'media', mediaId: video.id }, width: 33, height: 32, fit: 'contain' };
+  expect((await post('/api/media/resize', resize)).status).toBe(422);
+  const good = await post('/api/media/resize', { ...resize, width: 32 });
+  expect(good.status).toBe(201);
+  const resized = await good.json() as MediaItem;
+  expect(await probeVideo(gen.library.pathOf(resized))).toMatchObject({ width: 32, height: 32 });
+}, 20000);

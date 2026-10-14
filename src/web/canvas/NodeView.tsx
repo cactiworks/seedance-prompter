@@ -1,3 +1,4 @@
+import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
 import { seedanceInputs } from '../../core/canvas/seedance.ts';
@@ -69,9 +70,10 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
     if (sourceId === null) return;
     setBusy(true);
     setError(null);
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
       const item = await trimVideo(sourceId, node.start, node.end);
-      patchNode(node.id, { mediaId: item.id });
+      finish({ mediaId: item.id });
       void loadLibrary();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Видео не обрезалось.');
@@ -107,7 +109,7 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
         {problems[0] ?? `${node.end === 0 ? 'Конец 0 — до конца видео. ' : ''}${length === null ? '' : `Отрезок: ${length.toFixed(1)} с`}`}
       </Text>
       {node.mediaId !== null && <video className={styles.nodeVideo} src={mediaUrl(node.mediaId)} controls muted playsInline loop />}
-      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
+      {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <Button variant="border" size="s" icon={<Icon name="time" size={0.875} />} loading={busy} disabled={problems.length > 0} onClick={() => void cut()}>
         {node.mediaId === null ? 'Обрезать · бесплатно' : 'Обрезать заново'}
       </Button>
@@ -125,7 +127,6 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
 
 /** Своё видео (решение 36): файл с диска уходит в библиотеку, нода держит его id; выход — видео для кадра и обрезки. */
 function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
-  const { patchNode } = useCanvas();
   const loadLibrary = useGen((s) => s.loadLibrary);
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -133,9 +134,10 @@ function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
   const upload = async (f: File): Promise<void> => {
     setBusy(true);
     setError(null);
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
       const item = await importMedia(f);
-      patchNode(node.id, { mediaId: item.id, label: f.name });
+      finish({ mediaId: item.id, label: f.name });
       void loadLibrary();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Видео не загрузилось.');
@@ -154,7 +156,7 @@ function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
           </Text>
         </div>
       )}
-      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
+      {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <div className={styles.nodeRow}>
         <input
           ref={file}
@@ -201,9 +203,10 @@ function ResizeBody({ node }: { node: CanvasNode }) {
     if (input?.source == null) return;
     setBusy(true);
     setError(null);
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
       const item = await resizeMedia(input.source, node.width, node.height, node.fit);
-      patchNode(node.id, { mediaId: item.id, kind: item.kind });
+      finish({ mediaId: item.id, kind: item.kind });
       void loadLibrary();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Размер не подогнался.');
@@ -231,6 +234,7 @@ function ResizeBody({ node }: { node: CanvasNode }) {
           <input className={styles.trimInput} type="number" min={16} max={8192} step={2} value={node.height} aria-label="Высота" onChange={(event) => setSize({ height: Math.min(8192, Math.max(16, Math.round(Number(event.target.value) || 16))) })} />
         </span>
       </div>
+      {(node.width % 2 !== 0 || node.height % 2 !== 0) && <Text variant="caption" tone="accent">Ширина и высота должны быть чётными.</Text>}
       <SegmentedControl<'cover' | 'contain'>
         aria-label="Как вписать"
         size="s"
@@ -250,8 +254,8 @@ function ResizeBody({ node }: { node: CanvasNode }) {
           </Text>
         </div>
       )}
-      {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
-      <Button variant="border" size="s" icon={<Icon name="apps" size={0.875} />} loading={busy} disabled={input?.source == null} onClick={() => void run()}>
+      {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
+      <Button variant="border" size="s" icon={<Icon name="apps" size={0.875} />} loading={busy} disabled={input?.source == null || node.width % 2 !== 0 || node.height % 2 !== 0} onClick={() => void run()}>
         {node.mediaId === null ? 'Подогнать · бесплатно' : 'Подогнать заново'}
       </Button>
       {error !== null && (
@@ -277,8 +281,8 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
   const mine = useMemo(() => (node.slug === '' ? [] : jobs.filter((j) => j.origin?.projectSlug === node.slug && j.origin.shotId === node.shotId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((j) => j.id)), [jobs, node.slug, node.shotId]);
   useEffect(() => {
     const added = mine.filter((id) => !node.jobIds.includes(id));
-    if (added.length > 0) patchNode(node.id, { jobIds: [...node.jobIds, ...added], selected: node.jobIds.length + added.length - 1 }, false);
-  }, [mine, node.id, node.jobIds, patchNode]);
+    if (added.length > 0) patchNode(node.id, { jobIds: [...node.jobIds, ...added], selected: node.jobIds.length + added.length - 1, ...(flow !== null && node.runInputFingerprint === inputFingerprint(flow, node.id) ? { stale: false } : {}) }, false);
+  }, [mine, node.id, node.jobIds, node.runInputFingerprint, flow, patchNode]);
 
   const inputs = flow === null ? null : seedanceInputs(flow, node.id, jobLookup);
   const open = async (): Promise<void> => {
@@ -375,7 +379,7 @@ function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image
           )}
         </div>
       )}
-      {media !== null && <SavedResultActions mediaId={media} />}
+      {!node.stale && media !== null && <SavedResultActions mediaId={media} />}
       {node.jobIds.length > 1 && (
         <div className={styles.iterations}>
           <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
@@ -452,11 +456,14 @@ interface NodeViewProps {
   onHeaderDown: (event: ReactPointerEvent, node: CanvasNode) => void;
   onOutputDown: (event: ReactPointerEvent, node: CanvasNode) => void;
   onInputUp: (node: CanvasNode, port: InputPort) => void;
+  onKeyboardOutput: () => void;
+  onKeyboardInput: (port: InputPort) => void;
+  keyboardSource: boolean;
   onPickFromLibrary: (nodeId: string) => void;
   onNeedConsent: (run: () => void) => void;
 }
 
-export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp, onPickFromLibrary, onNeedConsent }: NodeViewProps) {
+export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp, onKeyboardOutput, onKeyboardInput, keyboardSource, onPickFromLibrary, onNeedConsent }: NodeViewProps) {
   const { flow, patchNode, removeNode, select } = useCanvas();
   const { jobs, run, loadLibrary } = useGen();
   const file = useRef<HTMLInputElement>(null);
@@ -467,8 +474,9 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   const mediaOf = (jobId: string): string | null => savedMediaOf(jobs, jobId);
 
   const setImage = async (f: File): Promise<void> => {
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
-      patchNode(node.id, { source: await uploadImage(f), label: f.name });
+      finish({ source: await uploadImage(f), label: f.name });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не загрузилось.');
@@ -482,9 +490,10 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     if (plan === null || plan.estimate === null || plan.problems.length > 0) return;
     setBusy(true);
     setError(null);
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
       const created = await run({ modelId: plan.modelId, prompt: plan.prompt, params: plan.params, refs: plan.refs, count: 1, confirmCredits: plan.estimate.credits, refsConsent: plan.refs.length > 0 && consent ? true : undefined });
-      patchNode(node.id, { jobIds: [...node.jobIds, ...created.map((j) => j.id)], selected: node.jobIds.length });
+      finish({ jobIds: [...node.jobIds, ...created.map((j) => j.id)], selected: node.jobIds.length });
       const failed = created.find((j) => j.status === 'failed');
       if (failed !== undefined) setError(failed.error?.messageRu ?? 'Не запустилось.');
     } catch (e) {
@@ -504,9 +513,10 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     if (frameIn?.mediaId === null || frameIn === null) return;
     setBusy(true);
     setError(null);
+    const finish = useCanvas.getState().captureResult(node.id);
     try {
       const item = await extractFrame(frameIn.mediaId, node.which);
-      patchNode(node.id, { mediaId: item.id });
+      finish({ mediaId: item.id });
       void loadLibrary();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Кадр не извлёкся.');
@@ -548,13 +558,15 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         const f = event.dataTransfer.files[0];
         if (f === undefined) return;
         if (node.type === 'image') void setImage(f);
-        else
+        else {
+          const finish = useCanvas.getState().captureResult(node.id);
           void importMedia(f)
             .then((item) => {
-              patchNode(node.id, { mediaId: item.id, label: f.name });
+              finish({ mediaId: item.id, label: f.name });
               void loadLibrary();
             })
             .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Видео не загрузилось.'));
+        }
       }}
     >
       <header className={styles.nodeHead} onPointerDown={(event) => onHeaderDown(event, node)}>
@@ -568,13 +580,13 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       </header>
 
       {/* Выход — справа на уровне первой строки. */}
-      <span className={`${styles.port} ${styles.portOut}`} style={{ top: PORT_TOP }} title="Выход — тяни к входу генератора" onPointerDown={(event) => onOutputDown(event, node)} />
+      <button type="button" aria-label={`Выход: ${nodeTitle(node)}`} aria-pressed={keyboardSource} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardOutput(); } }} className={`${styles.port} ${styles.portOut}`} style={{ top: PORT_TOP }} title="Выход — тяни к входу генератора" onPointerDown={(event) => onOutputDown(event, node)} />
 
       {ports.length > 0 && (
         <div className={styles.inputs} style={{ height: ports.length * PORT_STEP + 6 }}>
           {ports.map((port, i) => (
             <div key={port} className={styles.inputRow} style={{ top: PORT_TOP - 40 - PORT_STEP / 2 + i * PORT_STEP, height: PORT_STEP }}>
-              <span className={`${styles.port} ${styles.portIn}`} onPointerUp={() => onInputUp(node, port)} title={`Вход «${PORT_RU[port]}»`} />
+              <button type="button" aria-label={`Вход ${PORT_RU[port]}: ${nodeTitle(node)}`} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardInput(port); } }} className={`${styles.port} ${styles.portIn}`} onPointerUp={() => onInputUp(node, port)} title={`Вход «${PORT_RU[port]}»`} />
               <Text variant="caption" tone="secondary">
                 {node.type === 'seedance' && port === 'ref' ? 'Рефы' : PORT_RU[port]}
               </Text>
@@ -584,6 +596,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       )}
 
       <div className={styles.nodeBody} onPointerDown={(event) => event.stopPropagation()}>
+        {node.stale && (node.mediaId !== null || node.jobIds.length > 0) && <div role="status"><Text variant="caption" tone="accent">Вход изменился. Прежний результат устарел; выполни этот шаг заново.</Text></div>}
         {node.type === 'prompt' && <textarea className={styles.nodeText} rows={5} value={node.text} placeholder="Текст промпта. Соедини выход со входом «Промпт» генератора." onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />}
 
         {node.type === 'image' && (
@@ -631,7 +644,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
                 </Text>
               </div>
             )}
-            {node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
+            {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
             <Button variant="border" size="s" icon={<Icon name="layers" size={0.875} />} loading={busy} disabled={frameIn?.mediaId === null || frameIn === null} onClick={() => void extract()}>
               {node.mediaId === null ? 'Извлечь кадр · бесплатно' : 'Извлечь заново'}
             </Button>

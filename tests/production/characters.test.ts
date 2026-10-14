@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -59,7 +60,9 @@ describe('durable characters and explicit creation', () => {
       await expect(characters.create(invalid as CreateCharacterInput)).rejects.toThrow();
     }
     await expect(characters.create({ ...input, uploadIds: [...input.uploadIds, 'u-missing-file'] })).rejects.toThrow('не найдено');
-    const bad = (await createUploads(dataDir).save(new Uint8Array([1, 2]), 'image/png'))!;
+    const bad = { id: 'u-invalid-123456' };
+    await mkdir(path.join(dataDir, 'uploads'), { recursive: true });
+    await writeFile(path.join(dataDir, 'uploads', `${bad.id}.png`), new Uint8Array([1, 2]));
     await expect(characters.create({ ...input, uploadIds: [bad.id] })).rejects.toThrow('прочитать');
     expect(provider.upload).not.toHaveBeenCalled(); expect(provider.create).not.toHaveBeenCalled();
   });

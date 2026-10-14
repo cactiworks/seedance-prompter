@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { findModel, type MediaKind } from '../../core/gen/models.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { useGen } from '../gen/genStore.ts';
-import { Icon, Text } from '../ui/components/index.ts';
+import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import { Composer } from './Composer.tsx';
 import { Controls } from './Controls.tsx';
 import { JobTile } from './JobTile.tsx';
@@ -13,6 +13,7 @@ import styles from './Studio.module.css';
 export function Studio({ kind }: { kind: MediaKind }) {
   const { jobs, library, activeSession, loadJobs, loadLibrary, addFiles, addRef } = useGen();
   const [open, setOpen] = useState<MediaItem | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function Studio({ kind }: { kind: MediaKind }) {
           void addFiles(kind, [...event.dataTransfer.files]);
         }}
       >
+        <div className={styles.settingsButton}><Button variant="border" size="s" onClick={() => setSettingsOpen(true)}>Модель и параметры</Button></div>
         {feed.length === 0 ? (
           <div className={styles.empty}>
             <span className={styles.emptyIcon}>
@@ -51,7 +53,7 @@ export function Studio({ kind }: { kind: MediaKind }) {
               {kind === 'image' ? 'Создай изображение' : 'Создай видео'}
             </Text>
             <Text variant="label" tone="secondary">
-              {kind === 'image' ? 'Опиши идею внизу или добавь референс. Модель и формат — справа.' : 'Опиши сцену внизу. Чтобы оживить изображение, добавь его как референс.'}
+              {kind === 'image' ? 'Опиши идею внизу или добавь референс. Модель и формат — в параметрах.' : 'Опиши сцену внизу. Чтобы оживить изображение, добавь его как референс.'}
             </Text>
           </div>
         ) : (
@@ -70,7 +72,8 @@ export function Studio({ kind }: { kind: MediaKind }) {
           </div>
         )}
       </section>
-      <Controls kind={kind} />
+      <div className={styles.desktopSettings}><Controls kind={kind} /></div>
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen} title="Модель и параметры"><div className={styles.settingsDialog}><Controls kind={kind} /></div></Dialog>
       <MediaPreview
         item={open}
         list={feedMedia}

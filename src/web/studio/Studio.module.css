@@ -7,6 +7,7 @@
 
 .center {
   position: relative;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -345,6 +346,7 @@
 
 .composerBar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--lab-space-4);
 }
@@ -603,4 +605,50 @@
 .seedButton:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+.desktopSettings {
+  display: flex;
+  min-height: 0;
+}
+
+.desktopSettings > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.settingsButton {
+  display: none;
+  padding: var(--lab-space-4) var(--lab-space-6);
+}
+
+.settingsDialog {
+  max-height: 65dvh;
+  overflow-y: auto;
+}
+
+.composerBar > button {
+  flex-shrink: 0;
+}
+
+@container workspace (width <= 50rem) {
+  .studio {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktopSettings {
+    display: none;
+  }
+
+  .settingsButton {
+    display: flex;
+  }
+
+  .empty {
+    padding: var(--lab-space-8);
+  }
+
+  .composerWrap {
+    padding: var(--lab-space-4);
+  }
 }

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { modelsOf, paramsFor, type MediaKind } from '../../core/gen/models.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, inputsOf, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import { wouldCycle } from '../../core/canvas/plan.ts';
+import { inputFingerprint, invalidateChanged } from '../../core/canvas/freshness.ts';
 import { cloneSeedance } from '../../core/canvas/seedance.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
@@ -66,6 +67,10 @@ interface CanvasState {
   openFlow: (id: string) => Promise<void>;
   newFlow: (from?: Pick<Flow, 'nodes' | 'edges' | 'name'>) => Promise<void>;
   deleteFlow: (id: string) => Promise<void>;
+  restoreFlow: (id: string) => Promise<void>;
+  saveCopy: () => Promise<void>;
+  flush: () => Promise<boolean>;
+  captureResult: (id: string) => (patch: Partial<CanvasNode>) => boolean;
   /**
    * Единственный путь менять flow: чистая функция, автосейв сам. `historyKey` — правки с одним ключом подряд
    * склеиваются в один шаг отмены; null — отдельный шаг; false — без истории (вид холста).
@@ -103,21 +108,46 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastKey: { key: string; at: number } | null = null;
 
 export const useCanvas = create<CanvasState>((set, get) => {
+  let pending: Flow | null = null;
+  let writing: Promise<boolean> | null = null;
+  let navigation = 0;
+  const revisions = new Map<string, number>();
+  const draftKey = (id: string): string => `sp-canvas-draft:${id}`;
+  const remember = (flow: Flow): void => { try { localStorage.setItem(draftKey(flow.id), JSON.stringify(flow)); } catch { /* in-memory draft remains */ } };
+  const flush = async (): Promise<boolean> => {
+    if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+    if (writing !== null) return writing;
+    writing = (async () => {
+      while (pending !== null) {
+        const snapshot = pending;
+        const outgoing = { ...snapshot, rev: revisions.get(snapshot.id) ?? snapshot.rev ?? 0 };
+        remember(outgoing);
+        if (get().flow?.id === snapshot.id) set({ save: 'saving' });
+        try {
+          const saved = await json<Flow>(await fetch(`/api/canvas/flows/${snapshot.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(outgoing), keepalive: true }));
+          revisions.set(snapshot.id, saved.rev ?? outgoing.rev + 1);
+          set((state) => ({ flows: state.flows.map((item) => item.id === saved.id ? { id: saved.id, name: saved.name, nodes: saved.nodes.length, updatedAt: saved.updatedAt } : item) }));
+          if (pending === snapshot) {
+            pending = null;
+            try { localStorage.removeItem(draftKey(snapshot.id)); } catch { /* storage unavailable */ }
+            if (get().flow?.id === snapshot.id) set((state) => ({ flow: state.flow === null ? null : { ...state.flow, rev: saved.rev }, save: 'saved', error: null }));
+          } else if (pending !== null) remember({ ...pending, rev: saved.rev });
+        } catch (error) {
+          if (get().flow?.id === snapshot.id) set({ save: 'error', error: error instanceof Error ? error.message : 'Не сохранилось. Черновик сохранён в этом браузере.' });
+          return false;
+        }
+      }
+      return true;
+    })();
+    try { return await writing; } finally { writing = null; }
+  };
   const persist = (): void => {
+    const snapshot = get().flow;
+    if (snapshot === null) return;
+    pending = snapshot;
+    remember(snapshot);
     if (saveTimer !== null) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      saveTimer = null;
-      const flow = get().flow;
-      if (flow === null) return;
-      set({ save: 'saving' });
-      void fetch(`/api/canvas/flows/${flow.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(flow) })
-        .then((res) => json<Flow>(res))
-        .then(() => {
-          if (get().save === 'saving') set({ save: 'saved' });
-          void get().loadFlows();
-        })
-        .catch((error: unknown) => set({ save: 'error', error: error instanceof Error ? error.message : 'Не сохранилось.' }));
-    }, 600);
+    saveTimer = setTimeout(() => { saveTimer = null; void flush(); }, 600);
   };
 
   const pushHistory = (flow: Flow, key: string | null): void => {
@@ -131,7 +161,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
   };
 
   /** Копия ноды без результатов: запуски принадлежат исходной ноде. Seedance-промптер получит копию черновика при открытии. */
-  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: null, ...cloneSeedance(node) });
+  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ...cloneSeedance(node) });
 
   /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
   const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {
@@ -171,32 +201,86 @@ export const useCanvas = create<CanvasState>((set, get) => {
     future: [],
 
     loadFlows: async () => {
-      const flows = await json<FlowListItem[]>(await fetch('/api/canvas/flows'));
-      set({ flows });
-      if (get().flow === null && flows[0] !== undefined) await get().openFlow(flows[0].id);
+      try {
+        const flows = await json<FlowListItem[]>(await fetch('/api/canvas/flows'));
+        set({ flows });
+        if (get().flow === null && flows[0] !== undefined) await get().openFlow(flows[0].id);
+      } catch (error) { set({ error: String(error) }); }
+    },
+    flush,
+    captureResult: (id) => {
+      const started = get().flow;
+      const fingerprint = started === null ? null : inputFingerprint(started, id);
+      return (patch) => {
+        const current = get().flow;
+        if (current === null || current.id !== started?.id || !current.nodes.some((n) => n.id === id) || inputFingerprint(current, id) !== fingerprint) return false;
+        get().patchNode(id, { ...patch, stale: false });
+        return true;
+      };
     },
     openFlow: async (id) => {
+      const request = ++navigation;
+      if (!await flush()) return;
+      if (get().flow?.id === id) return;
+      const saved = await json<Flow>(await fetch(`/api/canvas/flows/${id}`));
+      if (request !== navigation || !await flush() || request !== navigation) return;
+      revisions.set(id, saved.rev ?? 0);
+      let flow = saved;
+      try {
+        const raw = localStorage.getItem(draftKey(id));
+        if (raw !== null) flow = FlowSchema.parse(JSON.parse(raw));
+      } catch { /* invalid browser draft must not hide the server copy */ }
       lastKey = null;
-      set({ flow: await json<Flow>(await fetch(`/api/canvas/flows/${id}`)), selected: null, selection: [], save: 'saved', past: [], future: [] });
+      const restored = flow !== saved;
+      const conflict = restored && (flow.rev ?? 0) !== (saved.rev ?? 0);
+      if (conflict) revisions.set(id, flow.rev ?? 0);
+      set({ flow, selected: null, selection: [], save: restored ? 'dirty' : 'saved', past: [], future: [], error: conflict ? 'Есть локальный черновик и другая версия на сервере. Сохрани схему или создай копию, чтобы не потерять правки.' : null });
+      if (restored) { pending = flow; if (!conflict) persist(); }
+    },
+    saveCopy: async () => {
+      let draft = get().flow;
+      if (draft === null) return;
+      if (writing !== null) await writing;
+      if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+      try {
+        const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: `${draft.name} — копия` }) }));
+        if (get().flow?.id === draft.id) draft = get().flow!;
+        // The original browser draft is retained until the new copy is confirmed on disk.
+        navigation += 1;
+        revisions.set(created.id, created.rev ?? 0);
+        set({ flow: { ...created, nodes: draft.nodes, edges: draft.edges, viewport: draft.viewport }, save: 'dirty', error: null, past: [], future: [] });
+        persist();
+        if (await flush()) { try { localStorage.removeItem(draftKey(draft.id)); } catch { /* storage unavailable */ } }
+        await get().loadFlows();
+      } catch (error) { set({ error: String(error), save: 'error' }); }
     },
     newFlow: async (from) => {
+      const request = ++navigation;
+      if (!await flush()) return;
       const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: from?.name ?? '' }) }));
+      if (request !== navigation || !await flush() || request !== navigation) { await get().loadFlows(); return; }
       lastKey = null;
       set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, selected: null, selection: [], past: [], future: [] });
       if (from !== undefined) persist();
       await get().loadFlows();
     },
     deleteFlow: async (id) => {
+      if (!await flush()) return;
       await json(await fetch(`/api/canvas/flows/${id}`, { method: 'DELETE', headers: HEADERS }));
       if (get().flow?.id === id) set({ flow: null, past: [], future: [] });
       await get().loadFlows();
     },
 
+    restoreFlow: async (id) => {
+      await json(await fetch(`/api/canvas/flows/${id}/restore`, { method: 'POST', headers: HEADERS }));
+      await get().openFlow(id);
+      await get().loadFlows();
+    },
     update: (recipe, historyKey = null) => {
       const flow = get().flow;
       if (flow === null) return;
       if (historyKey !== false) pushHistory(flow, historyKey);
-      set({ flow: recipe(flow), save: 'dirty' });
+      set({ flow: invalidateChanged(flow, recipe(flow)), save: 'dirty' });
       persist();
     },
     undo: () => {
@@ -205,7 +289,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (flow === null || prev === undefined) return;
       lastKey = null;
       // Вид холста не откатываем: отмена правит граф, а не то, куда смотрит владелец.
-      set((s) => ({ flow: { ...prev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => prev.nodes.some((n) => n.id === id)) }));
+      set((s) => ({ flow: { ...prev, rev: flow.rev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => prev.nodes.some((n) => n.id === id)) }));
       persist();
     },
     redo: () => {
@@ -213,7 +297,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const next = future.at(-1);
       if (flow === null || next === undefined) return;
       lastKey = null;
-      set((s) => ({ flow: { ...next, viewport: flow.viewport }, future: s.future.slice(0, -1), past: [...s.past, flow], save: 'dirty' }));
+      set((s) => ({ flow: { ...next, rev: flow.rev, viewport: flow.viewport }, future: s.future.slice(0, -1), past: [...s.past, flow], save: 'dirty' }));
       persist();
     },
     rename: (name) => get().update((f) => ({ ...f, name }), 'rename'),
@@ -253,6 +337,9 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const flow = get().flow;
       if (flow === null) return 'Нет flow.';
       if (from === to) return 'Нода не соединяется сама с собой.';
+      const sourceNode = flow.nodes.find((n) => n.id === from);
+      const targetNode = flow.nodes.find((n) => n.id === to);
+      if (sourceNode === undefined || targetNode === undefined || !inputsOf(targetNode, ['ref', 'start', 'end']).includes(port) || !portAccepts(port, outputOf(sourceNode))) return 'Несовместимые порты.';
       if (wouldCycle(flow, from, to)) return 'Так получится цикл.';
       // Во входы «Старт», «Финал» и «Видео» — одна связь; повторная заменяет прежнюю.
       const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media');
@@ -289,6 +376,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         const nodes = (Array.isArray(parsed.nodes) ? parsed.nodes : []).map((n) => CanvasNodeSchema.parse(n));
         const edges = (Array.isArray(parsed.edges) ? parsed.edges : []).map((e) => CanvasEdgeSchema.parse(e));
         if (nodes.length === 0) return 0;
+        FlowSchema.parse({ ...get().flow, nodes, edges });
         const minX = Math.min(...nodes.map((n) => n.x));
         const minY = Math.min(...nodes.map((n) => n.y));
         return insertCopies(nodes, edges, at.x - minX, at.y - minY).length;

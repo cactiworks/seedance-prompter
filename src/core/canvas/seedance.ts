@@ -49,6 +49,7 @@ export function seedanceInputs(flow: Flow, nodeId: string, jobOf: JobLookup): { 
   for (const edge of flow.edges.filter((e) => e.to === nodeId && e.port === 'ref')) {
     const from = flow.nodes.find((n) => n.id === edge.from);
     if (from === undefined) continue;
+    if (from.stale) { problems.push(`«${nodeTitle(from)}»: вход изменился, сначала обнови результат.`); continue; }
     // Сгенерированный кадр подписывается началом своего промпта: «Картинка · GPT Image 2.5» трижды подряд не различить.
     const add = (source: RefSource, kind: Ref['kind'], note: string | null): void => {
       const label = note === null ? nodeTitle(from) : excerpt(note);

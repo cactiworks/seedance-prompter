@@ -14,7 +14,7 @@ const SIDEBAR_KEY = 'sp-sidebar';
 
 function readCollapsed(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_KEY) === 'collapsed';
+    return window.matchMedia('(max-width: 768px)').matches || localStorage.getItem(SIDEBAR_KEY) === 'collapsed';
   } catch {
     return false;
   }
@@ -183,6 +183,14 @@ function ProviderCards() {
 
 export function AppShell({ route, onRoute, sidebar, children }: { route: Route; onRoute: (r: Route) => void; sidebar?: ReactNode; children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const adapt = (): void => { if (media.matches) setCollapsed(true); };
+    const escape = (event: KeyboardEvent): void => { if (event.key === 'Escape' && media.matches) setCollapsed(true); };
+    media.addEventListener('change', adapt);
+    window.addEventListener('keydown', escape);
+    return () => { media.removeEventListener('change', adapt); window.removeEventListener('keydown', escape); };
+  }, []);
   const toolsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (event: PointerEvent): void => {
@@ -204,6 +212,7 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
 
   return (
     <div className={`${styles.shell} ${collapsed ? styles.collapsed : ''}`}>
+      {!collapsed && <button className={styles.sidebarBackdrop} type="button" aria-label="Закрыть список работ" onClick={() => setCollapsed(true)} />}
       <aside className={styles.sidebar} aria-hidden={collapsed}>
         <div className={styles.brand}>
           <span className={styles.logo}>

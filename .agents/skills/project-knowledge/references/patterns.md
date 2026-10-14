@@ -87,3 +87,10 @@
 - Новый `doctor` не сохраняет сырые ответы или личный контекст: стандартный режим без inference,
   live-зонд выводит только счётчики. `data/logs/doctor/` и `docs/day0/` относятся к историческим
   проверкам Claude-моста; они не подтверждают Codex-мост.
+
+
+Production prompt validation: imagePrompt содержит 40–200 слов; английская проза (русский текст
+допускается внутри кавычек); motion intervals непрерывно покрывают 0–durationSec из director plan.
+Это детерминированный контракт формы/длительности, а не semantic или visual continuity QC.
+Регрессии alpha-аудита: `tests/{core,server}/alpha*.test.ts`, плюс unknown-submit в `gen.test.ts`.
+`alphaMedia.test.ts` использует реальный ffmpeg/ffprobe и синтетическое видео, без внешних провайдеров.

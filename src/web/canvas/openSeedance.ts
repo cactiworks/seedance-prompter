@@ -1,3 +1,4 @@
+import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { applySeedanceInputs, inputsToUpload, nextRefSync, seedanceInputs, seedanceSummary, type JobLookup, type SeedanceInput } from '../../core/canvas/seedance.ts';
 import { seedanceSlug, type CanvasNode } from '../../core/model/canvas.ts';
 import { durationOf, shootingOf, type Project } from '../../core/model/project.ts';
@@ -64,6 +65,7 @@ export async function openSeedanceNode(nodeId: string): Promise<string[]> {
   const node = flow?.nodes.find((n) => n.id === nodeId);
   if (flow === null || node === undefined || node.type !== 'seedance') return ['Нода не найдена.'];
 
+  const fingerprint = inputFingerprint(flow, node.id);
   const draft = await ensureDraft(node, flow.name);
   const shotId = node.shotId !== '' && draft.shots.some((s) => s.id === node.shotId) ? node.shotId : (draft.shots[0]?.id ?? '');
   const { inputs, problems } = seedanceInputs(flow, node.id, jobLookup);
@@ -80,7 +82,9 @@ export async function openSeedanceNode(nodeId: string): Promise<string[]> {
   }
   // Не залилась — при следующем открытии попробуем снова: отпечаток остаётся прежним.
   const refSync = nextRefSync(node.refSync, inputs, failed, draft.refs.map((r) => r.key));
-  canvas.patchNode(node.id, { slug: draft.slug, shotId, copyFrom: '', refSync }, false);
+  const current = useCanvas.getState().flow;
+  if (current?.id !== flow.id || inputFingerprint(current, node.id) !== fingerprint) return ['Вход или холст изменился во время подготовки. Открой промптер заново.'];
+  canvas.patchNode(node.id, { slug: draft.slug, shotId, copyFrom: '', refSync, runInputFingerprint: fingerprint }, false);
 
   useStore.getState().openInHost(draft, shotId, { kind: 'canvas', flowId: flow.id, nodeId: node.id }, (project) => applySeedanceInputs(project, shotId, inputs, files, Object.keys(node.refSync)));
   return problems;
@@ -89,7 +93,8 @@ export async function openSeedanceNode(nodeId: string): Promise<string[]> {
 /** После закрытия промптера: подпись ноды по сохранённому черновику и свежая лента задач (новые генерации — выход ноды). */
 export async function afterSeedanceClose(nodeId: string): Promise<void> {
   void useGen.getState().loadJobs();
-  const node = useCanvas.getState().flow?.nodes.find((n) => n.id === nodeId);
+  const captured = useCanvas.getState().flow;
+  const node = captured?.nodes.find((n) => n.id === nodeId);
   const pack = useStore.getState().pack;
   if (node === undefined || node.slug === '' || pack === null) return;
   const res = await fetch(`/api/projects/${node.slug}`);
@@ -108,5 +113,6 @@ export async function afterSeedanceClose(nodeId: string): Promise<void> {
     cuts: shootingOf(shot).structure === 'cuts',
     synopsisRu: shot.synopsisRu,
   });
+  if (useCanvas.getState().flow?.id !== captured?.id) return;
   if (text !== node.text) useCanvas.getState().patchNode(nodeId, { text }, false);
 }

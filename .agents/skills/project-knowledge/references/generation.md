@@ -96,3 +96,15 @@ PUT с выданными upload_headers без API-ключа → public_url д
 [Soul ID](https://open.higgsfield.ai/models/soul-id/api-reference),
 [upload](https://docs.higgsfield.ai/docs/concepts/file-uploads.md).
 Общий OpenAPI Soul ID опускает model_version; используется model-specific контракт Soul 2.
+
+## Ошибки отправки и локальное медиа (14.10.2026)
+
+Потеря ответа submit без достоверного отказа — `unknown`, а не обычный failed. Повтор через retry
+отклоняется; остаток batch не отправляется. После рестарта submitting без taskId тоже unknown.
+Сначала нужна сверка истории провайдера; автоматического повторного списания нет.
+
+Uploads/import проверяются по содержимому и декодированию, локальные результаты — до добавления
+в библиотеку. Последний кадр — последний декодированный PNG, cache version `decoded-v2` обходит
+прежние неточные файлы. Trim проверяет длительность источника, минимум 0.2 s и хранит точные start/end
+в params; cache использует эти числа. Resize принимает чётные стороны 16–8192 px, без скрытого округления.
+ffmpeg/ffprobe теперь нужны также для проверки входящих файлов.

@@ -122,6 +122,7 @@
 }
 
 .main {
+  min-width: 0;
   min-height: 0;
   padding: var(--lab-space-10) var(--lab-space-12) var(--lab-space-24);
   overflow-y: auto;
@@ -129,6 +130,7 @@
 
 .head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--lab-space-8);
@@ -137,6 +139,8 @@
 
 .tools {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: var(--lab-space-6);
 }
@@ -158,6 +162,7 @@
 }
 
 .selectionBar {
+  flex-wrap: wrap;
   position: sticky;
   top: 0;
   z-index: 3;
@@ -347,4 +352,31 @@
 
 .caption {
   padding: 0 var(--lab-space-2);
+}
+
+.head > :first-child {
+  flex: 1 0 100%;
+  overflow-wrap: anywhere;
+
+}
+
+.selectionBar > button {
+  flex-shrink: 0;
+}
+
+@container workspace (width <= 42rem) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .rail {
+    max-height: 12rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--lab-border-subtle);
+  }
+
+  .main {
+    padding: var(--lab-space-6);
+  }
 }

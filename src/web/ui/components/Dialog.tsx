@@ -1,5 +1,5 @@
 import { Dialog as RadixDialog } from 'radix-ui';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Icon } from '../icons/Icon.tsx';
 import { Button } from './Button.tsx';
 import { Text } from './Text.tsx';
@@ -18,11 +18,12 @@ interface DialogProps {
 
 /** Модальное окно Lab UI: затемнение с блюром, плавающая карточка с крупным радиусом, закрытие по Esc и клику мимо. */
 export function Dialog({ open, onOpenChange, title, description, footer, size = 'm', children }: DialogProps) {
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className={styles.overlay} />
-        <RadixDialog.Content className={`${styles.content} ${size === 'l' ? styles.l : ''}`} aria-describedby={undefined}>
+        <RadixDialog.Content className={`${styles.content} ${size === 'l' ? styles.l : ''}`} aria-describedby={undefined} onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={(event) => { if (opener.current?.isConnected) { event.preventDefault(); opener.current.focus({ preventScroll: true }); } }}>
           <header className={`${styles.head} lab-glass-thin`}>
             <div className={styles.headText}>
               <RadixDialog.Title asChild>

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { atomicWrite, serialize } from './atomic.ts';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
@@ -51,23 +52,28 @@ export function createLibrary(dataDir: string, options: { fetch?: typeof fetch; 
   const now = options.now ?? Date.now;
   const index = new Map<string, MediaItem>();
   let loaded = false;
+  let loading: Promise<void> | null = null;
 
   async function load(): Promise<void> {
     if (loaded) return;
-    loaded = true;
-    await mkdir(root, { recursive: true });
-    for (const month of await readdir(root)) {
-      if (!MONTH.test(month)) continue;
-      for (const file of await readdir(path.join(root, month))) {
-        if (!file.endsWith('.json') || !MEDIA_ID.test(file.slice(0, -5))) continue;
-        try {
-          const item = MediaItemSchema.parse(JSON.parse(await readFile(path.join(root, month, file), 'utf8')));
-          index.set(item.id, item);
-        } catch {
-          /* битое описание не роняет библиотеку */
+    if (loading !== null) return loading;
+    loading = (async () => {
+      await mkdir(root, { recursive: true });
+      for (const month of await readdir(root)) {
+        if (!MONTH.test(month)) continue;
+        for (const file of await readdir(path.join(root, month))) {
+          if (!file.endsWith('.json') || !MEDIA_ID.test(file.slice(0, -5))) continue;
+          try {
+            const item = MediaItemSchema.parse(JSON.parse(await readFile(path.join(root, month, file), 'utf8')));
+            index.set(item.id, item);
+          } catch {
+            /* битое описание не роняет библиотеку */
+          }
         }
       }
-    }
+      loaded = true;
+    })();
+    try { await loading; } finally { loading = null; }
   }
 
   /** Абсолютный путь файла; путь из описания проверяется, чтобы не выйти за пределы библиотеки. */
@@ -209,12 +215,12 @@ export function createLibrary(dataDir: string, options: { fetch?: typeof fetch; 
     },
 
     async setFavorite(id: string, on: boolean): Promise<string[]> {
-      const current = await this.favorites();
-      const next = on ? [...new Set([...current, id])] : current.filter((f) => f !== id);
-      await mkdir(root, { recursive: true });
-      await writeFile(path.join(root, 'favorites.json.tmp'), `${JSON.stringify(next)}\n`);
-      await rename(path.join(root, 'favorites.json.tmp'), path.join(root, 'favorites.json'));
-      return next;
+      return serialize(path.join(root, 'favorites.json'), async () => {
+        const current = await this.favorites();
+        const next = on ? [...new Set([...current, id])] : current.filter((f) => f !== id);
+        await atomicWrite(path.join(root, 'favorites.json'), `${JSON.stringify(next)}\n`);
+        return next;
+      });
     },
 
     async folders(): Promise<Folder[]> {
@@ -227,12 +233,11 @@ export function createLibrary(dataDir: string, options: { fetch?: typeof fetch; 
 
     /** Правка папок одной функцией над списком; запись атомарная. */
     async updateFolders(recipe: (folders: Folder[]) => Folder[]): Promise<Folder[]> {
-      const next = z.array(FolderSchema).parse(recipe(await this.folders()));
-      await mkdir(root, { recursive: true });
-      const tmp = path.join(root, `folders.json.${randomBytes(3).toString('hex')}.tmp`);
-      await writeFile(tmp, `${JSON.stringify(next, null, 1)}\n`);
-      await rename(tmp, path.join(root, 'folders.json'));
-      return next;
+      return serialize(path.join(root, 'folders.json'), async () => {
+        const next = z.array(FolderSchema).parse(recipe(await this.folders()));
+        await atomicWrite(path.join(root, 'folders.json'), `${JSON.stringify(next, null, 1)}\n`);
+        return next;
+      });
     },
 
     async readBytes(item: MediaItem): Promise<Uint8Array> {

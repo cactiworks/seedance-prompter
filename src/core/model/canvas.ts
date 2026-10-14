@@ -20,7 +20,9 @@ export const INPUT_PORTS = ['prompt', 'ref', 'start', 'end', 'video', 'media'] a
 export type InputPort = (typeof INPUT_PORTS)[number];
 
 export const CanvasNodeSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1),
+  stale: z.boolean().optional(),
+  runInputFingerprint: z.string().optional(),
   type: z.enum(CANVAS_NODE_TYPES),
   x: z.number(),
   y: z.number(),
@@ -63,11 +65,41 @@ export type CanvasEdge = z.infer<typeof CanvasEdgeSchema>;
 export const FlowSchema = z.object({
   id: z.string(),
   name: z.string(),
+  rev: z.number().int().nonnegative().optional(),
   nodes: z.array(CanvasNodeSchema),
   edges: z.array(CanvasEdgeSchema),
-  viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number() }).default({ x: 0, y: 0, zoom: 1 }),
+  viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number().min(0.1).max(4) }).default({ x: 0, y: 0, zoom: 1 }),
   createdAt: z.string(),
   updatedAt: z.string(),
+}).superRefine((flow, ctx) => {
+  const nodes = new Map(flow.nodes.map((n) => [n.id, n]));
+  const error = (message: string): void => ctx.addIssue({ code: 'custom', message });
+  if (nodes.size !== flow.nodes.length) error('ID нод должны быть уникальны.');
+  if (new Set(flow.edges.map((e) => e.id)).size !== flow.edges.length) error('ID связей должны быть уникальны.');
+  const used = new Set<string>();
+  const adjacency = new Map<string, string[]>();
+  for (const e of flow.edges) {
+    const from = nodes.get(e.from); const to = nodes.get(e.to);
+    if (from === undefined || to === undefined || e.from === e.to) { error('Связь ссылается на отсутствующую ноду или саму себя.'); continue; }
+    const ports = inputsOf(to, ['ref', 'start', 'end']);
+    if (!ports.includes(e.port) || !portAccepts(e.port, outputOf(from))) error('Несовместимые порты связи.');
+    const key = `${e.to}:${e.port}:${['start', 'end', 'video', 'media'].includes(e.port) ? '' : e.from}`;
+    if (used.has(key)) error('Повторная связь во входе.');
+    used.add(key);
+    adjacency.set(e.from, [...(adjacency.get(e.from) ?? []), e.to]);
+  }
+  const degree = new Map(flow.nodes.map((n) => [n.id, 0]));
+  for (const destinations of adjacency.values()) for (const id of destinations) degree.set(id, (degree.get(id) ?? 0) + 1);
+  const queue = [...degree].filter(([, n]) => n === 0).map(([id]) => id);
+  let visited = 0;
+  for (let i = 0; i < queue.length; i += 1) {
+    visited += 1;
+    for (const id of adjacency.get(queue[i] ?? '') ?? []) {
+      const next = (degree.get(id) ?? 0) - 1; degree.set(id, next);
+      if (next === 0) queue.push(id);
+    }
+  }
+  if (visited !== nodes.size) error('Цикл в Canvas запрещён.');
 });
 export type Flow = z.infer<typeof FlowSchema>;
 

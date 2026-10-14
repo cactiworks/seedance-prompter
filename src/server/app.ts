@@ -20,7 +20,8 @@ import { forgetMedia } from '../core/model/canvas.ts';
 import { LearningSchema, MoodboardSchema, RefSourceSchema, VerdictSchema } from '../core/model/media.ts';
 import { durationOf, newProject, ProjectSchema, storyboardFrames } from '../core/model/project.ts';
 import { agentShooting, buildShot, type PackBundle } from '../core/pipeline.ts';
-import { cropArgs, frameArgs, resizeArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
+import { cropArgs, frameArgs, probeVideo, resizeArgs, runFfmpeg, trimArgs, type FfmpegRunner } from './gen/ffmpeg.ts';
+import { validateMediaFile } from './gen/validateMedia.ts';
 import { GEN_HTTP, GenError } from './gen/provider.ts';
 import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
 import type { ImageInput } from './llm/codexCli/args.ts';
@@ -76,6 +77,8 @@ export interface AppOptions {
   gen?: GenRuntime;
   /** ffmpeg для кадра из видео; в тестах — подмена, которая пишет файл сама. */
   ffmpeg?: FfmpegRunner;
+  validateMedia?: typeof validateMediaFile;
+  probeVideo?: typeof probeVideo;
 }
 
 function revealInFinder(target: string): void {
@@ -137,6 +140,7 @@ export function createApp(options: AppOptions) {
   });
 
   app.onError((error, c) => {
+    if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
     if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
     if (error instanceof SubmitError) return c.json({ error: error.code, messageRu: error.messageRu, ...error.details }, error.status);
     if (error instanceof GenError) return c.json({ error: error.code, messageRu: error.messageRu }, GEN_HTTP[error.code]);
@@ -522,6 +526,10 @@ export function createApp(options: AppOptions) {
       const saved = await flows.save(c.req.param('id'), await c.req.json());
       return saved === null ? c.json({ error: 'INVALID', messageRu: 'Flow не сохранён: неверная структура.' }, 422) : c.json(saved);
     })
+    .post('/api/canvas/flows/:id/restore', async (c) => {
+      const flow = await flows.restore(c.req.param('id'));
+      return flow === undefined ? c.json({ messageRu: 'Удалённый холст не найден.' }, 404) : c.json(flow);
+    })
     .delete('/api/canvas/flows/:id', async (c) => ((await flows.remove(c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'NOT_FOUND', messageRu: 'Flow не найден.' }, 404)))
     // Сессии студии: лента генераций одного типа (Картинки / Видео).
     .get('/api/studio/sessions', async (c) => {
@@ -608,11 +616,12 @@ export function createApp(options: AppOptions) {
       const body = (await c.req.json()) as { which?: unknown };
       const which = body.which === 'first' ? 'first' : 'last';
       const label = which === 'last' ? 'Последний кадр видео' : 'Первый кадр видео';
-      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/frame' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
+      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/frame' && m.params.extractor === 'decoded-v2' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
       if (existing !== undefined) return c.json(existing);
-      const out = path.join(gen.library.root, `.frame-${video.id}-${which}-${process.pid}.png`);
+      const out = path.join(gen.library.root, `.frame-${video.id}-${which}-${randomBytes(4).toString('hex')}.png`);
       try {
         await (options.ffmpeg ?? runFfmpeg)(frameArgs(gen.library.pathOf(video), out, which));
+        await (options.validateMedia ?? validateMediaFile)(out, 'image');
         const item = await gen.library.importFile(out, 'png', {
           kind: 'image',
           jobId: 'local-frame',
@@ -621,7 +630,7 @@ export function createApp(options: AppOptions) {
           modelId: 'local/frame',
           providerModel: 'ffmpeg',
           prompt: label,
-          params: {},
+          params: { extractor: 'decoded-v2' },
           refs: [{ label: 'Видео', source: { type: 'media', mediaId: video.id }, role: 'ref' }],
           origin: video.origin,
           sessionId: null,
@@ -633,18 +642,18 @@ export function createApp(options: AppOptions) {
         return c.json(item, 201);
       } catch (error) {
         return c.json({ error: 'FRAME_FAILED', messageRu: error instanceof Error ? error.message : 'Кадр не извлёкся.' }, 500);
-      }
+      } finally { await rm(out, { force: true }); }
     })
     // Размер площадки (решение 36): нода canvas «Размер» — картинка или видео под W×H, ffmpeg локально, бесплатно.
     .post('/api/media/resize', async (c) => {
       const body = (await c.req.json()) as { source?: unknown; width?: unknown; height?: unknown; fit?: unknown };
       const source = RefSourceSchema.safeParse(body.source);
       // Стороны чётные: H.264 в yuv420p нечётных не принимает, а картинке это не вредит.
-      const side = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 16 && v <= 8192 ? v - (v % 2) : null);
+      const side = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 16 && v <= 8192 && v % 2 === 0 ? v : null);
       const width = side(body.width);
       const height = side(body.height);
       const fit = body.fit === 'contain' ? 'contain' : 'cover';
-      if (!source.success || width === null || height === null) return c.json({ error: 'BAD_RESIZE', messageRu: 'Нужен файл и размер от 16 до 8192 px по каждой стороне.' }, 422);
+      if (!source.success || width === null || height === null) return c.json({ error: 'BAD_RESIZE', messageRu: 'Нужен файл и чётный размер от 16 до 8192 px по каждой стороне. Нечётный размер не округляется автоматически.' }, 422);
       let input: string;
       let kind: 'image' | 'video' = 'image';
       let tmpInput: string | null = null;
@@ -671,6 +680,7 @@ export function createApp(options: AppOptions) {
       const out = path.join(gen.library.root, `.resize-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}.${ext}`);
       try {
         await (options.ffmpeg ?? runFfmpeg)(resizeArgs(input, out, width, height, fit, kind === 'video'));
+        await (options.validateMedia ?? validateMediaFile)(out, kind);
         const item = await gen.library.importFile(out, ext, {
           kind,
           jobId: 'local-resize',
@@ -693,12 +703,14 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'RESIZE_FAILED', messageRu: error instanceof Error ? error.message : 'Размер не подогнался.' }, 500);
       } finally {
         if (tmpInput !== null) await rm(tmpInput, { force: true });
+        await rm(out, { force: true });
       }
     })
     // Свой файл в библиотеку (решение 36): съёмку можно резать, брать из неё кадр и отдавать в canvas, как сгенерированное.
     .post('/api/library/import', async (c) => {
       const type = IMPORT_EXT[(c.req.header('content-type') ?? '').split(';')[0]?.trim() ?? ''];
       if (type === undefined) return c.json({ error: 'BAD_TYPE', messageRu: 'Подходят PNG, JPG, WebP и видео MP4, MOV, WebM.' }, 415);
+      if (Number(c.req.header('content-length') ?? 0) > MAX_IMPORT_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Файл больше 1 ГБ.' }, 413);
       const bytes = new Uint8Array(await c.req.arrayBuffer());
       if (bytes.byteLength === 0) return c.json({ error: 'EMPTY', messageRu: 'Пустой файл.' }, 422);
       if (bytes.byteLength > MAX_IMPORT_BYTES) return c.json({ error: 'TOO_LARGE', messageRu: 'Файл больше 1 ГБ — сожми или обрежь его заранее.' }, 413);
@@ -706,6 +718,8 @@ export function createApp(options: AppOptions) {
       const tmp = path.join(gen.library.root, `.import-${Date.now().toString(36)}-${randomBytes(3).toString('hex')}.${type.ext}`);
       await mkdir(gen.library.root, { recursive: true });
       await writeFile(tmp, bytes);
+      try { await (options.validateMedia ?? validateMediaFile)(tmp, type.kind); }
+      catch { await rm(tmp, { force: true }); return c.json({ error: 'BAD_MEDIA', messageRu: 'Файл повреждён или его содержимое не соответствует выбранному типу.' }, 422); }
       const item = await gen.library.importFile(tmp, type.ext, {
         kind: type.kind,
         jobId: 'local-import',
@@ -730,16 +744,19 @@ export function createApp(options: AppOptions) {
       const video = await gen.library.get(c.req.param('id'));
       if (video === undefined || video.kind !== 'video') return c.json({ error: 'NOT_VIDEO', messageRu: 'Обрезать по времени можно видео из библиотеки.' }, 422);
       const body = (await c.req.json()) as { start?: unknown; end?: unknown };
-      const start = typeof body.start === 'number' && body.start >= 0 ? Math.round(body.start * 100) / 100 : null;
-      const end = typeof body.end === 'number' && body.end >= 0 ? Math.round(body.end * 100) / 100 : null;
+      const start = typeof body.start === 'number' && Number.isFinite(body.start) && body.start >= 0 ? Math.round(body.start * 100) / 100 : null;
+      const end = typeof body.end === 'number' && Number.isFinite(body.end) && body.end >= 0 ? Math.round(body.end * 100) / 100 : null;
       if (start === null || end === null || (end !== 0 && end - start < 0.2)) return c.json({ error: 'BAD_TRIM', messageRu: 'Конец должен быть позже начала хотя бы на 0.2 с (0 — до конца).' }, 422);
-      const label = `Обрезка ${start.toFixed(1)}–${end === 0 ? 'конец' : `${end.toFixed(1)} с`}`;
+      const info = await (options.probeVideo ?? probeVideo)(gen.library.pathOf(video)).catch(() => null);
+      if (info === null || start >= info.durationSec || (end !== 0 && end > info.durationSec) || (end === 0 ? info.durationSec : end) - start < 0.2) return c.json({ error: 'BAD_TRIM', messageRu: 'Отрезок должен находиться внутри видео и длиться хотя бы 0.2 с.' }, 422);
+      const label = `Обрезка ${start.toFixed(2)}–${end === 0 ? 'конец' : `${end.toFixed(2)} с`}`;
       // Тот же отрезок того же видео — тот же файл: повторный клик не плодит копии.
-      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/trim' && m.prompt === label && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
+      const existing = (await gen.library.list()).find((m) => m.modelId === 'local/trim' && m.params.start === start && m.params.end === end && m.refs.some((r) => r.source.type === 'media' && r.source.mediaId === video.id));
       if (existing !== undefined) return c.json(existing);
-      const out = path.join(gen.library.root, `.trim-${video.id}-${Date.now().toString(36)}.mp4`);
+      const out = path.join(gen.library.root, `.trim-${video.id}-${randomBytes(4).toString('hex')}.mp4`);
       try {
         await (options.ffmpeg ?? runFfmpeg)(trimArgs(gen.library.pathOf(video), out, start, end));
+        await (options.validateMedia ?? validateMediaFile)(out, 'video');
         const item = await gen.library.importFile(out, 'mp4', {
           kind: 'video',
           jobId: 'local-trim',
@@ -748,7 +765,7 @@ export function createApp(options: AppOptions) {
           modelId: 'local/trim',
           providerModel: 'ffmpeg',
           prompt: label,
-          params: {},
+          params: { start, end },
           refs: [{ label: 'Видео', source: { type: 'media', mediaId: video.id }, role: 'ref' }],
           origin: video.origin,
           sessionId: video.sessionId,
@@ -760,7 +777,7 @@ export function createApp(options: AppOptions) {
         return c.json(item, 201);
       } catch (error) {
         return c.json({ error: 'TRIM_FAILED', messageRu: error instanceof Error ? error.message : 'Видео не обрезалось.' }, 500);
-      }
+      } finally { await rm(out, { force: true }); }
     })
     // Обрезка (решение 34): бесплатно, локально ffmpeg; результат — новая версия (исходник — референс), провайдер не нужен.
     .post('/api/library/:id/crop', async (c) => {

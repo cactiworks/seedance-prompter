@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { z } from 'zod';
-import { flowCost } from '../../core/canvas/plan.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
+import { flowCost, nodeTitle } from '../../core/canvas/plan.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
+import type { GenJob } from '../../core/model/media.ts';
 import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
@@ -18,7 +19,9 @@ const SAVE_RU = { saved: 'Сохранено', dirty: 'Изменено', saving
 
 /** Список flows в сайдбаре оболочки — как «Projects» в connxn. */
 export function FlowList() {
-  const { flows, flow, loadFlows, openFlow, newFlow, deleteFlow } = useCanvas();
+  const { flows, flow, loadFlows, openFlow, newFlow, deleteFlow, restoreFlow } = useCanvas();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState<string | null>(null);
   useEffect(() => {
     void loadFlows();
   }, [loadFlows]);
@@ -39,12 +42,14 @@ export function FlowList() {
                 {f.nodes}
               </Text>
             </button>
-            <button type="button" className={styles.flowDelete} aria-label={`Удалить холст «${f.name}»`} title="Удалить холст (файлы генераций останутся в библиотеке)" onClick={() => void deleteFlow(f.id)}>
-              <Icon name="bin" size={0.875} />
+            <button type="button" className={styles.flowDelete} style={confirmDelete === f.id ? { width: 'auto', opacity: 1 } : undefined} aria-label={`Удалить холст «${f.name}»`} title="Удалить холст (файлы генераций останутся в библиотеке)" onClick={() => { if (confirmDelete !== f.id) { setConfirmDelete(f.id); return; } void deleteFlow(f.id).then(() => { setDeleted(f.id); setConfirmDelete(null); }); }}>
+              {confirmDelete === f.id ? 'Удалить?' : <Icon name="bin" size={0.875} />}
             </button>
           </div>
         ))}
       </nav>
+      {confirmDelete !== null && <Button variant="ghost" size="xs" onClick={() => setConfirmDelete(null)}>Отмена удаления</Button>}
+      {deleted !== null && <Button variant="border" size="s" onClick={() => void restoreFlow(deleted).then(() => setDeleted(null))}>Восстановить удалённый холст</Button>}
       {flows.length === 0 && <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>Здесь будут твои работы.</Text>}
       <details className={styles.sidebarTemplates}>
         <summary>Шаблоны холстов</summary>
@@ -104,6 +109,8 @@ export function Canvas() {
   const [linkMenu, setLinkMenu] = useState<{ from: string; screenX: number; screenY: number; x: number; y: number } | null>(null);
   const [act, setAct] = useState<Interaction | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [keyboardFrom, setKeyboardFrom] = useState<string | null>(null);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [picker, setPicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
   const [consent, setConsent] = useState<(() => void) | null>(null);
@@ -120,6 +127,29 @@ export function Canvas() {
     void loadJobs();
     void loadLibrary();
   }, [loadJobs, loadLibrary]);
+
+  const jobIdsKey = (flow?.nodes.flatMap((node) => node.jobIds) ?? []).join(',');
+  useEffect(() => {
+    const ids = [...new Set(jobIdsKey.split(',').filter(Boolean))];
+    const missing = ids.filter((id) => !useGen.getState().jobs.some((job) => job.id === id));
+    void Promise.all(missing.map(async (id) => {
+      const response = await fetch(`/api/gen/jobs/${encodeURIComponent(id)}`);
+      return response.ok ? await response.json() as GenJob : null;
+    })).then((found) => useGen.setState((state) => ({ jobs: [...new Map([...state.jobs, ...found.filter((job): job is GenJob => job !== null)].map((job) => [job.id, job])).values()] }))).catch(() => setHint('Не удалось загрузить историю результатов. Обнови страницу.'));
+  }, [jobIdsKey]);
+  useEffect(() => {
+    setKeyboardFrom(null);
+    setPicker(null);
+    setConsent(null);
+    const flush = (): void => { void useCanvas.getState().flush(); };
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, [flow?.id]);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent): void => { if (event.key === 'Escape') { if (keyboardFrom !== null) { const node = [...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].find((el) => el.dataset.nodeId === keyboardFrom); node?.querySelector<HTMLButtonElement>('button[aria-pressed]')?.focus(); } setKeyboardFrom(null); setHint(null); } };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [keyboardFrom]);
 
   // Seedance-промптер закрыт — подпись ноды по сохранённому черновику и свежие задачи (выход ноды).
   const host = useStore((s) => s.host);
@@ -138,8 +168,18 @@ export function Canvas() {
   const centerWorld = (): { x: number; y: number } => {
     const rect = board.current?.getBoundingClientRect();
     const c = toWorld((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2);
-    const jitter = ((flow?.nodes.length ?? 0) % 5) * 24;
-    return { x: c.x - 130 + jitter, y: c.y - 120 + jitter };
+    const x = c.x - 130;
+    let y = c.y - 120;
+    const occupied = (flow?.nodes ?? []).map((n) => {
+      const el = [...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].find((element) => element.dataset.nodeId === n.id);
+      return { x: n.x, y: n.y, width: NODE_WIDTH[n.type], height: el?.offsetHeight ?? 360 };
+    });
+    for (let i = 0; i <= occupied.length; i += 1) {
+      const hit = occupied.find((r) => x < r.x + r.width + 32 && x + 320 > r.x - 32 && y < r.y + r.height + 32 && y + 400 > r.y - 32);
+      if (!hit) break;
+      y = hit.y + hit.height + 48;
+    }
+    return { x, y };
   };
 
   // Перетаскивание, панорама и протяжка связи — через window, чтобы не терять курсор за пределами ноды.
@@ -261,8 +301,9 @@ export function Canvas() {
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
       if (file !== undefined) {
         event.preventDefault();
+        const targetFlow = useCanvas.getState().flow?.id;
         void uploadImage(file)
-          .then((source) => patchNode(addNode('image', at.x, at.y), { source, label: file.name }, false))
+          .then((source) => { if (useCanvas.getState().flow?.id === targetFlow) patchNode(addNode('image', at.x, at.y), { source, label: file.name }, false); })
           .catch((e: unknown) => setHint(e instanceof Error ? e.message : 'Не загрузилось.'));
         return;
       }
@@ -371,8 +412,9 @@ export function Canvas() {
     const minX = Math.min(...flow.nodes.map((n) => n.x));
     const minY = Math.min(...flow.nodes.map((n) => n.y));
     const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type]));
-    const maxY = Math.max(...flow.nodes.map((n) => n.y + 360));
-    const zoom = Math.min(1, Math.max(0.3, Math.min(rect.width / (maxX - minX + 96), rect.height / (maxY - minY + 96))));
+    const heights = new Map([...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].map((el) => [el.dataset.nodeId, el.offsetHeight]));
+    const maxY = Math.max(...flow.nodes.map((n) => n.y + (heights.get(n.id) ?? 360)));
+    const zoom = Math.min(1, Math.max(0.1, Math.min(rect.width / (maxX - minX + 96), rect.height / (maxY - minY + 96))));
     setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (rect.height - (maxY - minY) * zoom) / 2 - minY * zoom });
   };
 
@@ -387,6 +429,7 @@ export function Canvas() {
   const importFlow = async (f: File): Promise<void> => {
     try {
       const parsed = ImportSchema.parse(JSON.parse(await f.text()));
+      FlowSchema.parse({ ...parsed, id: 'import', createdAt: '', updatedAt: '' });
       // Новые id: импорт того же flow второй раз не должен делить с оригиналом ноды и черновики Seedance-промптеров.
       const ids = new Map(parsed.nodes.map((n) => [n.id, newId('n')]));
       const nodes = parsed.nodes.map((n) => ({ ...n, id: ids.get(n.id) ?? n.id, ...cloneSeedance(n) }));
@@ -404,6 +447,7 @@ export function Canvas() {
   const addBlock = (type: CanvasNode['type'], kind: 'image' | 'video' = 'image'): void => {
     const at = centerWorld();
     addNode(type, at.x, at.y, kind);
+    setViewport({ ...viewport, x: 80 - at.x * viewport.zoom, y: 80 - at.y * viewport.zoom });
     if (addMenu.current !== null) {
       addMenu.current.open = false;
       addMenu.current.querySelector('summary')?.focus();
@@ -418,9 +462,11 @@ export function Canvas() {
         <div className={styles.flowIdentity} data-guide="canvas-save">
           <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label="Название холста" />
           <Text variant="caption" tone={save === 'error' ? 'primary' : 'tertiary'}>
-            {SAVE_RU[save]}{error !== null && save === 'error' ? ` · ${error}` : ''}
+            {SAVE_RU[save]}{error !== null ? ` · ${error}` : ''}
           </Text>
         </div>
+        {error !== null && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().saveCopy()}>Сохранить копию</Button>}
+        <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>Связи ({flow.edges.length})</Button>
         <span className={styles.grow} />
         <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title="Скачать схему холста в JSON. Медиафайлы скачиваются из результата.">
           Сохранить схему
@@ -499,6 +545,7 @@ export function Canvas() {
             setHint(`Загружаю «${f.name}»…`);
             void importMedia(f)
               .then((item) => {
+                if (useCanvas.getState().flow?.id !== flow.id) return;
                 patchNode(addNode('video', p.x, p.y), { mediaId: item.id, label: f.name }, false);
                 setHint(null);
                 void loadLibrary();
@@ -508,6 +555,7 @@ export function Canvas() {
           }
           void uploadImage(f)
             .then((source) => {
+              if (useCanvas.getState().flow?.id !== flow.id) return;
               const id = addNode('image', p.x, p.y);
               patchNode(id, { source, label: f.name });
             })
@@ -534,7 +582,7 @@ export function Canvas() {
             {linkFrom !== undefined && act?.type === 'link' && <path d={curve(outPoint(linkFrom).x, outPoint(linkFrom).y, act.x, act.y)} className={styles.edgeDraft} />}
           </svg>
           {flow.nodes.map((node) => (
-            <NodeView key={node.id} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
+            <NodeView key={`${flow.id}:${node.id}`} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} keyboardSource={keyboardFrom === node.id} onKeyboardOutput={() => { setKeyboardFrom(node.id); setHint('Выход выбран. Нажми Tab до нужного входа и Enter; Escape — отмена.'); }} onKeyboardInput={(port) => { if (keyboardFrom !== null) { setHint(connect(keyboardFrom, node.id, port) ?? 'Связь создана.'); setKeyboardFrom(null); } else setHint('Сначала выбери выход исходной ноды.'); }} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
           ))}
         </div>
 
@@ -597,7 +645,7 @@ export function Canvas() {
           </div>
         )}
         {hint !== null && (
-          <button type="button" className={styles.hint} onClick={() => setHint(null)}>
+          <button type="button" className={styles.hint} aria-live="polite" onClick={() => setHint(null)}>
             <Text variant="caption">{hint}</Text>
             <Icon name="close" size={0.75} />
           </button>
@@ -635,6 +683,10 @@ export function Canvas() {
         </div>
       </div>
 
+      <Dialog open={connectionsOpen} onOpenChange={setConnectionsOpen} title="Связи холста" description="Клавиатура: выбери выход ноды, затем нужный вход. Здесь можно удалить связь.">
+        {flow.edges.length === 0 && <Text>Связей пока нет.</Text>}
+        {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {edge.port}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>Удалить связь</Button></div>)}
+      </Dialog>
       <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? 'Видео из библиотеки' : 'Картинка из библиотеки'} description="Выбери файл для этого блока. Свои файлы можно добавить в блоке кнопкой «С диска».">
         <div className={styles.pickerGrid}>
           {library

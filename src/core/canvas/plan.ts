@@ -75,6 +75,7 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
     if (edge.port === 'prompt' || edge.port === 'video' || edge.port === 'media') continue;
     const from = source(edge.from);
     if (from === undefined) continue;
+    if (from.stale) { problems.push(`«${nodeTitle(from)}»: вход изменился, обнови результат.`); continue; }
     const role = ROLE_OF[edge.port];
     if (from.type === 'frame' || from.type === 'resize') {
       // «Размер» мог сменить вид после того, как связь провели (импортированный flow): видео во вход картинки не идёт.
@@ -109,6 +110,7 @@ export function frameInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) 
   const edge = flow.edges.find((e) => e.to === nodeId && e.port === 'video');
   const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
   if (from === undefined) return { mediaId: null, problemRu: 'Подключи ко входу «Видео» генератор видео или обрезку.' };
+  if (from.stale) return { mediaId: null, problemRu: `«${nodeTitle(from)}»: вход изменился, обнови результат.` };
   if (outputOf(from) !== 'video') return { mediaId: null, problemRu: `«${nodeTitle(from)}» отдаёт картинку, а сюда нужно видео.` };
   if (from.type === 'trim') return from.mediaId === null ? { mediaId: null, problemRu: `Сначала обрежь видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
   if (from.type === 'video') return from.mediaId === null ? { mediaId: null, problemRu: `Выбери видео в ноде «${nodeTitle(from)}».` } : { mediaId: from.mediaId, problemRu: null };
@@ -127,6 +129,7 @@ export function mediaInput(flow: Flow, nodeId: string, mediaOf: (jobId: string) 
   const from = edge === undefined ? undefined : flow.nodes.find((n) => n.id === edge.from);
   if (from === undefined) return { source: null, kind: 'image', problemRu: 'Подключи ко входу «Файл» картинку или видео.' };
   const kind = outputOf(from) === 'video' ? 'video' : 'image';
+  if (from.stale) return { source: null, kind, problemRu: `«${nodeTitle(from)}»: вход изменился, обнови результат.` };
   if (from.type === 'image') return from.source === null ? { source: null, kind, problemRu: `В ноде «${nodeTitle(from)}» нет картинки.` } : { source: from.source, kind, problemRu: null };
   if (isJobNode(from)) {
     const jobId = from.jobIds[from.selected];
