@@ -1,0 +1,19 @@
+.bar {
+  display: grid;
+  gap: var(--lab-space-2);
+  padding: var(--lab-space-2) var(--lab-space-6);
+  border-bottom: 1px solid var(--lab-border-subtle);
+  background: var(--lab-bg-surface);
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lab-space-2) var(--lab-space-4);
+}
+
+.line > p {
+  flex: 1;
+  min-width: 10rem;
+}

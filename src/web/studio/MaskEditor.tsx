@@ -3,6 +3,7 @@ import { fixParams } from '../../core/gen/fixes.ts';
 import { estimate, findModel, formatCost } from '../../core/gen/models.ts';
 import { maskToBoxes, MAX_REGIONS, regionProblems, type Box } from '../../core/gen/regionEdit.ts';
 import type { MediaItem } from '../../core/model/media.ts';
+import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import { hasRefsConsent, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
 import styles from './MediaPreview.module.css';
@@ -191,8 +192,7 @@ export function MaskEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
         refsConsent: true,
         sessionId: item.sessionId ?? undefined,
       });
-      const failed = created.find((j) => j.status === 'failed');
-      setState({ phase: 'idle', messageRu: failed?.error?.messageRu ?? 'Правка запущена — новая версия появится в ленте версий слева, файл сразу на диске.' });
+      setState({ phase: 'idle', messageRu: submissionIssue(created) ?? 'Задача добавлена в «Материалы». Её статус виден здесь, в задачах правки.' });
       void loadLibrary();
     } catch (error) {
       setState({ phase: 'idle', messageRu: error instanceof Error ? error.message : 'Правка не запустилась.' });

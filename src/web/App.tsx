@@ -4,6 +4,7 @@ import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace, WorkspaceOverlay } from './features/Workspace.tsx';
 import { Library } from './library/Library.tsx';
+import { useGen } from './gen/genStore.ts';
 import { Production, ProductionList } from './production/Production.tsx';
 import { Prompter } from './prompter/Prompter.tsx';
 import { AppShell } from './shell/AppShell.tsx';
@@ -14,8 +15,16 @@ import { applyTheme, readTheme } from './theme.ts';
 import { Text } from './ui/components/index.ts';
 
 export function App() {
+  useEffect(() => {
+    const stop = useGen.getState().watchJobs();
+    const refresh = (): void => { if (document.visibilityState === 'visible') void useGen.getState().loadJobs(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { stop(); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
   const { pack, project, host, loadPack, error } = useStore();
   const [route, setRoute] = useRoute();
+  const tasksVisit = useGen((s) => s.tasksVisit);
 
   useEffect(() => {
     applyTheme(readTheme());
@@ -40,7 +49,7 @@ export function App() {
         {route === 'images' && <Studio kind="image" />}
         {route === 'video' && <Studio kind="video" />}
         {route === 'canvas' && <Canvas />}
-        {route === 'library' && <Library />}
+        {route === 'library' && <Library key={tasksVisit} />}
         {route === 'calibration' && <Calibration />}
         {route === 'shots' && (
           <div style={{ height: '100%', overflowY: 'auto' }}>

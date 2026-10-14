@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
 import { retryable, STATUS_RU } from '../studio/JobTile.tsx';
 import { Button, Text } from '../ui/components/index.ts';
@@ -6,16 +6,18 @@ import styles from './ShotGenerations.module.css';
 
 /** Генерации попытки кадра: запущены из карточки кадра, файлы уже на диске. */
 export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shotId: string; attemptN: number }) {
-  const { jobs, loadJobs, retry, reveal } = useGen();
+  const { jobs, loadJobs, retry, reveal, jobsError } = useGen();
+  const [actionError, setActionError] = useState<string | null>(null);
   useEffect(() => {
     void loadJobs();
   }, [loadJobs]);
 
   const mine = jobs.filter((j) => j.origin?.projectSlug === slug && j.origin.shotId === shotId && j.origin.attemptN === attemptN);
-  if (mine.length === 0) return null;
+  if (mine.length === 0 && jobsError === null) return null;
 
   return (
     <div className={styles.list}>
+      {(jobsError !== null || actionError !== null) && <Text variant="caption" role="alert">{jobsError ?? actionError}</Text>}
       <Text variant="caption" tone="secondary">
         Генерации попытки · {mine.length}
       </Text>
@@ -38,7 +40,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
                     </Text>
                   )}
                   {retryable(job) && (
-                    <Button variant="border" size="xs" onClick={() => void retry(job.id)}>
+                    <Button variant="border" size="xs" onClick={() => { setActionError(null); void retry(job.id).catch((error: unknown) => setActionError(error instanceof Error ? error.message : 'Не удалось проверить задачу.')); }}>
                       {job.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}
                     </Button>
                   )}

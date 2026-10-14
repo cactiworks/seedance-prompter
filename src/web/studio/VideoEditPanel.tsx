@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import { estimate, formatCost, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { hasRefsConsent, measureInput, useGen, type MeasuredInput } from '../gen/genStore.ts';
@@ -49,8 +50,7 @@ export function VideoEditPanel({ item }: { item: MediaItem }) {
         refsConsent: true,
         sessionId: item.sessionId ?? undefined,
       });
-      const failed = created.find((j) => j.status === 'failed');
-      setState({ busy: false, messageRu: failed?.error?.messageRu ?? 'Апскейл запущен — новая версия появится в ленте слева, файл сразу на диске.' });
+      setState({ busy: false, messageRu: submissionIssue(created) ?? 'Задача добавлена в «Материалы». Её статус виден здесь, в задачах правки.' });
       void loadLibrary();
     } catch (error) {
       setState({ busy: false, messageRu: error instanceof Error ? error.message : 'Апскейл не запустился.' });

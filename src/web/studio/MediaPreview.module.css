@@ -57,6 +57,22 @@
 
 .versionPending {
   cursor: default;
+  display: grid;
+  place-items: center;
+  padding: var(--lab-space-1);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.jobFeedback {
+  display: grid;
+  gap: var(--lab-space-4);
+  padding: var(--lab-space-4);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-m);
+  max-height: 15rem;
+  flex-shrink: 0;
+  overflow-y: auto;
 }
 
 .stage {

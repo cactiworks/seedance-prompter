@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { choiceParams, fillFix, fixParams, type FixPack, type FixRecipe } from '../../core/gen/fixes.ts';
 import { estimate, findModel, formatCost, modelsOf, paramsFor, type GenModel } from '../../core/gen/models.ts';
 import type { MediaItem, RefSource } from '../../core/model/media.ts';
+import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import { hasRefsConsent, mediaUrl, thumbOf, uploadImage, useGen } from '../gen/genStore.ts';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
 import styles from './MediaPreview.module.css';
@@ -95,9 +96,9 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
         refsConsent: true,
         sessionId: item.sessionId ?? undefined,
       });
-      const failed = created.find((j) => j.status === 'failed');
-      setState({ busy: false, messageRu: failed?.error?.messageRu ?? 'Правка запущена — новая версия появится в ленте слева, файл сразу на диске.' });
-      if (failed === undefined) {
+      const issue = submissionIssue(created);
+      setState({ busy: false, messageRu: issue ?? 'Задача добавлена в «Материалы». Её статус виден здесь, в задачах правки.' });
+      if (issue === null) {
         setCustomText('');
         setValues({});
       }
@@ -361,7 +362,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
       </section>
       )}
       <Text variant="caption" tone="tertiary">
-        Каждая правка — новая версия в ленте слева; исходник не меняется. Обрезка бесплатная и локальная, остальное — по
+        Каждая правка — отдельная задача в «Материалах» и новая версия после завершения; исходник не меняется. Обрезка бесплатная и локальная, остальное — по
         цене на кнопке.
       </Text>
     </div>

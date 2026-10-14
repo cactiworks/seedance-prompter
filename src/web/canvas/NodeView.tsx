@@ -13,6 +13,7 @@ import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts'
 import styles from './Canvas.module.css';
 import { NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
 import { jobLookup, openSeedanceNode } from './openSeedance.ts';
+import { submissionIssue } from '../../core/gen/jobStatus.ts';
 
 export const PORT_RU: Record<InputPort, string> = { prompt: 'Промпт', ref: 'Реф', start: 'Старт', end: 'Финал', video: 'Видео', media: 'Файл' };
 
@@ -494,8 +495,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     try {
       const created = await run({ modelId: plan.modelId, prompt: plan.prompt, params: plan.params, refs: plan.refs, count: 1, confirmCredits: plan.estimate.credits, refsConsent: plan.refs.length > 0 && consent ? true : undefined });
       finish({ jobIds: [...node.jobIds, ...created.map((j) => j.id)], selected: node.jobIds.length });
-      const failed = created.find((j) => j.status === 'failed');
-      if (failed !== undefined) setError(failed.error?.messageRu ?? 'Не запустилось.');
+      setError(submissionIssue(created));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не запустилось.');
     } finally {

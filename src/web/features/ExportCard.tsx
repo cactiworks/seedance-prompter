@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { estimate, findModel, formatCost, paramsFor, validateGen } from '../../core/gen/models.ts';
+import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import type { Project, Shot } from '../../core/model/project.ts';
 import type { ShotBuild } from '../../core/pipeline.ts';
 import { hasRefsConsent, useGen } from '../gen/genStore.ts';
@@ -104,7 +105,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
         refsConsent: panelFiles.length > 0 ? true : undefined,
         origin: { projectSlug: project.slug, shotId: shot.id, attemptN: n },
       });
-      setGenState({ prompt: build.prompt, n, errorRu: jobs.find((j) => j.status === 'failed')?.error?.messageRu });
+      setGenState({ prompt: build.prompt, n, errorRu: submissionIssue(jobs) ?? undefined });
     } catch (error) {
       setGenState({ prompt: build.prompt, n, errorRu: error instanceof Error ? error.message : 'Генерация не запустилась.' });
     } finally {
@@ -173,7 +174,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
             </Button>
             {launched !== null && (
               <Text variant="label" tone={launched.errorRu === undefined ? 'secondary' : 'accent'}>
-                {launched.errorRu ?? `Попытка №${launched.n} запущена — результат появится в блоке «Попытки» и в библиотеке, файл сразу на диске.`}
+                {launched.errorRu ?? `Задача попытки №${launched.n} добавлена в «Материалы». Статус виден также в блоке «Попытки»; файл появится после завершения.`}
               </Text>
             )}
           </div>

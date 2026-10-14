@@ -5,6 +5,7 @@ import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
+import { isActive, needsAttention } from '../core/gen/jobStatus.ts';
 import { staleFields, type FieldsOutput } from '../core/compose.ts';
 import { buildCriticSystem, buildCriticUser, CRITIC_SCHEMA, verifyCritique, type CriticOutput, type SymptomCatalog } from '../core/llm/buildCritic.ts';
 import { buildFieldsUser, FIELDS_SCHEMA, normalizeFields, validateFields } from '../core/llm/buildFields.ts';
@@ -509,7 +510,7 @@ export function createApp(options: AppOptions) {
       return c.json(
         all
           .filter((job) => (slug === undefined || job.origin?.projectSlug === slug) && (shotId === undefined || job.origin?.shotId === shotId) && (sessionId === undefined || job.sessionId === sessionId) && (kind === undefined || job.kind === kind))
-          .slice(0, 300),
+          .filter((job, index) => index < 300 || isActive(job) || needsAttention(job)),
       );
     })
     // Canvas: flows пишет клиент (автосейв), сервер хранит. Генерации из нод идут тем же /api/gen/jobs.

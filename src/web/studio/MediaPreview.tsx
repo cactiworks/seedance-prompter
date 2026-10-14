@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { estimate, findModel, formatCost, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
-import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
+import { mediaUrl, useGen } from '../gen/genStore.ts';
+import { STATUS_RU, awaitingFiles } from '../../core/gen/jobStatus.ts';
+import { mediaVersions, parentMediaId } from '../../core/gen/versions.ts';
+import { retryable } from './JobTile.tsx';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
 import { VerdictBar } from '../calibration/VerdictBar.tsx';
 import { useCanvas } from '../canvas/canvasStore.ts';
@@ -17,8 +20,7 @@ const PARAM_RU: Record<string, string> = { resolution: 'Разрешение', a
 const showValue = (v: unknown): string => (v === true ? 'да' : v === false ? 'нет' : v === '' ? '—' : String(v));
 
 const parentOf = (item: MediaItem): string | null => {
-  const ref = item.refs.find((r) => r.source.type === 'media');
-  return ref !== undefined && ref.source.type === 'media' ? ref.source.mediaId : null;
+  return parentMediaId(item.refs);
 };
 
 interface PreviewProps {
@@ -57,7 +59,8 @@ export function DownloadMediaButton({ item, size = 's' }: { item: Pick<MediaItem
  * справа «Инфо» (промпт, параметры, действия) и «Правка» (рецепт починки или своё описание — `EditPanel`).
  */
 export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialTab = 'info' }: PreviewProps) {
-  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo, deleteMedia } = useGen();
+  const { jobs, library, folders, remix, regenerate, reveal, toggleFavorite, favorites, fileTo, deleteMedia, jobsError, libraryError, loadJobs, retry } = useGen();
+  const [taskError, setTaskError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sendMedia = useCanvas((s) => s.sendMedia);
   const canvasName = useCanvas((s) => s.flow?.name);
@@ -109,14 +112,12 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
   // Версии: исходник (если эта работа — правка), сама работа, её правки; незаконченные правки — заглушками.
   const versions = useMemo(() => {
     if (item === null) return { done: [] as MediaItem[], pending: [] as GenJob[] };
-    const rootId = parentOf(item) ?? item.id;
-    const root = library.find((m) => m.id === rootId);
-    const derived = library.filter((m) => parentOf(m) === rootId).sort((a, b) => a.savedAt.localeCompare(b.savedAt));
-    const pending = jobs.filter((j) => isActive(j) && j.refs.some((r) => r.source.type === 'media' && r.source.mediaId === rootId));
-    return { done: [...(root === undefined ? [] : [root]), ...derived], pending };
+    return mediaVersions(item, library, jobs);
   }, [item, library, jobs]);
 
   if (item === null) return null;
+  const latestVersion = versions.done.at(-1);
+  const nextVersion = latestVersion !== undefined && latestVersion.id !== item.id && latestVersion.savedAt >= item.savedAt ? latestVersion : null;
   const job = jobs.find((j) => j.id === item.jobId);
   const model = findModel(item.modelId);
   const again = model === undefined ? null : estimate(model, paramsFor(model, item.params), 1, item.refs.length);
@@ -146,7 +147,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
             </button>
           ))}
           {versions.pending.map((j) => (
-            <span key={j.id} className={`${styles.version} ${styles.versionPending} lab-hatch`} title="Правка генерируется" />
+            <span key={j.id} className={`${styles.version} ${styles.versionPending} lab-hatch`} title={`${sourceTitleRu(j.modelId)} · ${STATUS_RU[j.status]}`}><Text variant="caption">{STATUS_RU[j.status]}</Text></span>
           ))}
         </nav>
       )}
@@ -201,6 +202,19 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
           ]}
         />
 
+        {(versions.pending.length > 0 || nextVersion !== null || jobsError !== null || libraryError !== null) && <section className={styles.jobFeedback} aria-label="Задачи правки">
+          {nextVersion !== null && <Button variant="border" size="xs" onClick={() => setCurrent(nextVersion)}>Готово — открыть новую версию</Button>}
+          {(jobsError !== null || libraryError !== null) && <Text variant="caption" role="alert">{jobsError ?? libraryError}</Text>}
+          {versions.pending.map((task) => <div key={task.id} data-job-id={task.id}>
+            <Text variant="label" medium role="status">{sourceTitleRu(task.modelId)} · {STATUS_RU[task.status]}</Text>
+            {awaitingFiles(task, library) && <Text variant="caption">Обновляется список файлов…</Text>}
+            {task.error !== null && <Text variant="caption">{task.error.messageRu}</Text>}
+            {retryable(task) && <Button variant="border" size="xs" onClick={() => void retry(task.id).catch((error: unknown) => setTaskError(error instanceof Error ? error.message : 'Не удалось обновить задачу.'))}>{task.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}</Button>}
+          </div>)}
+          {taskError !== null && <Text variant="caption" role="alert">{taskError}</Text>}
+          <Button variant="border" size="xs" onClick={() => { onClose(); useGen.getState().openTasks(); }}>Все задачи и результаты в «Материалах»</Button>
+          {jobsError !== null && <Button variant="ghost" size="xs" onClick={() => void loadJobs()}>Обновить статусы</Button>}
+        </section>}
         <div className={styles.actions}>
           <DownloadMediaButton item={item} />
           <Button

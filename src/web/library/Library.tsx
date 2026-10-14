@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { sourceTitleRu } from '../../core/gen/models.ts';
+import { awaitingFiles } from '../../core/gen/jobStatus.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { importMedia, mediaUrl, useGen } from '../gen/genStore.ts';
 import { MediaPreview } from '../studio/MediaPreview.tsx';
+import { JobTile } from '../studio/JobTile.tsx';
 import { Button, Icon, Select, Text } from '../ui/components/index.ts';
 import styles from './Library.module.css';
 
@@ -59,8 +61,12 @@ export function Library() {
 
   useEffect(() => {
     void loadLibrary();
-    if (jobs.length === 0) void loadJobs();
-  }, [loadLibrary, loadJobs, jobs.length]);
+    void loadJobs();
+  }, [loadLibrary, loadJobs]);
+
+  const unfinished = jobs.filter((job) => (job.status !== 'saved' || awaitingFiles(job, library)) &&
+    (view.type === 'all' || (view.type === 'kind' && job.kind === view.kind)) &&
+    (query.trim() === '' || `${job.prompt} ${sourceTitleRu(job.modelId)}`.toLowerCase().includes(query.trim().toLowerCase())));
 
   const folder = view.type === 'folder' ? folders.find((f) => f.id === view.id) : undefined;
   const shown = useMemo(() => {
@@ -215,6 +221,14 @@ export function Library() {
           </div>
         </header>
 
+        {unfinished.length > 0 && <section className={styles.day} aria-label="Задачи генерации">
+          <Text as="h2" variant="title-s">В работе и требуют внимания · {unfinished.length}</Text>
+          <Text variant="caption" tone="secondary">Генерации со всех холстов и правки. Готовый файл появится ниже автоматически; ошибка останется здесь.</Text>
+          <div className={styles.grid} style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}rem, 1fr))` }}>
+            {(order === 'new' ? unfinished : [...unfinished].reverse()).map((job) => <JobTile key={job.id} job={job} onOpen={(id) => setOpen(library.find((m) => m.id === id) ?? null)} />)}
+          </div>
+        </section>}
+
         {selected.length > 0 && (
           <div className={styles.selectionBar}>
             <Text variant="label" medium>
@@ -312,7 +326,7 @@ export function Library() {
         {shown.length === 0 ? (
           <div className={`${styles.empty} lab-hatch`}>
             <Text variant="label" tone="tertiary">
-              {library.length === 0 ? 'Здесь будут готовые изображения и видео. Свои референсы можно загрузить кнопкой «Добавить файлы».' : view.type === 'folder' ? 'Папка пуста. Выбери работы и нажми «В папку».' : 'Ничего не нашлось.'}
+              {unfinished.length > 0 ? 'Готовых файлов по этому фильтру пока нет. Статусы задач показаны выше.' : library.length === 0 ? 'Здесь будут готовые изображения и видео. Свои референсы можно загрузить кнопкой «Добавить файлы».' : view.type === 'folder' ? 'Папка пуста. Выбери работы и нажми «В папку».' : 'Ничего не нашлось.'}
             </Text>
           </div>
         ) : (

@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { estimate, findModel, modelsOf, paramsFor, validateGen, type GenParams, type MediaKind, type ParamValue, type ProviderId, type RefRole } from '../../core/gen/models.ts';
 import type { Folder, GenJob, MediaItem, RefSource, StudioSession } from '../../core/model/media.ts';
 import { forgetMedia } from '../../core/model/canvas.ts';
+import { isActive, mergeJobs, submissionIssue } from '../../core/gen/jobStatus.ts';
 import { useCanvas } from '../canvas/canvasStore.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
-const ACTIVE = new Set<GenJob['status']>(['submitting', 'queued', 'running', 'downloading']);
+export { isActive } from '../../core/gen/jobStatus.ts';
 
 /**
  * Сервер уже вычистил удалённые файлы из сохранённых flows; открытый flow держит клиент — его чистим здесь, иначе
@@ -126,7 +127,6 @@ export async function uploadImage(file: File): Promise<RefSource> {
   const upload = await json<{ id: string }>(await fetch('/api/uploads', { method: 'POST', headers: { 'x-sp-client': '1', 'content-type': file.type }, body: file }));
   return { type: 'upload', uploadId: upload.id };
 }
-export const isActive = (job: GenJob): boolean => ACTIVE.has(job.status);
 
 /** Согласие отправлять картинки провайдеру — на сессию браузера, как у vision-анализа. */
 export function hasRefsConsent(): boolean {
@@ -153,6 +153,15 @@ let refSeq = 0;
 const nextKey = (): string => `r${Date.now().toString(36)}${(refSeq += 1)}`;
 
 interface GenState {
+  jobsLoading: boolean;
+  jobsError: string | null;
+  libraryError: string | null;
+  jobsCheckedAt: string | null;
+  submitting: number;
+  submissionError: string | null;
+  tasksVisit: number;
+  openTasks: () => void;
+  watchJobs: () => () => void;
   status: Record<string, ProviderStatus>;
   sessions: Record<MediaKind, StudioSession[]>;
   activeSession: Record<MediaKind, string | null>;
@@ -218,6 +227,10 @@ interface GenState {
 }
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
+let watchers = 0;
+let jobsRequest: Promise<void> | null = null;
+let libraryRequest: Promise<void> | null = null;
+let jobsRevision = 0;
 
 export const useGen = create<GenState>((set, get) => {
   const patchComposer = (kind: MediaKind, patch: Partial<Composer> | ((c: Composer) => Partial<Composer>)): void => {
@@ -235,17 +248,25 @@ export const useGen = create<GenState>((set, get) => {
     if (pollTimer !== null) return;
     pollTimer = setTimeout(() => {
       pollTimer = null;
-      void get()
-        .loadJobs()
-        .then(() => {
-          if (get().jobs.some(isActive)) schedulePoll();
-        });
-    }, 2000);
+      void get().loadJobs();
+    }, get().jobs.some(isActive) || get().jobsError !== null || get().libraryError !== null || get().submitting > 0 ? 2000 : 10000);
   };
 
   const post = async <T>(url: string, body: unknown): Promise<T> => json<T>(await fetch(url, { method: 'POST', headers: HEADERS, body: JSON.stringify(body) }));
 
   return {
+    jobsLoading: false, jobsError: null, libraryError: null, jobsCheckedAt: null,
+    submitting: 0, submissionError: null,
+    tasksVisit: 0,
+    openTasks: () => { set((s) => ({ tasksVisit: s.tasksVisit + 1 })); window.location.hash = '/library'; },
+    watchJobs: () => {
+      watchers += 1;
+      void get().loadJobs();
+      return () => {
+        watchers = Math.max(0, watchers - 1);
+        if (watchers === 0 && pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
+      };
+    },
     status: {},
     sessions: { image: [], video: [] },
     activeSession: { image: null, video: null },
@@ -296,15 +317,40 @@ export const useGen = create<GenState>((set, get) => {
     },
 
     loadJobs: async () => {
-      const before = new Set(get().jobs.filter((j) => j.status === 'saved').map((j) => j.id));
-      const jobs = await json<GenJob[]>(await fetch('/api/gen/jobs'));
-      set((state) => ({ jobs: [...new Map([...state.jobs, ...jobs].map((job) => [job.id, job])).values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) }));
-      if (jobs.some((j) => j.status === 'saved' && !before.has(j.id))) void get().loadLibrary();
-      if (jobs.some(isActive)) schedulePoll();
+      if (jobsRequest !== null) return jobsRequest;
+      const revision = jobsRevision;
+      const before = new Map(get().jobs.map((job) => [job.id, job.updatedAt]));
+      set({ jobsLoading: true });
+      jobsRequest = (async () => {
+        try {
+          const jobs = await json<GenJob[]>(await fetch('/api/gen/jobs', { signal: AbortSignal.timeout(10000) }));
+          if (revision === jobsRevision) set((state) => {
+            const ids = new Set(jobs.map((job) => job.id));
+            // The endpoint includes every unfinished job; missing unchanged entries were removed elsewhere.
+            const retained = state.jobs.filter((job) => job.status === 'saved' || ids.has(job.id) || before.get(job.id) !== job.updatedAt);
+            return { jobs: mergeJobs(retained, jobs), jobsError: null, jobsCheckedAt: new Date().toISOString() };
+          });
+          await get().loadLibrary();
+        } catch {
+          set({ jobsError: 'Не удалось обновить задачи. Показаны последние полученные статусы; проверка повторится автоматически.' });
+        } finally {
+          jobsRequest = null;
+          set({ jobsLoading: false });
+          if (watchers > 0 || get().jobs.some(isActive) || get().submitting > 0 || get().jobsError !== null || get().libraryError !== null) schedulePoll();
+        }
+      })();
+      return jobsRequest;
     },
     loadLibrary: async () => {
-      const body = await json<{ items: MediaItem[]; favorites: string[]; folders: Folder[] }>(await fetch('/api/library'));
-      set({ library: body.items, favorites: body.favorites, folders: body.folders });
+      if (libraryRequest !== null) return libraryRequest;
+      libraryRequest = (async () => {
+        try {
+          const body = await json<{ items: MediaItem[]; favorites: string[]; folders: Folder[] }>(await fetch('/api/library', { signal: AbortSignal.timeout(10000) }));
+          set({ library: body.items, favorites: body.favorites, folders: body.folders, libraryError: null });
+        } catch { set({ libraryError: 'Не удалось обновить список файлов. Уже созданные результаты могут пока не отображаться.' }); }
+        finally { libraryRequest = null; }
+      })();
+      return libraryRequest;
     },
     createFolder: async (name) => {
       const folder = await post<Folder>('/api/library/folders', { name });
@@ -333,12 +379,16 @@ export const useGen = create<GenState>((set, get) => {
     },
     deleteMedia: async (mediaIds) => {
       for (const id of mediaIds) await json(await fetch(`/api/library/${id}`, { method: 'DELETE', headers: HEADERS }));
+      jobsRevision += 1;
+      set((s) => ({ library: s.library.filter((m) => !mediaIds.includes(m.id)), jobs: s.jobs.filter((j) => j.status !== 'saved' || j.mediaIds.some((id) => id !== null && !mediaIds.includes(id))) }));
       forgetInOpenFlow(mediaIds);
       await Promise.all([get().loadLibrary(), get().loadJobs()]);
     },
     deleteJob: async (jobId) => {
       const removed = (get().jobs.find((j) => j.id === jobId)?.mediaIds ?? []).filter((m): m is string => m !== null);
       await json(await fetch(`/api/gen/jobs/${jobId}`, { method: 'DELETE', headers: HEADERS }));
+      jobsRevision += 1;
+      set((s) => ({ jobs: s.jobs.filter((j) => j.id !== jobId) }));
       forgetInOpenFlow(removed);
       await Promise.all([get().loadLibrary(), get().loadJobs()]);
     },
@@ -400,6 +450,7 @@ export const useGen = create<GenState>((set, get) => {
 
     submit: async (kind, consent = false) => {
       const c = get().composer[kind];
+      if (c.sending) return 'error';
       const model = findModel(c.modelId);
       if (model === undefined) return 'error';
       const params = paramsFor(model, c.params);
@@ -418,7 +469,7 @@ export const useGen = create<GenState>((set, get) => {
           await get().newSession(kind);
           sessionId = get().activeSession[kind];
         }
-        const result = await post<{ jobs: GenJob[] }>('/api/gen/jobs', {
+        const created = await get().run({
           modelId: model.id,
           prompt: c.prompt,
           params,
@@ -428,13 +479,12 @@ export const useGen = create<GenState>((set, get) => {
           refsConsent: c.refs.length > 0 ? true : undefined,
           sessionId: sessionId ?? undefined,
         });
-        set((s) => ({ jobs: [...result.jobs, ...s.jobs.filter((j) => !result.jobs.some((n) => n.id === j.id))] }));
-        const failed = result.jobs.find((j) => j.status === 'failed');
+        const issue = submissionIssue(created);
         // Как в connxn: в картинках форма остаётся для быстрых правок, в видео — очищается.
-        patchComposer(kind, kind === 'video' && failed === undefined ? { prompt: '', refs: [], sending: false } : { sending: false, error: failed?.error?.messageRu ?? null });
+        patchComposer(kind, kind === 'video' && issue === null ? { prompt: '', refs: [], sending: false } : { sending: false, error: issue });
         schedulePoll();
         void get().loadSessions(kind);
-        return failed === undefined ? 'ok' : 'error';
+        return issue === null ? 'ok' : 'error';
       } catch (error) {
         patchComposer(kind, { sending: false, error: error instanceof Error ? error.message : 'Генерация не запустилась.' });
         return 'error';
@@ -448,7 +498,7 @@ export const useGen = create<GenState>((set, get) => {
       // Повторить кадр — «Использовать настройки»: remix переносит seed как есть.
       const seedKey = model.params.find((d) => d.type === 'seed')?.key;
       const params = paramsFor(model, seedKey === undefined ? job.params : { ...job.params, [seedKey]: 0 });
-      const result = await post<{ jobs: GenJob[] }>('/api/gen/jobs', {
+      await get().run({
         modelId: model.id,
         prompt: job.prompt,
         params,
@@ -459,17 +509,27 @@ export const useGen = create<GenState>((set, get) => {
         refsConsent: job.refs.length > 0 ? true : undefined,
         sessionId: job.sessionId ?? undefined,
         origin: job.origin ?? undefined,
-      });
-      set((s) => ({ jobs: [...result.jobs, ...s.jobs] }));
-      schedulePoll();
+      }).catch(() => { /* run exposes the error in the shared task status. */ });
     },
 
     run: async (body) => {
       if (body.refsConsent === true) rememberConsent();
-      const result = await post<{ jobs: GenJob[] }>('/api/gen/jobs', body);
-      set((s) => ({ jobs: [...result.jobs, ...s.jobs.filter((j) => !result.jobs.some((n) => n.id === j.id))] }));
-      schedulePoll();
-      return result.jobs;
+      set((s) => ({ submitting: s.submitting + 1, submissionError: null }));
+      // Start observing before submit returns: the server may already have a submitting job.
+      void get().loadJobs();
+      try {
+        const result = await post<{ jobs: GenJob[] }>('/api/gen/jobs', body);
+        set((s) => ({ jobs: mergeJobs(s.jobs, result.jobs), submissionError: submissionIssue(result.jobs) }));
+        return result.jobs;
+      } catch (error) {
+        const message = error instanceof TypeError ? 'Ответ на отправку не получен. Проверь задачи в «Материалах» перед повтором: генерация могла начаться.' : error instanceof Error ? error.message : 'Не удалось получить ответ на отправку. Проверь задачи в «Материалах».';
+        set({ submissionError: message });
+        throw new Error(message);
+      } finally {
+        set((s) => ({ submitting: Math.max(0, s.submitting - 1) }));
+        if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
+        schedulePoll();
+      }
     },
   };
 });

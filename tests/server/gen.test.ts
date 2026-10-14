@@ -327,6 +327,17 @@ describe('студия: сессии, загрузки, избранное', () 
 });
 
 describe('Soul 2 через Higgsfield: тот же конвейер', () => {
+  it('active and unresolved jobs remain visible beyond the latest 300 finished jobs', async () => {
+    const { gen, app, post } = setup();
+    const original = (await (await post('/api/gen/jobs', imageJob())).json() as { jobs: GenJob[] }).jobs[0]!;
+    await gen.jobs.put({ ...original, id: 'j-unknown-old-123', status: 'unknown' });
+    await Promise.all(Array.from({ length: 300 }, (_, i) => gen.jobs.put({ ...original, id: `j-recent-${String(i).padStart(6, '0')}`, status: 'saved', createdAt: new Date(Date.parse(original.createdAt) + i + 1).toISOString() })));
+    const jobs = await (await app.request('/api/gen/jobs', { headers: { host } })).json() as GenJob[];
+    expect(jobs).toHaveLength(302);
+    expect(jobs.some((j) => j.id === original.id)).toBe(true);
+    expect(jobs.some((j) => j.id === 'j-unknown-old-123')).toBe(true);
+  });
+
   it('выбранный Soul ID сохраняется в задаче и уходит как provider reference; «Без персонажа» убирает оба поля', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-soul-selection-'));
     const hf = mockProvider({ id: 'higgsfield', balance: undefined });

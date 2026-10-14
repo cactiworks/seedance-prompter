@@ -3,6 +3,7 @@ import type { MediaKind } from '../../core/gen/models.ts';
 import { isCanvasDraft } from '../../core/model/canvas.ts';
 import { ThemeSwitch } from '../features/ThemeSwitch.tsx';
 import { useGen } from '../gen/genStore.ts';
+import { GenerationStatus } from '../gen/GenerationStatus.tsx';
 import { usePrompter } from '../prompter/prompterStore.ts';
 import { useStore } from '../store.ts';
 import { Button, Icon, Text } from '../ui/components/index.ts';
@@ -253,7 +254,7 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
           </nav>
           <details ref={toolsRef} className={styles.tools} data-guide="nav-tools" onKeyDown={(event) => {
             if (event.key === 'Escape' && toolsRef.current) { toolsRef.current.open = false; toolsRef.current.querySelector('summary')?.focus(); }
-          }} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
+          }} onBlur={(event) => { if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false; }}>
             <summary className={`${styles.tab} ${TOOL_ROUTES.includes(route) ? styles.tabActive : ''}`}>
               {TOOL_ROUTES.includes(route) ? ROUTE_RU[route] : 'Инструменты'} <Icon name="chevron-down" size={0.875} />
             </summary>
@@ -266,6 +267,7 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
           </details>
           <div className={styles.help}><CreatorGuide route={route} onRoute={onRoute} /></div>
         </header>
+        <GenerationStatus onOpen={() => useGen.getState().openTasks()} />
         <div className={styles.content}>{children}</div>
       </div>
     </div>

@@ -486,7 +486,9 @@ export function Canvas() {
             event.currentTarget.querySelector('summary')?.focus();
           }}
           onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
+            // WebKit blurs summary to null on mouse-down without focusing the button.
+            // Closing here removes the target before click; outside pointer-down handles that case.
+            if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget as Node)) event.currentTarget.open = false;
           }}
         >
           <summary className={styles.addTrigger}><Icon name="plus" size={1} />Добавить</summary>

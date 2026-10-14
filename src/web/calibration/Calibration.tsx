@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { calibrationTag, expandSuite, parseCalibrationTag, repeatedSymptoms, suiteCost, VERDICT_RU, VERDICT_SYMPTOMS, VERDICTS, type CalibrationSuite, type Repeat } from '../../core/gen/calibration.ts';
 import { findModel, GEN_MODELS } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
-import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
+import { STATUS_RU, submissionIssue } from '../../core/gen/jobStatus.ts';
+import { mediaUrl, useGen } from '../gen/genStore.ts';
 import { MediaPreview } from '../studio/MediaPreview.tsx';
 import { Button, Dialog, Icon, Select, Tag, Text } from '../ui/components/index.ts';
 import styles from './Calibration.module.css';
@@ -27,7 +28,7 @@ function Cell({ job, onOpen }: { job: GenJob | undefined; onOpen: (mediaId: stri
     return (
       <div className={styles.cellEmpty}>
         <Text variant="caption" tone={job.status === 'failed' ? 'primary' : 'tertiary'} className={job.status === 'failed' ? styles.failed : undefined}>
-          {isActive(job) ? 'генерируется…' : (job.error?.messageRu ?? 'нет файла')}
+          {job.error?.messageRu ?? STATUS_RU[job.status]}
         </Text>
       </div>
     );
@@ -61,17 +62,21 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
     const errors: string[] = [];
     try {
       const res = await fetch('/api/studio/sessions', { method: 'POST', headers: HEADERS, body: JSON.stringify({ kind: 'image', title: `Калибровка · ${suite.titleRu}` }) });
+      if (!res.ok) throw new Error('Не удалось создать подборку калибровки. Генерации не отправлены.');
       const session = (await res.json()) as { id: string };
       for (const job of planned) {
         try {
-          await run({ modelId: job.modelId, prompt: job.prompt, params: job.params, count: 1, confirmCredits: job.credits, sessionId: session.id, tag: calibrationTag(id, suite.id, job.caseId, job.modelKey) });
+          const created = await run({ modelId: job.modelId, prompt: job.prompt, params: job.params, count: 1, confirmCredits: job.credits, sessionId: session.id, tag: calibrationTag(id, suite.id, job.caseId, job.modelKey) });
+          const issue = submissionIssue(created);
+          if (issue !== null) errors.push(issue);
+          if (created.some((task) => task.status === 'unknown')) { errors.push('Остальные задачи не отправлены: сначала проверь неизвестный исход.'); break; }
         } catch (error) {
           errors.push(`${suite.models.find((m) => m.key === job.modelKey)?.labelRu ?? job.modelKey}: ${error instanceof Error ? error.message : 'не запустилось'}`);
         }
       }
       void loadSessions('image');
       setRunId(id);
-      setState({ busy: false, messageRu: errors.length === 0 ? `Запущено ${planned.length} генераций — результаты появятся в сетке и в сессии «Калибровка · ${suite.titleRu}».` : `Не запустилось ${errors.length} из ${planned.length}: ${[...new Set(errors)].join('; ')}` });
+      setState({ busy: false, messageRu: errors.length === 0 ? `Запущено ${planned.length} генераций — результаты появятся в сетке и в сессии «Калибровка · ${suite.titleRu}».` : `Есть задачи, требующие внимания: ${[...new Set(errors)].join('; ')}. Статусы — в сетке и в «Материалах».` });
     } catch (error) {
       setState({ busy: false, messageRu: error instanceof Error ? error.message : 'Набор не запустился.' });
     }
