@@ -8,17 +8,23 @@ import type { AppearanceState } from './appearance.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
-export const CreateRunSchema = z.object({
+export const RunBriefSchema = z.object({
   mode: z.enum(['mock', 'photos']).default('mock'),
+  contentMode: z.enum(['story', 'broll']).optional(),
+  brollCount: z.number().int().min(1).max(8).optional(),
   requestId: z.string().min(8).max(100).optional(),
   planningMode: z.enum(['mock', 'codex']).optional(),
   characterId: z.string().regex(CHARACTER_ID).nullable().optional(),
   title: z.string().trim().min(1).max(100),
-  script: z.string().trim().min(1).max(12_000),
+  script: z.string().trim().max(12_000).default(''),
   direction: z.string().trim().min(1).max(3000),
   style: z.enum(['phone', 'cinema']).default('phone'),
   scenario: z.enum(['normal', 'repair']).default('repair'),
 }).strict();
+export const CreateRunSchema = RunBriefSchema.superRefine((input, ctx) => {
+  if (input.contentMode !== 'broll' && !input.script) ctx.addIssue({ code: 'custom', path: ['script'], message: 'Для серии по сценарию нужен текст.' });
+  if (input.contentMode === 'broll' && (input.mode !== 'photos' || input.planningMode !== 'codex')) ctx.addIssue({ code: 'custom', path: ['contentMode'], message: 'Креативные B-roll используют подготовку Codex и режим фотографий.' });
+});
 export type RunInput = z.infer<typeof CreateRunSchema>;
 export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('pause'), rev: z.number().int().nonnegative() }),

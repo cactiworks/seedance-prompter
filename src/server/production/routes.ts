@@ -23,7 +23,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
     .get('/', async (c) => c.json(await runtime.list()))
     .post('/', async (c) => {
       const input = CreateRunSchema.safeParse(await c.req.json().catch(() => null));
-      if (!input.success) return c.json({ messageRu: 'Нужны название, сценарий и визуальный вектор.' }, 422);
+      if (!input.success) return c.json({ messageRu: 'Нужны название и визуальный вектор. Для серии по сценарию добавь текст; B-roll готовит Codex в режиме фото.' }, 422);
       const character = input.data.characterId ? await characters.select(input.data.characterId) : null;
       return c.json(await runtime.create(input.data, character), 201);
     })
@@ -85,6 +85,6 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       const run = await runtime.get(c.req.param('id'));
       const ids = new Set(run.shots.flatMap((s) => [s.acceptedPhotoId, ...(s.step === 'ready' ? [s.finalId] : [])]));
       c.header('content-disposition', `attachment; filename="${run.id}-manifest.json"`);
-      return c.json({ mode: run.mode, character: run.character ?? null, title: run.title, script: run.script, direction: run.direction, planningMode: run.planningMode ?? 'mock', scenePlan: run.scenePlan ?? null, promptPlan: run.promptPlan ?? null, note: run.mode === 'photos' ? `Реальные фото. Приняты владельцем; ${run.review?.status === 'complete' ? 'отчёт критика приложен отдельно' : 'сохранены до подключения критика'}. Видео и upscale отключены.` : 'Медиа — локальные демонстрационные материалы, не иллюстрация реального плана. Итоговое видео остаётся 480p.', retouch: run.retouch ?? null, review: run.review ?? null, masterReview: run.masterReview ?? null, appearance: run.appearance ?? null, artifacts: run.artifacts.filter((a) => ids.has(a.id)), approvals: run.approvals });
+      return c.json({ mode: run.mode, contentMode: run.contentMode ?? 'story', brollCount: run.brollCount, character: run.character ?? null, title: run.title, script: run.script, direction: run.direction, planningMode: run.planningMode ?? 'mock', scenePlan: run.scenePlan ?? null, promptPlan: run.promptPlan ?? null, note: run.mode === 'photos' ? `Реальные фото. Приняты владельцем; ${run.review?.status === 'complete' ? 'отчёт критика приложен отдельно' : 'сохранены до подключения критика'}. Видео и upscale отключены.` : 'Медиа — локальные демонстрационные материалы, не иллюстрация реального плана. Итоговое видео остаётся 480p.', retouch: run.retouch ?? null, review: run.review ?? null, masterReview: run.masterReview ?? null, appearance: run.appearance ?? null, artifacts: run.artifacts.filter((a) => ids.has(a.id)), approvals: run.approvals });
     });
 }

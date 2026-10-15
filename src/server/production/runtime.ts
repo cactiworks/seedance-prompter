@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { advanceRun, applyRunAction, completePreparation, newRun, ProductionError, record } from '../../core/production/engine.ts';
-import type { ProductionRun, RunAction, RunInput } from '../../core/production/model.ts';
+import { CreateRunSchema, type ProductionRun, type RunAction, type RunInput } from '../../core/production/model.ts';
 import { StoredRunSchema } from '../../core/production/persistence.ts';
 import type { CharacterSelection } from '../../core/production/character.ts';
 import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
@@ -103,7 +103,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
           const scene = await directScene(run, agentOptions);
           await updatePreparation(id, attempt, (current) => {
             current.scenePlan = scene; current.preparation!.stage = 'prompts';
-            record(current, now(), 'Паспорт сцены и shot plan сохранены. Codex готовит prompts.');
+            record(current, now(), current.contentMode === 'broll' ? 'Самостоятельные идеи B-roll, одежда и постановка сохранены. Codex готовит prompts.' : 'Паспорт сцены и shot plan сохранены. Codex готовит prompts.');
           });
         }
         run = await read(id);
@@ -135,7 +135,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
       const source = await read(id);
       if (source.rev !== rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Повтори создание серии фото.');
       if (!source.planned || !source.scenePlan || !source.promptPlan || !source.preparation) throw new ProductionError('INVALID', 'Нужен завершённый план Codex.');
-      const fresh = newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, { mode: 'photos', requestId, planningMode: 'codex', title: source.title, script: source.script, direction: source.direction, style: source.style, scenario: 'normal', characterId: source.characterId }, now(), delay);
+      const fresh = newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, { mode: 'photos', contentMode: source.contentMode, brollCount: source.brollCount, requestId, planningMode: 'codex', title: source.title, script: source.script, direction: source.direction, style: source.style, scenario: 'normal', characterId: source.characterId }, now(), delay);
       fresh.character = source.character; fresh.scenePlan = source.scenePlan; fresh.promptPlan = source.promptPlan; fresh.planSourceId = id;
       fresh.preparation = { ...source.preparation, calls: [] };
       fresh.events = [{ at: fresh.createdAt, message: 'Создана отдельная серия по сохранённому Codex-плану. Новых вызовов LLM не было; mock-файлы и приёмки не перенесены.' }];
@@ -144,6 +144,9 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     issues: () => [...damaged].map(([file, message]) => `${file}: ${message}`),
     waitForPreparation: async (id: string): Promise<void> => { await pending.get(id)?.done; },
     create: async (input: RunInput, character: CharacterSelection | null = null): Promise<ProductionRun> => {
+      const parsed = CreateRunSchema.safeParse(input);
+      if (!parsed.success) throw new ProductionError('INVALID', 'Нужны название и визуальный вектор; для серии по сценарию — текст, для B-roll — режим Codex → фото.');
+      input = { ...parsed.data, contentMode: parsed.data.contentMode ?? 'story', script: parsed.data.contentMode === 'broll' ? '' : parsed.data.script, brollCount: parsed.data.contentMode === 'broll' ? parsed.data.brollCount ?? 4 : undefined };
       if ((input.characterId ?? null) !== (character?.id ?? null)) throw new ProductionError('INVALID', 'Персонаж серии не проверен.');
       if (input.mode === 'photos' && input.planningMode !== 'codex') throw new ProductionError('INVALID', 'Для реальных фото нужен план Codex.');
       let created = false;
@@ -151,8 +154,8 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
         if (input.requestId) {
           const existing = (await list()).find((r) => r.requestId === input.requestId);
           if (existing) {
-            const keys = ['title', 'script', 'direction', 'style', 'scenario', 'planningMode', 'characterId', 'mode'] as const;
-            if (keys.some((key) => (existing[key] ?? null) !== (input[key] ?? null))) throw new ProductionError('CONFLICT', 'Этот запрос уже сохранён с другим содержимым. Открой существующую серию.');
+            const keys = ['title', 'script', 'direction', 'style', 'scenario', 'planningMode', 'characterId', 'mode', 'brollCount'] as const;
+            if ((existing.contentMode ?? 'story') !== input.contentMode || keys.some((key) => (existing[key] ?? null) !== (input[key] ?? null))) throw new ProductionError('CONFLICT', 'Этот запрос уже сохранён с другим содержимым. Открой существующую серию.');
             return existing;
           }
         }

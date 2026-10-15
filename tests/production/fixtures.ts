@@ -1,4 +1,4 @@
-import type { GeneratedSceneDraft, PromptPlan } from '../../src/core/production/plan.ts';
+import type { GeneratedBrollDraft, GeneratedSceneDraft, PromptPlan } from '../../src/core/production/plan.ts';
 
 export const SCRIPT = 'Я открываю блокнот у окна. Записываю мысль. Закрываю блокнот.';
 export function sceneDraft(count = 3): GeneratedSceneDraft {
@@ -12,6 +12,19 @@ export function sceneDraft(count = 3): GeneratedSceneDraft {
 }
 export function promptPlan(count = 3): PromptPlan {
   return { masterPrompt: 'A wide establishing photograph of one quiet room with a warm wooden desk next to a north facing window. {{identity}}. The subject wears a plain white shirt and sits at the desk with a notebook. Soft overcast morning light from the left reveals the furniture, room layout and consistent neutral palette.', shots: Array.from({ length: count }, (_, i) => ({ shotId: `shot-${i + 1}`, imagePrompt: `Frame ${i + 1}: a natural phone photograph of the subject opening a notebook at a warm wooden desk beside a north facing window. A plain white shirt, soft overcast morning light from the left, restrained white and gray palette, a quiet room and a grounded tabletop composition. {{identity}}.`, motionPrompt: '0–3s: the subject opens the notebook at the same wooden desk. 3–6s: a subtle handheld camera drift settles on the page. One continuous shot in soft window light.' })), warnings: [] };
+}
+
+/** Synthetic independent concepts; this fixture does not prove creative quality. */
+export function brollDraft(count = 4): GeneratedBrollDraft {
+  const base = sceneDraft(count);
+  return { ...base, contentMode: 'broll',
+    scenes: base.shots.map((_, i) => ({ ...base.scenes[0]!, id: `location-${i + 1}`, title: `Локация ${i + 1}`, wardrobe: `Авторский силуэт ${i + 1}` })),
+    shots: base.shots.map(({ scriptExcerpt: _quote, beat: _beat, ...shot }, i) => ({ ...shot,
+      sceneId: `location-${i + 1}`, concept: `Самостоятельная визуальная идея ${i + 1}`,
+      intentionalEffect: i === 0 ? 'Ткань образует вихрь вокруг неподвижного человека; его анатомия естественна' : 'Естественная физика, эффект создаётся постановкой',
+      visualAnchor: `Визуальный приём ${i + 1}`, purpose: 'Вставка для разговорного ролика без связи с репликой',
+    })),
+  };
 }
 
 export function reviewReport(ids: string[]) {

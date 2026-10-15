@@ -8,7 +8,7 @@ import { AppearanceStateSchema } from './appearance.ts';
 
 const nullableText = z.string().nullable();
 /** Validate persisted records before the scheduler or UI touches nested data. */
-export const StoredRunSchema = CreateRunSchema.extend({
+export const StoredRunSchema = CreateRunSchema.safeExtend({
   retouch: RetouchStateSchema.optional(),
   photos: PhotoStateSchema.optional(), review: ReviewStateSchema.optional(), masterReview: ReviewStateSchema.optional(), appearance: AppearanceStateSchema.optional(), planSourceId: z.string().optional(),
   id: z.string(), rev: z.number().int().nonnegative(), createdAt: z.string(), updatedAt: z.string(),

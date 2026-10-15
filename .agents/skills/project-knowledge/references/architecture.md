@@ -160,14 +160,24 @@ milestone до действия владельца; выбранная част�
 `mode: mock` сохраняет demo; `mode: photos` блокирует mock-переходы и требует Codex-план; `planningMode: codex` отдельно включает две роли через
 `server/production/agents.ts` и существующий `runCodex` (injected `Runner` в тестах). Модель:
 `SP_PRODUCTION_MODEL` → `SP_LLM_MODEL` → default. Схемы `core/production/plan.ts` ограничивают
-1–8 кадров; код назначает shot IDs, проверяет цитаты сценария, покрытие ID и длину/refs prompts.
+1–8 кадров; код назначает shot IDs, проверяет контракт выбранного режима, покрытие ID и длину/refs prompts.
 Роли получают только JSON творческого задания. Обычно два вызова, до четырёх при schema/semantic
 repair; ошибки провайдера не повторяются автоматически. ScenePlan сохраняется до prompts;
 невалидный результат не подменяется mock-планом. Calls/usage сохраняются; расход при сбое без отчёта
-помечен неизвестным. Новые планы events-v1 требуют artDirection, scenes (паспорта с IDs), beat, sceneId, startFrame,
+помечен неизвестным. Новые планы по сценарию events-v1 требуют artDirection, scenes (паспорта с IDs), beat, sceneId, startFrame,
 subjectVisibility и visualAnchor каждого кадра. Первый паспорт сохраняется также в scene для совместимости.
 Проверяются ссылки на сцены, порядок цитат, буквальные дубли действий/стартовых кадров/prompts;
 это не доказательство смыслового разнообразия ответа LLM. Старые планы читаются без новых полей. Tick вызывает критика только при сохранённом reviewConsent.
+
+`contentMode` отделяет `story` (в том числе старые записи без поля) от `broll`. B-roll допускает
+только `planningMode: codex` + `mode: photos`: сценарий не нужен, перед сохранением и отправкой
+сервер убирает его; brollCount — ровно 1–8 идей, default 4. Отдельный BROLL_DIRECTOR_SYSTEM получает
+только direction/style/count/characterSelected. GeneratedBrollDraftSchema требует concept и
+intentionalEffect, запрещает scriptExcerpt/beat; shots сохраняют sceneId/action/startFrame/visibility.
+Количество, буквальные дубли идей/visualAnchor и кадров проверяются до prompter. Prompter и critic
+видят contentMode; необычное явление допускается только в границах intentionalEffect, не в анатомии.
+Режим, count и идеи сохраняются при reload/retry/fork и в manifest. Медиа используют тот же events-v1
+маршрут с master gate и независимыми T2I, затем останавливаются на ручном photo milestone.
 
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет
 незавершённую роль. Пауза abort-ит вызов и защищает состояние от позднего ответа; resume не запускает

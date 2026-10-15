@@ -27,3 +27,16 @@ it('does not replay a mutation after conflict and keeps the error visible', asyn
   expect(useProduction.getState().error).toContain('Конфликт версий');
   expect(useProduction.getState().run?.rev).toBe(run.rev + 1);
 });
+
+it('stores the B-roll draft and omits its hidden story script from the request', async () => {
+  const run = setup();
+  const draft = { ...DEMO_INPUT, contentMode: 'broll' as const, brollCount: 5, mode: 'photos' as const, planningMode: 'codex' as const, script: 'Сценарий другого режима' };
+  const storage = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
+  useProduction.getState().setDraft(draft);
+  expect(JSON.parse(storage.get('sp-production-draft')!)).toEqual(draft);
+  const fetch = vi.fn().mockResolvedValue(Response.json({ ...run, ...draft, script: '' })); vi.stubGlobal('fetch', fetch);
+  await useProduction.getState().create(draft);
+  expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({ contentMode: 'broll', brollCount: 5, script: '', mode: 'photos', planningMode: 'codex' });
+  expect(useProduction.getState().draft.script).toBe(draft.script);
+});

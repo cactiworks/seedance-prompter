@@ -9,12 +9,13 @@ const SceneSchema = z.object({
 }).strict();
 const StorySceneSchema = SceneSchema.extend({ id: text(30) });
 export const SceneDraftSchema = z.object({
+  contentMode: z.enum(['story', 'broll']).optional(),
   artDirection: ArtDirectionSchema.optional(),
   scene: SceneSchema,
   storyboardVersion: z.literal('events-v1').optional(),
   scenes: z.array(StorySceneSchema).min(1).max(8).optional(),
   shots: z.array(z.object({
-    title: text(100), scriptExcerpt: text(1500), purpose: text(500),
+    title: text(100), scriptExcerpt: text(1500).optional(), concept: text(700).optional(), intentionalEffect: text(500).optional(), purpose: text(500),
     framing: text(250), action: text(700), camera: text(600), visualAnchor: text(500).optional(),
     sceneId: text(30).optional(), beat: text(500).optional(), startFrame: text(700).optional(),
     subjectVisibility: z.enum(['person', 'detail', 'none']).optional(),
@@ -25,14 +26,23 @@ export const SceneDraftSchema = z.object({
 }).strict();
 /** New output has scene-scoped events. `scene` is a stored legacy alias, never authored twice. */
 export const GeneratedSceneDraftSchema = SceneDraftSchema.omit({ scene: true }).extend({
+  contentMode: z.literal('story').optional(),
   storyboardVersion: z.literal('events-v1'),
   scenes: z.array(StorySceneSchema).min(1).max(8),
   artDirection: ArtDirectionSchema,
   shots: z.array(SceneDraftSchema.shape.shots.element.extend({
-    visualAnchor: text(500), sceneId: text(30), beat: text(500), startFrame: text(700),
+    scriptExcerpt: text(1500), visualAnchor: text(500), sceneId: text(30), beat: text(500), startFrame: text(700),
     subjectVisibility: z.enum(['person', 'detail', 'none']),
   })).min(1).max(8),
 });
+/** Independent concepts have no script quotes or story beats. The image route stays events-v1. */
+export const GeneratedBrollDraftSchema = GeneratedSceneDraftSchema.extend({
+  contentMode: z.literal('broll'),
+  shots: z.array(GeneratedSceneDraftSchema.shape.shots.element.omit({ scriptExcerpt: true, beat: true }).extend({
+    concept: text(700), intentionalEffect: text(500),
+  })).min(1).max(8),
+});
+export type GeneratedBrollDraft = z.infer<typeof GeneratedBrollDraftSchema>;
 export type SceneDraft = z.infer<typeof SceneDraftSchema>;
 export type GeneratedSceneDraft = z.infer<typeof GeneratedSceneDraftSchema>;
 export type PlannedShot = SceneDraft['shots'][number] & { id: string };
@@ -57,28 +67,39 @@ export interface PreparationState {
 export const hasStoryEvents = (plan: ScenePlan | undefined): boolean => plan?.storyboardVersion === 'events-v1';
 export const sceneForShot = (plan: ScenePlan, shot: PlannedShot) => plan.scenes?.find(s => s.id === shot.sceneId) ?? plan.scene;
 const normalized = (value: string) => value.toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, ' ').trim();
-export function validateScene(draft: SceneDraft | GeneratedSceneDraft, script: string): string[] {
-  const errors = draft.shots.flatMap((s, i) => script.includes(s.scriptExcerpt) ? [] : [`Кадр ${i + 1}: scriptExcerpt должен быть точной цитатой сценария.`]);
+export function validateScene(draft: SceneDraft | GeneratedSceneDraft | GeneratedBrollDraft, script: string, brollCount?: number): string[] {
+  const broll = draft.contentMode === 'broll';
+  const shots: SceneDraft['shots'] = draft.shots;
+  const errors: string[] = broll ? [] : shots.flatMap((s, i) => s.scriptExcerpt && script.includes(s.scriptExcerpt) ? [] : [`Кадр ${i + 1}: scriptExcerpt должен быть точной цитатой сценария.`]);
+  if (broll && draft.shots.length !== (brollCount ?? 4)) errors.push(`Нужно ровно ${brollCount ?? 4} самостоятельных B-roll.`);
   if (draft.storyboardVersion !== 'events-v1') return errors;
   const scenes = draft.scenes ?? [];
   if (!scenes.length || new Set(scenes.map(s => s.id)).size !== scenes.length) errors.push('Паспорта сцен должны иметь уникальные IDs.');
-  const events = new Set<string>(); const frames = new Set<string>();
+  const events = new Set<string>(); const frames = new Set<string>(); const concepts = new Set<string>(); const hooks = new Set<string>();
   let previous = 0;
-  for (const [i, shot] of draft.shots.entries()) {
+  for (const [i, shot] of shots.entries()) {
     if (!scenes.some(s => s.id === shot.sceneId)) errors.push(`Кадр ${i + 1}: sceneId не связан с паспортом сцены.`);
-    if (!shot.beat || !shot.startFrame || !shot.subjectVisibility) errors.push(`Кадр ${i + 1}: нужны смысл, стартовое состояние и видимость персонажа.`);
-    const position = script.indexOf(shot.scriptExcerpt, previous);
-    if (position < 0) errors.push(`Кадр ${i + 1}: цитаты должны следовать порядку сценария.`);
-    else previous = position;
-    const event = `${shot.sceneId}:${normalized(shot.action)}`;
+    if ((!broll && !shot.beat) || !shot.startFrame || !shot.subjectVisibility) errors.push(`Кадр ${i + 1}: нужны смысл, стартовое состояние и видимость персонажа.`);
+    if (broll) {
+      if (shot.scriptExcerpt || shot.beat) errors.push(`Кадр ${i + 1}: B-roll не должен содержать цитату или смысловой beat сценария.`);
+      if (!shot.concept || !shot.intentionalEffect) errors.push(`Кадр ${i + 1}: нужны самостоятельная идея и описание намеренного эффекта.`);
+      const concept = normalized(shot.concept ?? ''); const hook = normalized(shot.visualAnchor ?? '');
+      if (concepts.has(concept) || hooks.has(hook)) errors.push(`Кадр ${i + 1}: повтор идеи или визуального приёма. Нужен самостоятельный B-roll.`);
+      concepts.add(concept); hooks.add(hook);
+    } else {
+      const position = script.indexOf(shot.scriptExcerpt ?? '', previous);
+      if (position < 0) errors.push(`Кадр ${i + 1}: цитаты должны следовать порядку сценария.`);
+      else previous = position;
+    }
+    const event = `${broll ? '' : shot.sceneId}:${normalized(shot.action)}`;
     const frame = normalized(shot.startFrame ?? '');
-    if (events.has(event) || frames.has(frame)) errors.push(`Кадр ${i + 1}: повтор события или стартового изображения. Нужен следующий смысловой момент, а не другой ракурс дубля.`);
+    if (events.has(event) || frames.has(frame)) errors.push(`Кадр ${i + 1}: повтор события или стартового изображения. Нужен ${broll ? 'самостоятельный B-roll' : 'следующий смысловой момент'}, а не другой ракурс дубля.`);
     events.add(event); frames.add(frame);
   }
   if (scenes.some(s => !draft.shots.some(shot => shot.sceneId === s.id))) errors.push('Каждая сцена должна использоваться в плане кадров.');
   return errors;
 }
-export function withShotIds(draft: SceneDraft | GeneratedSceneDraft): ScenePlan {
+export function withShotIds(draft: SceneDraft | GeneratedSceneDraft | GeneratedBrollDraft): ScenePlan {
   const scene = SceneSchema.strip().parse('scene' in draft ? draft.scene : draft.scenes[0]);
   return { ...draft, scene, shots: draft.shots.map((s, i) => ({ ...s, id: `shot-${i + 1}` })) };
 }

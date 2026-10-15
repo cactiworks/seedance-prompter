@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { z } from 'zod';
-import { CreateRunSchema, DEMO_INPUT, type ProductionRun, type RunAction, type RunInput } from '../../core/production/model.ts';
+import { RunBriefSchema, DEMO_INPUT, type ProductionRun, type RunAction, type RunInput } from '../../core/production/model.ts';
 const ACTIVE_KEY = 'sp-production-active';
 function savedActive(): string | null { try { return sessionStorage.getItem(ACTIVE_KEY); } catch { return null; } }
 function rememberActive(id: string | null): void { try { if (id === null) sessionStorage.removeItem(ACTIVE_KEY); else sessionStorage.setItem(ACTIVE_KEY, id); } catch { /* selection still works */ } }
 const DRAFT_KEY = 'sp-production-draft';
 const REQUEST_KEY = 'sp-production-create-request';
-const DraftSchema = CreateRunSchema.extend({ title: z.string().max(100), script: z.string().max(12_000), direction: z.string().max(3000) });
+const DraftSchema = RunBriefSchema.extend({ title: z.string().max(100), script: z.string().max(12_000), direction: z.string().max(3000) });
 function savedDraft(): RunInput {
   try { const raw = localStorage.getItem(DRAFT_KEY); if (raw) { const draft = DraftSchema.parse(JSON.parse(raw)); return draft.planningMode === 'codex' ? { ...draft, mode: 'photos', scenario: 'normal' } : draft; } } catch { /* use starter brief */ }
   return { ...DEMO_INPUT, mode: 'photos', planningMode: 'codex', scenario: 'normal' };
@@ -71,7 +71,7 @@ export const useProduction = create<State>((set, get) => ({
     set({ busy: true, error: null });
     pendingRequest ??= createRequestId();
     try {
-      const run = await request<ProductionRun>('/api/production', { ...input, requestId: pendingRequest });
+      const run = await request<ProductionRun>('/api/production', { ...input, ...(input.contentMode === 'broll' ? { script: '' } : {}), requestId: pendingRequest });
       rememberActive(run.id);
       set({ run, activeId: run.id, initialized: true, runs: mergeRuns(get().runs, [run]) });
       pendingRequest = null;

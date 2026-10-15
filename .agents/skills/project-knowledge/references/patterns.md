@@ -95,8 +95,15 @@ Production prompt validation: imagePrompt содержит 40–200 слов; а
 Регрессии alpha-аудита: `tests/{core,server}/alpha*.test.ts`, плюс unknown-submit в `gen.test.ts`.
 `alphaMedia.test.ts` использует реальный ffmpeg/ffprobe и синтетическое видео, без внешних провайдеров.
 
-Production events-v1: цитата → beat → событие/action → startFrame → sceneId. Appearance может
+Production story events-v1: цитата → beat → событие/action → startFrame → sceneId. Appearance может
 заполнить только {{identity}}, остальной imagePrompt и motionPrompt неизменны. Для person/master
 полный якорь, для detail без лица локальная внешность, для none текст неизменен. На new route
 image reference master отсутствует физически в submit. Текстовые проверки не доказывают, что
 модель исполнит событие; финальный visual critic оценивает shotMatch/startFrame и дубли.
+
+
+Production B-roll: vector → independent concepts → prompts → photos → photo milestone.
+contentMode=broll: ровно brollCount (1–8, default 4); нет цитат/beat. Story schema не принимает
+broll как обход проверки цитат. Скрытый сценарий не отправляется агентам и не сохраняется в серии.
+GeneratedBrollDraftSchema и semantic validation отклоняют неправильное число, несвязанные сцены,
+буквальные дубли идей/приёмов/действий/фото. Это не оценка творческого качества.

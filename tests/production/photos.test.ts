@@ -13,14 +13,14 @@ import type { CharacterSelection } from '../../src/core/production/character.ts'
 import { SoulIdError } from '../../src/server/production/soulId.ts';
 import { productionRoutes } from '../../src/server/production/routes.ts';
 import { createCharacters } from '../../src/server/production/characters.ts';
-import { SCRIPT, sceneDraft, promptPlan, reviewReport, appearanceOutput } from './fixtures.ts';
+import { SCRIPT, sceneDraft, brollDraft, promptPlan, reviewReport, appearanceOutput } from './fixtures.ts';
 import { ReviewReportSchema, validateReview, masterApproved } from '../../src/core/production/review.ts';
 import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const png = readFileSync(new URL('../../src/web/public/production-mock/shot-1.png', import.meta.url));
 const resources: { dir: string; rt: ProductionRuntime; gen: GenRuntime }[] = [];
 const identity: CharacterSelection = { id: 'ch-identity-123', name: 'Тестовый персонаж', referenceId: '11111111-1111-4111-8111-111111111111', modelVersion: 'v2', selectedAt: new Date(0).toISOString() };
-async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner) {
+async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner, contentMode: 'story' | 'broll' = 'story') {
   const dir = mkdtempSync(path.join(tmpdir(), 'production-photos-'));
   if (character) {
     mkdirSync(path.join(dir, 'characters'), { recursive: true }); mkdirSync(path.join(dir, 'uploads'), { recursive: true });
@@ -49,12 +49,12 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
     const reviewer = JSON.parse(request.user).scope === 'master' ? masterRunner : reviewRunner;
     if (critic && reviewer) return reviewer<T>(request);
     if (appearance && appearanceRunner) return appearanceRunner<T>(request);
-    return { data: (retouch ? { result: reviewReport([JSON.parse(request.user).candidate.artifactId]).results[0], preserved: 'pass', fixes: [] } : critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : appearance ? appearanceOutput(count) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T,
+    return { data: (retouch ? { result: reviewReport([JSON.parse(request.user).candidate.artifactId]).results[0], preserved: 'pass', fixes: [] } : critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : appearance ? appearanceOutput(count) : request.taskRu === 'Режиссёр Production' ? contentMode === 'broll' ? brollDraft(count) : sceneDraft(count) : promptPlan(count)) as T,
       meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } };
   };
   const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, now: () => clock, delayMs: 1 });
   resources.push({ dir, rt, gen });
-  const created = await rt.create({ ...DEMO_INPUT, script: SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
+  const created = await rt.create({ ...DEMO_INPUT, contentMode, brollCount: contentMode === 'broll' ? count : undefined, script: contentMode === 'broll' ? '' : SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
   await rt.waitForPreparation(created.id);
   const get = () => rt.get(created.id);
   const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const, reviewConsent: true as const, masterGateConsent: true as const }; };
@@ -66,6 +66,29 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it('takes independent B-roll through master QC and photos to the milestone, then waits without video or editing', async () => {
+    const external = vi.fn(() => { throw new Error('Unexpected network'); }); vi.stubGlobal('fetch', external);
+    const s = await setup(4, {}, identity, undefined, undefined, undefined, 'broll');
+    for (let i = 0; i < 3; i++) await s.cycle();
+    expect(s.submit).not.toHaveBeenCalled(); expect((await s.get()).photos).toBeUndefined();
+    await s.rt.photos.start(s.id, await s.input()); await s.dispatch();
+    expect(s.submit).toHaveBeenCalledTimes(1); // only master may be submitted before its critic
+    expect(masterApproved(await s.get())).toBe(false);
+    for (let i = 0; i < 18; i++) await s.cycle();
+    const run = await s.get();
+    expect(masterApproved(run)).toBe(true); expect(run.review?.status).toBe('complete');
+    expect(run.shots).toHaveLength(4); expect(run.shots.every(shot => shot.step === 'photoReview')).toBe(true);
+    expect(run.artifacts).toHaveLength(5); expect(run.artifacts.every(a => a.kind === 'photo')).toBe(true);
+    expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true); expect(run.retouch).toBeUndefined();
+    for (const [model, body] of s.submit.mock.calls) { expect(model).toBe('higgsfield-ai/soul/v2/standard'); expect(body).not.toHaveProperty('image_url'); expect(body.custom_reference_id).toBe(identity.referenceId); }
+    expect(s.provider.upload).not.toHaveBeenCalled();
+    const payload = JSON.parse(s.calls.find(c => c.taskRu === 'Критик фотографий Production' && JSON.parse(c.user).scope === 'series')!.user);
+    expect(payload.scenePlan.contentMode).toBe('broll'); expect(payload.scenario).toBe('');
+    expect(payload.candidates.find((c: { shotId: string }) => c.shotId === 'shot-1').shot.intentionalEffect).toContain('вихрь');
+    for (let i = 0; i < 6; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(5); expect((await s.get()).photos?.status).toBe('review'); expect(external).not.toHaveBeenCalled();
+  });
+
   it('routes person, hand detail and object shots independently across scenes without adding a portrait reference', async () => {
     const appearance: Runner = async <T>(request: LlmRequest) => {
       const output = appearanceOutput(3);
