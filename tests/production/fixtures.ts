@@ -31,7 +31,8 @@ export function reviewReport(ids: string[]) {
   return { summary: 'Тестовый отчёт, без оценки настоящего качества.', results: ids.map((artifactId) => ({
     artifactId, verdict: 'keep' as const, reason: 'Соответствует плану в тестовом ответе.',
     checks: { character: 'pass' as const, face: 'pass' as const, likeness: 'pass' as const, identityLeakage: 'pass', text: 'not_visible', hands: 'pass' as const, continuity: 'pass' as const, shotMatch: 'pass' as const, visualInterest: 'pass' as const },
-    observations: [{ region: 'Весь кадр', evidence: 'Тестовые признаки сцены присутствуют.' }],
+    faceDetail: { leftEye: 'pass', rightEye: 'pass', mouth: 'pass' },
+    observations: (['face', 'character', 'hands', 'identityLeakage', 'text'] as const).map(check => ({ check, region: `Тестовая область ${check}`, evidence: 'Синтетическое наблюдение; настоящие пиксели моделью не оценивались.' })),
   })) };
 }
 

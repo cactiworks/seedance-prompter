@@ -34,7 +34,7 @@ export function PhotoStart({ run }: { run: ProductionRun }) {
       <Text variant="title-s">До {photoPrice(quote.usd)} за оставшуюся работу</Text>
       <Text variant="caption" tone="secondary">Кадры: {quote.shotCount} · новых master: {quote.sceneCount} · запасных попыток: {quote.reserveCount}. Без запаса — {photoPrice(quote.baseUsd)}. Неиспользованные попытки не запускаются. Это оценка каталога; списание определяет Higgsfield.</Text>
       <label className={styles.check}><input type="checkbox" checked={consent} disabled={busy || run.paused} onChange={e => setConsent(e.target.checked)} />Подтверждаю сумму, автоматический подбор master (до трёх попыток всего) и передачу фото в Higgsfield и Codex.</label>
-      <Text variant="caption" tone="secondary">Codex / OpenAI получит до шести фото Soul ID и результаты для фиксации внешности и отбора. До пяти вызовов из квоты ChatGPT: внешность, до трёх проверок master, отбор серии. Видео и upscale не запускаются.</Text>
+      <Text variant="caption" tone="secondary">Codex / OpenAI получит до шести фото Soul ID и результаты с четырьмя крупными фрагментами каждого фото для проверки деталей. Фрагменты увеличивают расход квоты. До пяти вызовов из квоты ChatGPT: внешность, до трёх проверок master, отбор серии. Видео и upscale не запускаются.</Text>
     </>}
     <div className={styles.gateActions}>
       <Button variant={quote ? 'ghost' : 'primary'} disabled={busy || run.paused} loading={loading} onClick={() => void price()}>{quote ? 'Обновить оценку' : rejected ? 'Пересоздать опорный кадр' : run.photos ? 'Продолжить серию' : 'Рассчитать стоимость фото'}</Button>

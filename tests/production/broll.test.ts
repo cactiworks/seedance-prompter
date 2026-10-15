@@ -76,6 +76,20 @@ describe('independent creative B-roll', () => {
     expect(repeated.calls).toHaveLength(2);
   });
 
+  it('requires the owner in small sets and permits only one POV detail in larger sets', async () => {
+    for (const count of [1, 3, 4, 8]) {
+      const draft = brollDraft(count);
+      draft.shots[0]!.subjectVisibility = 'detail';
+      expect(validateScene(draft, '', count).length > 0).toBe(count < 4);
+      draft.shots[0]!.subjectVisibility = 'none';
+      expect(validateScene(draft, '', count).length).toBeGreaterThan(0);
+    }
+    const bad = brollDraft(4); bad.shots[0]!.subjectVisibility = 'detail'; bad.shots[1]!.subjectVisibility = 'detail';
+    const r = runner([bad, brollDraft(4)]);
+    const result = await directScene(input, { run: r.run, model: 'fixture', signal: new AbortController().signal, onCall: async () => {} });
+    expect(r.calls).toHaveLength(2); expect(result.shots.every(s => s.subjectVisibility === 'person')).toBe(true);
+  });
+
   it('persists mode/count without stale script, deduplicates requests and keeps photo dispatch behind its cost gate', async () => {
     const external = vi.fn(() => { throw new Error('No external calls'); }); vi.stubGlobal('fetch', external);
     const r = runner([brollDraft(), promptPlan(4)]); const { rt, dir } = runtime(r.run);

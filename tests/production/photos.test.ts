@@ -312,8 +312,8 @@ describe('photo critic lifecycle and trust boundaries', () => {
     for (let i = 0; i < 12; i++) await s.cycle();
     const run = await s.get(); expect(run.review?.status).toBe('complete'); expect(run.review?.identityCount).toBe(3);
     const request = s.calls.find((c) => c.taskRu === 'Критик фотографий Production' && JSON.parse(c.user).scope === 'series')!;
-    expect(request.images).toHaveLength(6); expect(request.images!.every((image) => image.mediaType === 'image/jpeg' && image.base64.length > 100)).toBe(true);
-    expect(JSON.parse(request.user).imageMap.map((i: { role: string }) => i.role)).toEqual(['identity', 'identity', 'identity', 'scene', 'shot', 'shot']);
+    expect(request.images).toHaveLength(18); expect(request.images!.every((image) => image.mediaType === 'image/jpeg' && image.base64.length > 100)).toBe(true);
+    expect(JSON.parse(request.user).imageMap.map((i: { role: string }) => i.role)).toEqual(['identity', 'identity', 'identity', ...Array(5).fill('scene'), ...Array(10).fill('shot')]);
     expect(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)).toEqual(run.review!.artifactIds);
     expect(JSON.parse(request.user).masterPrompt).toBe(appearanceOutput(2).prompts.masterPrompt);
     expect(run.approvals).toEqual([]); expect(s.submit).toHaveBeenCalledTimes(3); expect(s.calls).toHaveLength(5);
@@ -372,6 +372,23 @@ describe('photo critic lifecycle and trust boundaries', () => {
 
 describe('whole-character lock and mandatory master gate', () => {
   const meta = { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 };
+  it('blocks the series when a detailed eye check contradicts an overall pass', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
+      report.results[0]!.faceDetail!.leftEye = 'fail';
+      report.results[0]!.observations[0]!.evidence = 'Смазанный глаз слева.';
+      return { data: report as T, meta };
+    };
+    const s = await setup(2, {}, identity, undefined, critic);
+    await s.rt.photos.start(s.id, await s.input()); for (let i = 0; i < 10; i++) await s.cycle();
+    const run = await s.get(); expect(masterApproved(run)).toBe(false); expect(s.submit).toHaveBeenCalledTimes(1);
+    expect(run.masterReview?.report?.results[0]!.reason).toContain('Смазанный глаз');
+    const call = s.calls.find(c => c.taskRu === 'Критик фотографий Production')!;
+    const payload = JSON.parse(call.user);
+    expect(payload.inspectionMode).toBe('details-v4'); expect(call.effort).toBe('high');
+    expect(payload.imageMap.slice(3).map((i: { view: string }) => i.view)).toEqual(['full', 'top-left', 'top-right', 'bottom-left', 'bottom-right']);
+    expect(new Set(payload.imageMap.slice(3).map((i: { artifactId: string }) => i.artifactId)).size).toBe(1);
+  });
   it.each(['character', 'likeness', 'face', 'hands', 'continuity', 'shotMatch', 'visualInterest'] as const)('stops at one paid stub when master fails %s, even with a keep verdict', async (check) => {
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
@@ -406,7 +423,7 @@ describe('whole-character lock and mandatory master gate', () => {
     for (let i = 0; i < 8 && !masterApproved(await s.get()); i++) { await s.cycle(); expect(s.submit).toHaveBeenCalledTimes(1); }
     expect(masterApproved(await s.get())).toBe(true);
     const masterCall = s.calls.find(c => c.taskRu === 'Критик фотографий Production')!;
-    expect(JSON.parse(masterCall.user).scope).toBe('master'); expect(masterCall.images).toHaveLength(4);
+    expect(JSON.parse(masterCall.user).scope).toBe('master'); expect(masterCall.images).toHaveLength(8);
     expect(JSON.parse(masterCall.user).candidates).toHaveLength(1);
     for (let i = 0; i < 9; i++) await s.cycle();
     expect(s.submit).toHaveBeenCalledTimes(3);
@@ -471,7 +488,7 @@ describe('whole-character lock and mandatory master gate', () => {
     const s = await setup(2); await s.rt.photos.start(s.id, await s.input());
     for (let i = 0; i < 8 && !masterApproved(await s.get()); i++) await s.cycle();
     const run = await s.get(); expect(masterApproved(run)).toBe(true); const good = structuredClone(run);
-    const stale = [() => { delete run.masterReview; }, () => { run.masterReview!.artifactIds = ['old-master']; }, () => { run.masterReview!.appearanceRequestId = crypto.randomUUID(); }, () => { delete run.masterReview!.report!.results[0]!.checks.character; }];
+    const stale = [() => { delete run.masterReview; }, () => { run.masterReview!.artifactIds = ['old-master']; }, () => { run.masterReview!.appearanceRequestId = crypto.randomUUID(); }, () => { delete run.masterReview!.report!.results[0]!.checks.character; }, () => { delete run.masterReview!.report!.results[0]!.faceDetail; }];
     for (const corrupt of stale) {
       Object.assign(run, structuredClone(good)); corrupt(); writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
       await s.rt.tick(); expect(s.submit).toHaveBeenCalledTimes(1); expect(masterApproved(await s.get())).toBe(false);
@@ -503,7 +520,7 @@ describe('appearance reference consent and cancellation', () => {
     expect(s.calls.find(c => c.taskRu === 'Внешность персонажа Production')!.images).toHaveLength(6);
     expect(run.masterReview?.identityCount).toBe(6);
     await s.rt.review.start(s.id, { rev: run.rev, requestId: crypto.randomUUID(), consent: true }); await s.rt.review.wait(s.id);
-    run = await s.get(); expect(run.review?.identityCount).toBe(2); expect(s.calls.at(-1)!.images).toHaveLength(4); expect(s.submit).toHaveBeenCalledTimes(2);
+    run = await s.get(); expect(run.review?.identityCount).toBe(2); expect(s.calls.at(-1)!.images).toHaveLength(12); expect(s.submit).toHaveBeenCalledTimes(2);
   });
   it('discards a late appearance result after pause without sending the master', async () => {
     let finish: (() => void) | undefined;
@@ -524,6 +541,28 @@ describe('creator tolerance and bounded master recovery', () => {
   const meta = { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 };
   const budgetInput = async (s: Awaited<ReturnType<typeof setup>>, retryMaster = false) => ({ ...await s.input(), confirmUsd: quotePhotos(await s.get(), { retries: true, retryMaster }).usd, masterRetryConsent: true as const, ...(retryMaster ? { retryMaster: true as const } : {}) });
   const reportFor = (request: LlmRequest) => ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
+  it('preserves legacy inspection scope through an automatic master retry until new consent', async () => {
+    let calls = 0;
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = reportFor(request); if (++calls === 1) report.results[0]!.checks.hands = 'fail';
+      delete report.results[0]!.faceDetail;
+      report.results[0]!.observations = [{ region: 'Кадр', evidence: 'Старый формат проверки.' }];
+      return { data: report as T, meta };
+    };
+    const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await budgetInput(s));
+    let run = await s.get(); run.masterReview!.criteriaVersion = 'details-v3'; run.review!.criteriaVersion = 'details-v3';
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    for (let i = 0; i < 20; i++) await s.cycle();
+    run = await s.get(); expect(masterApproved(run)).toBe(true); expect(calls).toBe(2); expect(run.review?.status).toBe('complete');
+    expect(run.masterReview?.criteriaVersion).toBe('details-v3');
+    for (const c of s.calls.filter(c => c.taskRu === 'Критик фотографий Production')) {
+      const p = JSON.parse(c.user); expect(p.inspectionMode).toBe('overview'); expect(c.effort).toBe('medium');
+      expect(c.images).toHaveLength(JSON.parse(c.user).scope === 'master' ? 4 : 5);
+    }
+    await s.rt.review.start(s.id, { rev: run.rev, requestId: crypto.randomUUID(), consent: true, referenceLimit: 6 }); await s.rt.review.wait(s.id);
+    expect((await s.get()).review?.criteriaVersion).toBe('details-v4'); expect(s.calls.at(-1)!.images).toHaveLength(13);
+    expect(s.submit).toHaveBeenCalledTimes(3);
+  });
   it('accepts minor wardrobe and framing variation without relaxing anatomy or identity checks', async () => {
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = reportFor(request); Object.assign(report.results[0]!.checks, { continuity: 'variation', shotMatch: 'variation' });

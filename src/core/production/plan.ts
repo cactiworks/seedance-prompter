@@ -71,6 +71,7 @@ export function validateScene(draft: SceneDraft | GeneratedSceneDraft | Generate
   const broll = draft.contentMode === 'broll';
   const shots: SceneDraft['shots'] = draft.shots;
   const errors: string[] = broll ? [] : shots.flatMap((s, i) => s.scriptExcerpt && script.includes(s.scriptExcerpt) ? [] : [`Кадр ${i + 1}: scriptExcerpt должен быть точной цитатой сценария.`]);
+  if (broll && (shots.some(s => s.subjectVisibility === 'none') || shots.filter(s => s.subjectVisibility !== 'person').length > (shots.length >= 4 ? 1 : 0))) errors.push('B-roll: владелец с читаемым лицом — главный герой. Только при 4–8 кадрах допустима одна detail-вставка от первого лица; предметные none запрещены.');
   if (broll && draft.shots.length !== (brollCount ?? 4)) errors.push(`Нужно ровно ${brollCount ?? 4} самостоятельных B-roll.`);
   if (draft.storyboardVersion !== 'events-v1') return errors;
   const scenes = draft.scenes ?? [];
