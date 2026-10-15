@@ -23,6 +23,7 @@ export function Preparation({ run }: { run: ProductionRun }) {
     {!plan && !failed && <Text variant="label" tone="secondary">Codex читает сценарий и визуальный вектор. Готовый паспорт появится здесь; медиа ждут окончания подготовки.</Text>}
     {plan && <>
       <Text as="h2" variant="title-s">{plan.scene.title}</Text>
+      {plan.artDirection && <div className={styles.notice}><Text variant="label" medium>Художественная идея</Text><Text variant="label">{plan.artDirection.concept}</Text><Text variant="label">Визуальный акцент: {plan.artDirection.visualHook}</Text><Text variant="caption" tone="secondary">Характер изображения: {plan.artDirection.captureTexture}</Text></div>}
       <dl className={styles.planFields}>{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
       <div><Text variant="label" medium>Общее для всех кадров</Text><ul className={styles.planNotes}>{plan.scene.continuity.map((note, i) => <li key={i}>{note}</li>)}</ul></div>
       {plan.assumptions.length > 0 && <div><Text variant="label" medium>Что режиссёр определил сам</Text><ul className={styles.planNotes}>{plan.assumptions.map((note, i) => <li key={i}>{note}</li>)}</ul></div>}
@@ -36,10 +37,11 @@ export function Preparation({ run }: { run: ProductionRun }) {
           <blockquote className={styles.scriptQuote}>{shot.scriptExcerpt}</blockquote>
           <Text variant="label">{shot.action}</Text><Text variant="label" tone="secondary">{shot.camera}</Text>
           <Text variant="caption" tone="secondary">Для монтажа: {shot.purpose}</Text>
+          {shot.visualAnchor && <Text variant="label">Визуальный приём: {shot.visualAnchor}</Text>}
           {prompts ? <details className={styles.detail}><summary>Prompts кадра · фото и движение</summary><Text variant="caption" medium>Фото · Soul 2</Text><pre>{prompts.imagePrompt}</pre><Text variant="caption" medium>Движение · будущий Seedance 2.5 · запуск отключён</Text><pre>{prompts.motionPrompt}</pre></details> : <Text variant="caption" tone="tertiary">Prompts появятся после второго агента.</Text>}
         </article>;
       })}</div>
-      <Text variant="caption" tone="secondary">{run.mode === 'photos' ? 'Фото создаются в Soul 2 с общим reference сцены и выбранным Soul ID. Это помогает сохранять сцену, но сходство и детали нужно проверить на milestone. Видео и upscale отключены.' : 'Это реальный текстовый план Codex. В этой старой серии дальше используются условные mock-файлы. Для реальных фото создай новую серию по этому плану.'}</Text>
+      <Text variant="caption" tone="secondary">{run.mode === 'photos' ? 'Фото создаются в Soul 2 с общим reference сцены и выбранным Soul ID. Критик проверит результат перед milestone; итоговое решение за тобой. Видео и upscale отключены.' : 'Это реальный текстовый план Codex. В этой старой серии дальше используются условные mock-файлы. Для реальных фото создай новую серию по этому плану.'}</Text>
     </>}
     {calls.length > 0 && <details className={styles.detail}><summary>Вызовы Codex и расход квоты</summary><ul className={styles.planNotes}>{calls.map((c, i) => <li key={i}>{c.stage === 'scene' ? 'Режиссёр' : 'Prompts'} · {c.model ?? 'модель не указана'} · {Math.round(c.durationMs / 1000)} с · {c.status === 'accepted' ? 'ответ принят' : c.message} · input {c.inputTokens ?? 'неизвестно'} / output {c.outputTokens ?? 'неизвестно'}</li>)}</ul></details>}
   </>;

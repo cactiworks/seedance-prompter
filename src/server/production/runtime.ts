@@ -9,6 +9,7 @@ import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
 import { createPhotoProduction } from './photos.ts';
+import { createPhotoReview } from './review.ts';
 import { agentError, directScene, writePrompts, type AgentOptions } from './agents.ts';
 
 const ID = /^pr-[a-z0-9-]{6,70}$/;
@@ -55,10 +56,12 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     }
     return runs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
-  const photos = createPhotoProduction({ get: read, update: (id, change) => exclusive(async () => {
+  const photoStore = { get: read, update: (id: string, change: (run: ProductionRun) => Promise<void> | void) => exclusive(async () => {
     const run = await read(id); const rev = run.rev;
     await change(run); return run.rev === rev ? run : write(run);
-  }) }, options.gen, now);
+  }) };
+  const photos = createPhotoProduction(photoStore, options.gen, now);
+  const review = createPhotoReview(photoStore, { dataDir: options.dataDir, gen: options.gen, runLlm: options.runLlm, now });
   async function tick(): Promise<void> {
     await exclusive(async () => {
       for (const run of await list()) {
@@ -66,7 +69,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
         if (next !== run) await write(next);
       }
     });
-    for (const run of await list()) if (run.mode === 'photos' && run.photos) await photos.tick(run.id);
+    for (const run of await list()) if (run.mode === 'photos' && run.photos) { await photos.tick(run.id); await review.tick(run.id); }
   }
   async function updatePreparation(id: string, attempt: number, change: (run: ProductionRun) => ProductionRun | void, includeStopped = false): Promise<void> {
     await exclusive(async () => {
@@ -118,7 +121,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     });
   }
   return {
-    get: read, list, tick, photos,
+    get: read, list, tick, photos, review,
     forkPhotos: (id: string, rev: number, requestId: string): Promise<ProductionRun> => exclusive(async () => {
       const existing = (await list()).find((r) => r.requestId === requestId);
       if (existing) {
@@ -179,9 +182,12 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
           next.preparation.status = 'interrupted';
           next.preparation.error = 'Вызов Codex прерван паузой. После продолжения можно повторить незавершённый этап; это расходует квоту.';
         }
+        if (action.type === 'pause' && next.review && ['pending', 'running'].includes(next.review.status)) {
+          next.review.status = 'interrupted'; next.review.error = 'Проверка остановлена паузой. Повтори её явно после продолжения.';
+        }
         return write(next);
       });
-      if (action.type === 'pause') pending.get(id)?.controller.abort();
+      if (action.type === 'pause') { pending.get(id)?.controller.abort(); review.cancel(id); }
       if (action.type === 'retryPreparation') launchPreparation(id, run.preparation!.attempt);
       return run;
     },
@@ -196,7 +202,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
           await write(run);
         }
       });
-      for (const run of await list()) if (run.mode === 'photos' && run.photos && options.gen) await photos.recover(run.id);
+      for (const run of await list()) if (run.mode === 'photos') { await review.recover(run.id); if (run.photos && options.gen) await photos.recover(run.id); }
       timer = setInterval(() => {
         if (ticking) return;
         ticking = true;
@@ -204,7 +210,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
       }, 450);
       timer.unref();
     },
-    stop(): void { photos.stop(); if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
+    stop(): void { photos.stop(); review.stop(); if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
   };
 }
 export type ProductionRuntime = ReturnType<typeof createProductionRuntime>;

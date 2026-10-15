@@ -3,6 +3,7 @@ import { ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, Artifact } from '../../core/production/model.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
 import { SubmitError } from '../gen/runtime.ts';
+import { pendingReview } from '../../core/production/review.ts';
 
 interface Store {
   get(id: string): Promise<ProductionRun>;
@@ -28,9 +29,10 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       if (run.photos?.requests.some((r) => r.id === input.requestId)) return;
       if (run.rev !== input.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Проверь стоимость и персонажа заново.');
       readyForPhotos(run);
+      if (run.review?.status === 'running') throw new ProductionError('INVALID', 'Сначала дождись критика или поставь серию на паузу.');
       if (run.photos?.status === 'running' || run.photos?.items.some(failed)) throw new ProductionError('INVALID', 'Сначала дождись текущих задач или разбери остановленную генерацию. Повтора платных задач нет.');
       const quote = quotePhotos(run);
-      if (!quote.count || quote.usd !== input.confirmUsd || input.refsConsent !== true) throw new ProductionError('INVALID', 'Стоимость или согласие не совпали. Обнови оценку перед запуском.');
+      if (!quote.count || quote.usd !== input.confirmUsd || input.refsConsent !== true || input.reviewConsent !== true) throw new ProductionError('INVALID', 'Стоимость или согласие не совпали. Подтверди также проверку изображений через Codex.');
       if (!run.photos) {
         run.photos = { status: 'stopped', identityId: run.character?.referenceId ?? null, masterArtifactId: null, requests: [],
           items: ['scene', ...run.shots.map((s) => s.id)].map((key) => ({ key, tag: `production:${run.id}:${input.requestId}:${key}`, jobId: null, taskId: null, status: 'pending', mediaId: null, error: null, errorCode: null })) };
@@ -38,6 +40,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       if (run.photos.identityId !== (run.character?.referenceId ?? null)) throw new ProductionError('INVALID', 'Персонаж изменился после начала серии. Создай отдельную серию.');
       run.photos.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       run.photos.status = 'running';
+      run.review = pendingReview(input.requestId, now());
       record(run, now(), `Подтверждена генерация ${quote.count} изображений: оценка $${quote.usd.toFixed(3)}. Reference сцены и Soul ID передаются Higgsfield. Видео и upscale отключены.`);
     });
   }
@@ -79,12 +82,12 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
           sourceId: item.key === 'scene' ? null : run.photos.masterArtifactId,
           url: `/api/library/${media.id}/file`, poster: `/api/library/${media.id}/file`, prompt: job.prompt,
           model: 'Soul 2 · Higgsfield', providerModel: job.providerModel, taskId: job.taskId ?? job.id,
-          createdAt: media.savedAt, qc: 'review', qcNote: 'Файл скачан и проверен декодированием. Лицо, детали и общую сцену проверь вручную; автоматического visual QC нет.',
+          createdAt: media.savedAt, qc: 'review', qcNote: 'Файл скачан и проверен декодированием. Визуальная оценка критика показана отдельно; получение файла не подтверждает его качество.',
           note: '', cost: job.estimateUsd, mediaId: media.id, generationJobId: job.id,
         };
         run.artifacts.push(artifact);
         if (item.key === 'scene') run.photos.masterArtifactId = artifact.id;
-        else if (shot) { shot.photoId = artifact.id; shot.step = 'photoReview'; shot.error = null; }
+        else if (shot) { shot.photoId = artifact.id; shot.step = 'photoQc'; shot.error = null; }
         changed = true;
       }
       if (run.photos.items.every((i) => i.status === 'saved' && i.mediaId) && run.photos.status !== 'complete' && run.photos.status !== 'review') { run.photos.status = 'review'; changed = true; }

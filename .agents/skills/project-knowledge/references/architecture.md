@@ -164,7 +164,8 @@ milestone до действия владельца; выбранная част�
 Роли получают только JSON творческого задания. Обычно два вызова, до четырёх при schema/semantic
 repair; ошибки провайдера не повторяются автоматически. ScenePlan сохраняется до prompts;
 невалидный результат не подменяется mock-планом. Calls/usage сохраняются; расход при сбое без отчёта
-помечен неизвестным. Медиа-tick не запускает LLM.
+помечен неизвестным. Новые планы требуют artDirection и visualAnchor каждого кадра;
+старые планы читаются без них. Tick вызывает критика только при сохранённом reviewConsent.
 
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет
 незавершённую роль. Пауза abort-ит вызов и защищает состояние от позднего ответа; resume не запускает
@@ -173,11 +174,21 @@ Runtime принимает общий `GenRuntime`; секреты не чита
 intent перед submit, связывает GenJob по id/tag, импортирует только saved/readable image в artifacts.
 Порядок: master T2I → каждый кадр I2I с master image_url; Soul ID отдельным custom_reference_id.
 Quote включает master+n; POST `/:id/photos/start` принимает rev, UUID requestId, confirmUsd,
-refsConsent=true. Числовой гейт проверяется до job creation; повтор UUID идемпотентен. Выбор Soul ID
+refsConsent=true и reviewConsent=true. Числовой гейт проверяется до job creation; повтор UUID идемпотентен. Выбор Soul ID
 проверяется HTTP-слоем и фиксируется после начала фото. Ошибка останавливает будущие отправки.
 Pause/restart требуют новой цены на pending; известные задачи продолжают poll/download.
 Retry `/:id/photos/retry` только для download_failed/POLL_TIMEOUT. Unknown не пересоздаётся.
-Artifact qc=review — ручной milestone; принятие переводит ветвь в ready, видео/upscale запрещены.
+Artifact qc=review до решения владельца. `server/production/review.ts` после остановки media
+передаёт реальные JPEG-копии (max1568) master+shots и до двух локальных identity refs в один
+Codex vision вызов. Model: SP_PRODUCTION_CRITIC_MODEL → SP_LLM_MODEL → default.
+`core/production/review.ts` проверяет схему, точное покрытие artifact IDs и согласованность
+вердиктов; без identity видимое лицо не получает подтверждения likeness. Отчёт хранится в review
+вместе с snapshot IDs, consent, usage, статусом и ошибкой. Приёмка разрешена только для
+проверенного ID, но владелец может принять reject/uncertain. Критик не удаляет и не генерирует.
+POST `/:id/review` (rev/requestId/consent) запускает проверку legacy или явный retry.
+Ошибка блокирует приёмку, не повторяет LLM; pause/restart помечают interrupted. Legacy без
+согласия не запускается при tick/restart. Manifest включает отчёт, но выдаёт только принятые фото.
+Принятие переводит ветвь в ready, видео/upscale запрещены.
 `/:id/fork-photos` копирует готовый Codex-план без LLM/artifacts/approvals, с дедупликацией requestId.
 Старые планы без masterPrompt используют establishing-вариант первого prompt. Новые требуют поле.
 Старые mock-серии без planningMode остаются mock. Zustand хранит выбор в sessionStorage, draft в

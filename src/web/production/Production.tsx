@@ -30,7 +30,7 @@ function NewRun() {
   return <div className={styles.start} data-guide="production-start">
     <Tag tone="outline">Production</Tag>
     <Text as="h1" variant="title-l">От сценария к подборке кадров</Text>
-    <Text tone="secondary">Задай направление. Codex подготовит единую сцену, план кадров и prompts. После подготовки подтверди стоимость фото — серия создастся в Higgsfield и придёт на приёмку. Видео и upscale пока отключены.</Text>
+    <Text tone="secondary">Задай направление. Codex подготовит единую сцену, план кадров и prompts. После подготовки подтверди стоимость фото — серия создастся в Higgsfield, пройдёт отбор критиком Codex и придёт на приёмку. Видео и upscale пока отключены.</Text>
     <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void create(input); }}>
       <TextField label="Название серии" value={input.title} maxLength={100} required onChange={(e) => setInput({ ...input, title: e.target.value })} />
       <TextField multiline label="Сценарий" rows={4} value={input.script} maxLength={12000} required onChange={(e) => setInput({ ...input, script: e.target.value })} />

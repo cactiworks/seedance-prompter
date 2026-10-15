@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 const text = (max: number) => z.string().trim().min(1).max(max);
+const ArtDirectionSchema = z.object({ concept: text(700), visualHook: text(500), captureTexture: text(500) }).strict();
 export const SceneDraftSchema = z.object({
+  artDirection: ArtDirectionSchema.optional(),
   scene: z.object({
     title: text(120), location: text(800), subject: text(500), wardrobe: text(500),
     timeOfDay: text(200), weather: text(300), lighting: text(700), palette: text(300),
@@ -9,12 +11,17 @@ export const SceneDraftSchema = z.object({
   }).strict(),
   shots: z.array(z.object({
     title: text(100), scriptExcerpt: text(1500), purpose: text(500),
-    framing: text(250), action: text(700), camera: text(600),
+    framing: text(250), action: text(700), camera: text(600), visualAnchor: text(500).optional(),
     durationSec: z.number().int().min(4).max(12),
   }).strict()).min(1).max(8),
   assumptions: z.array(text(500)).max(8),
   warnings: z.array(text(500)).max(8),
 }).strict();
+/** New plans must contain an art direction; stored legacy plans remain readable. */
+export const GeneratedSceneDraftSchema = SceneDraftSchema.extend({
+  artDirection: ArtDirectionSchema,
+  shots: z.array(SceneDraftSchema.shape.shots.element.extend({ visualAnchor: text(500) })).min(1).max(8),
+});
 export type SceneDraft = z.infer<typeof SceneDraftSchema>;
 export type PlannedShot = SceneDraft['shots'][number] & { id: string };
 export type ScenePlan = Omit<SceneDraft, 'shots'> & { shots: PlannedShot[] };

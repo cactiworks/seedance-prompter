@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,12 +12,14 @@ import type { CharacterSelection } from '../../src/core/production/character.ts'
 import { SoulIdError } from '../../src/server/production/soulId.ts';
 import { productionRoutes } from '../../src/server/production/routes.ts';
 import { createCharacters } from '../../src/server/production/characters.ts';
-import { SCRIPT, sceneDraft, promptPlan } from './fixtures.ts';
+import { SCRIPT, sceneDraft, promptPlan, reviewReport } from './fixtures.ts';
+import { ReviewReportSchema, validateReview } from '../../src/core/production/review.ts';
+import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const png = readFileSync(new URL('../../src/web/public/production-mock/shot-1.png', import.meta.url));
 const resources: { dir: string; rt: ProductionRuntime; gen: GenRuntime }[] = [];
 const identity: CharacterSelection = { id: 'ch-identity-123', name: 'Тестовый персонаж', referenceId: '11111111-1111-4111-8111-111111111111', modelVersion: 'v2', selectedAt: new Date(0).toISOString() };
-async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity) {
+async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner) {
   const dir = mkdtempSync(path.join(tmpdir(), 'production-photos-'));
   let clock = 100_000;
   let failDownload = false;
@@ -31,20 +33,38 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
   const gen = createGenRuntime({ dataDir: dir, providers: { higgsfield: provider }, now: () => clock,
     fetch: (async () => failDownload ? new Response('offline', { status: 503 }) : new Response(png, { headers: { 'content-type': 'image/png' } })) as typeof fetch,
   });
-  const calls: unknown[] = [];
-  const runLlm: Runner = async <T>(request: unknown) => { calls.push(request); return { data: (calls.length === 1 ? sceneDraft(count) : promptPlan(count)) as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } }; };
+  const calls: LlmRequest[] = [];
+  const runLlm: Runner = async <T>(request: LlmRequest) => { calls.push(request); const critic = request.taskRu === 'Критик фотографий Production'; if (critic && reviewRunner) return reviewRunner<T>(request); return { data: (critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } }; };
   const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, now: () => clock, delayMs: 1 });
   resources.push({ dir, rt, gen });
   const created = await rt.create({ ...DEMO_INPUT, script: SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
   await rt.waitForPreparation(created.id);
   const get = () => rt.get(created.id);
-  const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const }; };
-  const cycle = async () => { clock += 60_000; await gen.tick(); await rt.tick(); };
+  const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const, reviewConsent: true as const }; };
+  const cycle = async (waitReview = true) => { clock += 60_000; await gen.tick(); await rt.tick(); if (waitReview) await rt.review.wait(created.id); };
   return { rt, gen, dir, provider, submit, calls, id: created.id, get, input, cycle, failDownload: (value: boolean) => { failDownload = value; } };
 }
-afterEach(() => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
+afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) await rt.review.wait(run.id); rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it('keeps rejected files and permits an explicit owner override without new media', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
+      for (const result of report.results) { result.verdict = 'reject'; result.checks.shotMatch = 'fail'; }
+      return { data: report as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } };
+    };
+    const s = await setup(1, {}, identity, critic);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 8; i++) await s.cycle();
+    const run = await s.get(); const ids = run.shots.map(shot => shot.photoId!);
+    expect(run.review?.report?.results.every(r => r.verdict === 'reject')).toBe(true);
+    expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true);
+    expect(await s.gen.library.get(run.artifacts[1]!.mediaId!)).toBeTruthy();
+    const accepted = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids });
+    expect(accepted.shots[0]!.acceptedPhotoId).toBe(ids[0]);
+    expect(accepted.artifacts).toHaveLength(2); expect(s.submit).toHaveBeenCalledTimes(2);
+  });
+
   it('does not produce placeholders or submit before exact price and consent; deduplicates double clicks', async () => {
     const s = await setup();
     for (let i = 0; i < 5; i++) await s.cycle();
@@ -52,6 +72,7 @@ describe('real photos with injected providers only', () => {
     const input = await s.input();
     expect(input.confirmUsd).toBe(0.018); // master + 2 planned shots
     expect(PhotoStartSchema.safeParse({ ...input, refsConsent: false }).success).toBe(false);
+    expect(PhotoStartSchema.safeParse({ ...input, reviewConsent: undefined }).success).toBe(false);
     await expect(s.rt.photos.start(s.id, { ...input, confirmUsd: 0 })).rejects.toThrow('Стоимость');
     await expect(s.rt.photos.start(s.id, { ...input, rev: input.rev - 1 })).rejects.toThrow('Серия изменилась');
     await expect(s.rt.photos.start(s.id, { ...input, refsConsent: false as true })).rejects.toThrow('согласие');
@@ -107,6 +128,7 @@ describe('real photos with injected providers only', () => {
     const run = await s.get();
     expect(paid).toHaveBeenCalledTimes(1); expect(run.photos!.status).toBe('stopped'); expect(run.artifacts).toHaveLength(0);
     expect(run.photos!.items[0]!.status).toBe('unknown');
+    expect(run.review!.status).toBe('interrupted'); expect(s.calls).toHaveLength(2);
     await expect(s.rt.photos.start(s.id, await s.input())).rejects.toThrow('Повтора');
     await expect(s.rt.photos.retry(s.id, run.photos!.items[0]!.jobId!)).rejects.toMatchObject({ code: 'SUBMIT_UNKNOWN' });
   });
@@ -162,7 +184,7 @@ describe('real photos with injected providers only', () => {
     run = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids: [run.shots[0]!.photoId!] });
     const fresh = await s.rt.forkPhotos(s.id, run.rev, crypto.randomUUID());
     expect(fresh.photos).toBeUndefined(); expect(fresh.artifacts).toEqual([]); expect(fresh.approvals).toEqual([]);
-    expect(s.calls).toHaveLength(2); expect((await s.get()).shots[0]!.acceptedPhotoId).not.toBeNull();
+    expect(s.calls).toHaveLength(3); expect((await s.get()).shots[0]!.acceptedPhotoId).not.toBeNull();
   });
   it('reuses old Codex plans without another LLM call, media or approvals; accepts old plans without masterPrompt', async () => {
     const s = await setup(1); const old = await s.get();
@@ -173,9 +195,88 @@ describe('real photos with injected providers only', () => {
     expect(fresh.mode).toBe('photos'); expect(fresh.artifacts).toEqual([]); expect(fresh.approvals).toEqual([]); expect(fresh.photos).toBeUndefined();
     expect(fresh.preparation!.calls).toEqual([]); expect(fresh.scenePlan).toEqual(old.scenePlan); expect(s.calls).toHaveLength(2);
     expect((await s.rt.forkPhotos(s.id, old.rev, requestId)).id).toBe(fresh.id);
-    await s.rt.photos.start(fresh.id, { rev: fresh.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(fresh).usd, refsConsent: true });
+    await s.rt.photos.start(fresh.id, { rev: fresh.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(fresh).usd, refsConsent: true, reviewConsent: true });
     await s.rt.tick(); expect(s.submit).toHaveBeenCalledTimes(1);
     expect(s.submit.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ prompt: expect.stringContaining('Wide establishing') })]);
     expect((await s.get()).mode).toBe('mock');
+  });
+});
+
+describe('photo critic lifecycle and trust boundaries', () => {
+  it('normalizes visible faces without identity to uncertain and rejects missing IDs or skipped core criteria', () => {
+    const report = ReviewReportSchema.parse(reviewReport(['a']));
+    expect(validateReview(report, ['a'], 0).results[0]!.verdict).toBe('uncertain');
+    report.results[0]!.checks.likeness = 'not_visible';
+    expect(validateReview(report, ['a'], 0).results[0]!.checks.likeness).toBe('uncertain');
+    report.results[0]!.checks.face = 'not_visible';
+    expect(validateReview(report, ['a'], 0).results[0]!.verdict).toBe('keep');
+    expect(() => validateReview(report, ['b'], 2)).toThrow('список');
+    report.results[0]!.checks.continuity = 'not_visible';
+    expect(() => validateReview(report, ['a'], 2)).toThrow('критерий');
+  });
+  it('reviews real bytes with an explicit map, bounded identity photos and no approval or generation by the critic', async () => {
+    const s = await setup(2);
+    mkdirSync(path.join(s.dir, 'characters'), { recursive: true }); mkdirSync(path.join(s.dir, 'uploads'), { recursive: true });
+    const uploadIds = ['u-face-one', 'u-face-two', 'u-face-three'];
+    for (const id of uploadIds) writeFileSync(path.join(s.dir, 'uploads', `${id}.png`), png);
+    writeFileSync(path.join(s.dir, 'characters', `${identity.id}.json`), JSON.stringify({ ...identity, uploadIds, status: 'completed', createdAt: new Date(0).toISOString() }));
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get(); expect(run.review?.status).toBe('complete'); expect(run.review?.identityCount).toBe(2);
+    const request = s.calls.find((c) => c.taskRu === 'Критик фотографий Production')!;
+    expect(request.images).toHaveLength(5); expect(request.images!.every((image) => image.mediaType === 'image/jpeg' && image.base64.length > 100)).toBe(true);
+    expect(JSON.parse(request.user).imageMap.map((i: { role: string }) => i.role)).toEqual(['identity', 'identity', 'scene', 'shot', 'shot']);
+    expect(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)).toEqual(run.review!.artifactIds);
+    expect(JSON.parse(request.user).masterPrompt).toBe(promptPlan(2).masterPrompt);
+    expect(run.approvals).toEqual([]); expect(s.submit).toHaveBeenCalledTimes(3); expect(s.calls).toHaveLength(3);
+  });
+  it('invalid critic output blocks acceptance, never retries on ticks, and retries explicitly without media calls', async () => {
+    let invalid = true;
+    const critic: Runner = async <T>(request: LlmRequest) => ({ data: reviewReport(invalid ? ['invented'] : JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 1, outputTokens: 1, turns: 1 } });
+    const s = await setup(1, {}, identity, critic); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    let run = await s.get(); expect(run.review?.status).toBe('failed'); expect(s.calls).toHaveLength(3);
+    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids: [run.shots[0]!.photoId!] })).rejects.toThrow('критиком');
+    invalid = false;
+    const request = { rev: run.rev, requestId: crypto.randomUUID(), consent: true as const };
+    await Promise.all([s.rt.review.start(s.id, request), s.rt.review.start(s.id, request)]); await s.rt.review.wait(s.id);
+    run = await s.get(); expect(run.review?.status).toBe('complete'); expect(s.calls).toHaveLength(4); expect(s.submit).toHaveBeenCalledTimes(2);
+  });
+  it('legacy saved photos need explicit consent and restart never relaunches a critic', async () => {
+    const s = await setup(1); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 10; i++) await s.cycle();
+    let run = await s.get(); delete run.review;
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    await s.cycle(); expect(s.calls).toHaveLength(3);
+    const app = productionRoutes(s.rt, createCharacters({ dataDir: s.dir }));
+    const response = await app.request(`/${s.id}/review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rev: run.rev, requestId: crypto.randomUUID(), consent: false }) });
+    expect(response.status).toBe(422); expect(s.calls).toHaveLength(3);
+    run = await s.get(); run.review = { status: 'running', requestId: crypto.randomUUID(), consentedAt: new Date().toISOString(), artifactIds: [], identityCount: 0, report: null, error: null, model: null, inputTokens: null, outputTokens: null };
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    const runLlm = vi.fn(); const recovered = createProductionRuntime({ dataDir: s.dir, gen: s.gen, runLlm });
+    await recovered.start(); await recovered.tick(); recovered.stop();
+    expect((await recovered.get(s.id)).review!.status).toBe('interrupted'); expect(runLlm).not.toHaveBeenCalled();
+  });
+  it('deduplicates simultaneous background critic ticks after the async snapshot read', async () => {
+    const s = await setup(1); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 10; i++) await s.cycle();
+    const run = await s.get(); run.review!.status = 'pending'; run.review!.requestId = crypto.randomUUID(); run.review!.report = null;
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    await Promise.all(Array.from({ length: 8 }, () => s.rt.review.tick(s.id))); await s.rt.review.wait(s.id);
+    expect(s.calls.filter(c => c.taskRu === 'Критик фотографий Production')).toHaveLength(2);
+    expect((await s.get()).review!.status).toBe('complete'); expect(s.submit).toHaveBeenCalledTimes(2);
+  });
+  it('pause discards a late critic answer and requires an explicit new request', async () => {
+    let finish: (() => void) | undefined;
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      await new Promise<void>((resolve) => { finish = resolve; });
+      return { data: reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 1, outputTokens: 1, turns: 1 } };
+    };
+    const s = await setup(1, {}, identity, critic); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle(false);
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    let run = await s.get(); await s.rt.act(s.id, { type: 'pause', rev: run.rev }); finish!(); await s.rt.review.wait(s.id);
+    run = await s.get(); expect(run.review?.status).toBe('interrupted'); expect(run.review?.report).toBeNull();
+    await s.rt.act(s.id, { type: 'resume', rev: run.rev }); await s.cycle(); expect(s.calls).toHaveLength(3);
   });
 });

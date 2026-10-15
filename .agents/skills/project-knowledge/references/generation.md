@@ -137,7 +137,9 @@ $0.006 × (1 master + 1–8 кадров); без утверждения фак�
 Поддержка одного ref и signed upload также доступны общему Soul 2 adapter. Signed PUT получает
 только upload_headers, без API authorization, без redirects/retry. Soul ID использует тот же helper.
 Опорная сцена помогает continuity, но не доказывает её. На milestone — только saved файлы;
-visual QC ручной. Видео, upscale, платные reruns и editing в Production пока отключены.
+критик Codex выполняет предварительный visual QC, владелец принимает финальное решение.
+Cost gate включает отдельное явное согласие на Codex-проверку (квота ChatGPT, не цена Higgsfield).
+Видео, upscale, платные reruns и editing в Production пока отключены.
 
 Контракты проверены по [T2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/standard/api-reference)
 и [I2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/api-reference).

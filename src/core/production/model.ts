@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
 import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 import type { PhotoState } from './photos.ts';
+import type { ReviewState } from './review.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
@@ -42,6 +43,7 @@ export interface ProductionShot {
 }
 export interface ProductionRun extends RunInput {
   photos?: PhotoState;
+  review?: ReviewState;
   planSourceId?: string;
   character?: CharacterSelection | null;
   id: string; rev: number; createdAt: string; updatedAt: string; paused: boolean;
@@ -79,9 +81,12 @@ export function runLabel(run: ProductionRun): string {
   if (run.paused) return 'На паузе';
   if (run.preparation?.status === 'failed' || run.preparation?.status === 'interrupted') return 'Подготовка остановлена';
   if (run.mode === 'photos' && run.planned) {
+    if (run.review?.status === 'running') return 'Критик проверяет фото';
+    if (run.review?.status === 'pending' && run.photos?.status === 'review') return 'Ожидает критика';
+    if (run.review?.status === 'failed' || run.review?.status === 'interrupted') return 'Проверка остановлена';
     if (!run.photos) return 'Готов к генерации фото';
     if (run.photos.status === 'stopped') return 'Генерация остановлена';
-    if (run.photos.status === 'review') return 'Принять фотографии';
+    if (run.photos.status === 'review') return run.review?.status === 'complete' ? 'Принять фотографии' : 'Проверить фотографии';
   }
   if (run.planned && run.shots.every((s) => s.step === 'ready')) return 'Готово';
   if (run.shots.some((s) => s.error !== null)) return 'Нужна проверка';

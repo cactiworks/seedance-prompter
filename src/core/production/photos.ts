@@ -6,7 +6,7 @@ import type { ProductionRun } from './model.ts';
 export const PHOTO_MODEL = 'higgsfield/soul-2';
 export const PHOTO_PARAMS = { resolution: '1080p', aspectRatio: '9:16', enhancePrompt: false };
 export const PhotoStartSchema = z.object({
-  rev: z.number().int().nonnegative(), requestId: z.uuid(), confirmUsd: z.number().nonnegative(), refsConsent: z.literal(true),
+  rev: z.number().int().nonnegative(), requestId: z.uuid(), confirmUsd: z.number().nonnegative(), refsConsent: z.literal(true), reviewConsent: z.literal(true),
 }).strict();
 export type PhotoStart = z.infer<typeof PhotoStartSchema>;
 export const PhotoStateSchema = z.object({

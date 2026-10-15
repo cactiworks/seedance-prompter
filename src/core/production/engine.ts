@@ -1,4 +1,5 @@
 import { currentArtifact, isAutomatic, type Artifact, type ProductionRun, type ProductionShot, type RunAction, type RunInput } from './model.ts';
+import { reviewedPhoto } from './review.ts';
 
 export class ProductionError extends Error {
   readonly code: 'CONFLICT' | 'INVALID' | 'NOT_FOUND';
@@ -113,12 +114,13 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
     for (const id of ids) {
       const shot = run.shots.find((s) => (photo ? s.photoId : s.videoId) === id);
       const artifact = currentArtifact(run, id);
+      if (run.mode === 'photos' && artifact && !reviewedPhoto(run, id)) throw new ProductionError('INVALID', 'Сначала дождись проверки этого кадра критиком перед milestone.');
       if (!shot || !artifact || (artifact.qc !== 'pass' && !(run.mode === 'photos' && artifact.qc === 'review' && artifact.mediaId)) || shot.step !== (photo ? 'photoReview' : 'videoReview')) throw new ProductionError('INVALID', 'Принимать можно только текущие проверенные результаты этого milestone.');
       if (photo) { shot.acceptedPhotoId = id; shot.step = run.mode === 'photos' ? 'ready' : 'videos'; }
       else { shot.acceptedVideoId = id; shot.step = 'upscale'; }
       shot.dueAt = now + delay;
       run.approvals.push({ kind: photo ? 'photo' : 'video', artifactId: id, at: iso(now) });
-      if (run.mode === 'photos') { artifact.qc = 'pass'; artifact.qcNote = 'Фотография принята владельцем. Автоматическая визуальная оценка не выполнялась.'; }
+      if (run.mode === 'photos') { artifact.qc = 'pass'; artifact.qcNote = 'Фотография принята владельцем после отчёта критика. Оценка модели сохранена отдельно.'; }
     }
     if (run.photos && run.shots.every((s) => s.step === 'ready')) run.photos.status = 'complete';
     record(run, now, `${photo ? 'Milestone 1: приняты фотографии' : 'Milestone 2: приняты видео до Topaz'} — ${ids.size}. Остальные ветви остаются на своём этапе.`);
