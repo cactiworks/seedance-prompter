@@ -63,6 +63,48 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it('routes person, hand detail and object shots independently across scenes without adding a portrait reference', async () => {
+    const appearance: Runner = async <T>(request: LlmRequest) => {
+      const output = appearanceOutput(3);
+      const original = JSON.parse(request.user).promptPlan as NonNullable<Awaited<ReturnType<ProductionRuntime['get']>>['promptPlan']>;
+      output.prompts = { ...original, masterPrompt: original.masterPrompt!.replace('{{identity}}', output.profile.anchorEn), shots: original.shots.map((s, i) => ({ ...s, imagePrompt: s.imagePrompt.replace('{{identity}}', i === 1 ? 'Light skin and natural hand proportions observed in the identity photos' : output.profile.anchorEn) })) };
+      return { data: output as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } };
+    };
+    const s = await setup(3, {}, identity, undefined, undefined, appearance);
+    const planned = await s.get();
+    planned.scenePlan!.scenes!.push({ ...planned.scenePlan!.scenes![0]!, id: 'outside', title: 'Двор', location: 'Мощёный двор' });
+    planned.scenePlan!.shots[1]!.subjectVisibility = 'detail';
+    planned.scenePlan!.shots[2]!.subjectVisibility = 'none'; planned.scenePlan!.shots[2]!.sceneId = 'outside';
+    planned.promptPlan!.shots[2]!.imagePrompt = 'A closed notebook lies alone on a stone bench in a warm paved courtyard. A strip of amber sunlight crosses its worn cloth cover and the rough stone surface. The fixed camera is close above the notebook, with the surrounding pavement softly visible around the object.';
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(planned));
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 16; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(4);
+    for (const [model, body] of s.submit.mock.calls) { expect(model).toBe('higgsfield-ai/soul/v2/standard'); expect(body).not.toHaveProperty('image_url'); expect(body.prompt).not.toContain('{{identity}}'); }
+    expect(s.submit.mock.calls.map(([, b]) => b.custom_reference_id)).toEqual([identity.referenceId, identity.referenceId, undefined, undefined]);
+    expect(s.submit.mock.calls[2]![1].prompt).not.toContain(appearanceOutput().profile.anchorEn);
+    expect(s.submit.mock.calls[3]![1].prompt).toBe(planned.promptPlan!.shots[2]!.imagePrompt);
+    expect(s.provider.upload).not.toHaveBeenCalled();
+    const critic = s.calls.find(c => c.taskRu === 'Критик фотографий Production' && JSON.parse(c.user).scope === 'series')!;
+    const payload = JSON.parse(critic.user);
+    expect(payload.masterRole).toContain('not a composition reference');
+    expect(payload.candidates.find((c: { shotId: string }) => c.shotId === 'shot-3').scene.location).toBe('Мощёный двор');
+    expect((await s.get()).review?.status).toBe('complete');
+  });
+  it('keeps the legacy shared-master route for persisted plans without silently upgrading them', async () => {
+    const s = await setup(1, {}, null);
+    const old = await s.get(); delete old.scenePlan!.storyboardVersion; delete old.scenePlan!.scenes;
+    old.promptPlan!.masterPrompt = old.promptPlan!.masterPrompt!.replace('{{identity}}', 'Natural human proportions');
+    old.promptPlan!.shots.forEach(p => { p.imagePrompt = p.imagePrompt.replace('{{identity}}', 'Natural human proportions'); });
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(old));
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(2);
+    expect(s.submit.mock.calls[1]).toEqual(['higgsfield-ai/soul/v2/image-to-image', expect.objectContaining({ image_url: 'https://test.invalid/scene.png' })]);
+    const run = await s.get();
+    expect(run.artifacts[1]!.sourceId).toBe(run.photos!.masterArtifactId);
+    expect(run.scenePlan!.storyboardVersion).toBeUndefined();
+  });
   it('keeps rejected files and permits an explicit owner override without new media', async () => {
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
@@ -99,20 +141,21 @@ describe('real photos with injected providers only', () => {
     expect((await s.get()).photos!.requests).toHaveLength(1);
     await expect(s.rt.setCharacter(s.id, (await s.get()).rev, null)).rejects.toThrow('зафиксирован');
   });
-  it('uses a master scene + Soul ID for every shot and gates only downloaded photos; approvals never start video', async () => {
+  it('uses independent shots with Soul ID after master approval; never copies the master composition or starts video', async () => {
     vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected external request'); }));
     const s = await setup(); await s.rt.photos.start(s.id, await s.input());
     for (let i = 0; i < 12; i++) await s.cycle();
     let run = await s.get();
     expect(s.submit).toHaveBeenCalledTimes(3);
     expect(s.submit.mock.calls[0]).toEqual(['higgsfield-ai/soul/v2/standard', expect.objectContaining({ prompt: appearanceOutput().prompts.masterPrompt, custom_reference_id: identity.referenceId, enhance_prompt: false })]);
-    expect(s.submit.mock.calls[1]).toEqual(['higgsfield-ai/soul/v2/image-to-image', expect.objectContaining({ image_url: 'https://test.invalid/scene.png', custom_reference_id: identity.referenceId, enhance_prompt: true })]);
-    expect(s.provider.upload).toHaveBeenCalledTimes(2);
+    expect(s.submit.mock.calls[1]).toEqual(['higgsfield-ai/soul/v2/standard', expect.objectContaining({ custom_reference_id: identity.referenceId, enhance_prompt: false })]);
+    expect(s.provider.upload).not.toHaveBeenCalled();
+    for (const [, body] of s.submit.mock.calls) expect(body).not.toHaveProperty('image_url');
     expect(run.artifacts).toHaveLength(3); expect(run.photos!.status).toBe('review');
     expect(run.shots.every((shot) => shot.step === 'photoReview')).toBe(true);
     expect(run.artifacts.every((a) => a.qc === 'review' && a.mediaId && a.url.startsWith('/api/library/'))).toBe(true);
     const ids = run.shots.map((shot) => shot.photoId!);
-    expect(run.artifacts.find((a) => a.id === ids[0])!.sourceId).toBe(run.photos!.masterArtifactId);
+    expect(run.artifacts.find((a) => a.id === ids[0])!.sourceId).toBeNull();
     await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids: [run.photos!.masterArtifactId!] })).rejects.toThrow('milestone');
     run = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids });
     expect(run.photos!.status).toBe('complete');
@@ -205,6 +248,8 @@ describe('real photos with injected providers only', () => {
   it('reuses old Codex plans without another LLM call, media or approvals; accepts old plans without masterPrompt', async () => {
     const s = await setup(1); const old = await s.get();
     old.mode = 'mock'; delete old.promptPlan!.masterPrompt;
+    delete old.scenePlan!.storyboardVersion; delete old.scenePlan!.scenes;
+    old.promptPlan!.shots.forEach(s => { s.imagePrompt = s.imagePrompt.replace('{{identity}}', 'The protagonist'); });
     writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(old));
     const requestId = crypto.randomUUID();
     const fresh = await s.rt.forkPhotos(s.id, old.rev, requestId);
@@ -484,7 +529,7 @@ describe('creator tolerance and bounded master recovery', () => {
     expect(run.photos!.masterHistory!.every(h => h.review.report!.results[0]!.verdict === 'reject' && h.item.status === 'saved')).toBe(true);
     expect(run.photos!.budget!.remainingUsd).toBe(0); expect(masterApproved(run)).toBe(true);
     const jobs = await s.gen.jobs.all(); expect(new Set(jobs.map(j => j.tag)).size).toBe(5);
-    expect(run.artifacts.filter(a => a.shotId !== 'scene').every(a => a.sourceId === run.photos!.masterArtifactId)).toBe(true);
+    expect(run.artifacts.filter(a => a.shotId !== 'scene').every(a => a.sourceId === null)).toBe(true);
     expect(JSON.parse(s.calls.at(-1)!.user).candidates).toHaveLength(3);
   });
   it('stops after three unsuitable masters and cannot buy a fourth through the same endpoint', async () => {

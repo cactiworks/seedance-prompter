@@ -34,10 +34,11 @@ afterEach(() => { for (const rt of runtimes.splice(0)) rt.stop(); vi.unstubAllGl
 
 describe('Production agent contracts', () => {
   it('requires art direction for new plans while preserving legacy scenes', () => {
-    const legacy = sceneDraft(); delete legacy.artDirection;
-    for (const shot of legacy.shots) delete shot.visualAnchor;
-    expect(SceneDraftSchema.safeParse(legacy).success).toBe(true);
-    expect(GeneratedSceneDraftSchema.safeParse(legacy).success).toBe(false);
+    const { storyboardVersion: _version, scenes: _scenes, shots, ...legacy } = withShotIds(sceneDraft());
+    const stored = { ...legacy, shots: shots.map(({ id: _id, sceneId: _scene, beat: _beat, startFrame: _start, subjectVisibility: _visibility, ...shot }) => shot) };
+    delete stored.artDirection;
+    expect(SceneDraftSchema.safeParse(stored).success).toBe(true);
+    expect(GeneratedSceneDraftSchema.safeParse(stored).success).toBe(false);
     expect(GeneratedSceneDraftSchema.safeParse(sceneDraft()).success).toBe(true);
   });
 
@@ -63,7 +64,7 @@ describe('Production agent contracts', () => {
     const scene = withShotIds(sceneDraft()); const bad = promptPlan();
     bad.shots[1]!.shotId = 'shot-1'; bad.shots[2]!.shotId = 'invented';
     bad.shots[0]!.imagePrompt = `@Image1 ${'word '.repeat(201)}`;
-    expect(validatePrompts(bad, scene)).toHaveLength(3);
+    expect(validatePrompts(bad, scene).join(' ')).toContain('ровно один набор');
     const r = runner([bad, bad]);
     await expect(writePrompts(scene, 'phone', { run: r.run, model: 'test-model', signal: new AbortController().signal, onCall: async () => {} })).rejects.toThrow('Invalid structured');
     expect(r.requests).toHaveLength(2);

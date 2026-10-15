@@ -164,15 +164,21 @@ milestone до действия владельца; выбранная част�
 Роли получают только JSON творческого задания. Обычно два вызова, до четырёх при schema/semantic
 repair; ошибки провайдера не повторяются автоматически. ScenePlan сохраняется до prompts;
 невалидный результат не подменяется mock-планом. Calls/usage сохраняются; расход при сбое без отчёта
-помечен неизвестным. Новые планы требуют artDirection и visualAnchor каждого кадра;
-старые планы читаются без них. Tick вызывает критика только при сохранённом reviewConsent.
+помечен неизвестным. Новые планы events-v1 требуют artDirection, scenes (паспорта с IDs), beat, sceneId, startFrame,
+subjectVisibility и visualAnchor каждого кадра. Первый паспорт сохраняется также в scene для совместимости.
+Проверяются ссылки на сцены, порядок цитат, буквальные дубли действий/стартовых кадров/prompts;
+это не доказательство смыслового разнообразия ответа LLM. Старые планы читаются без новых полей. Tick вызывает критика только при сохранённом reviewConsent.
 
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет
 незавершённую роль. Пауза abort-ит вызов и защищает состояние от позднего ответа; resume не запускает
 Codex. Async `start()` помечает незавершённые вызовы interrupted, без автоповтора после рестарта.
 Runtime принимает общий `GenRuntime`; секреты не читает. `server/production/photos.ts` хранит
 intent перед submit, связывает GenJob по id/tag, импортирует только saved/readable image в artifacts.
-Порядок: фиксация внешности → master T2I → обязательный critic gate → I2I каждого кадра → финальный отбор.
+Порядок: фиксация внешности → master T2I → обязательный critic gate → отдельный T2I каждого события → финальный отбор.
+В events-v1 master — quality gate персонажа, не image reference. Soul ID применяется к master и
+shots person (включая лицо/глаза крупно); detail без головы/лица получает локальное описание части тела,
+none — предметный b-roll. Для detail/none Soul ID не отправляется. Legacy сохраняет I2I с master.
+У независимых T2I artifact.sourceId=null: master остаётся gate, а не источником пикселей.
 POST `/:id/photos/start` принимает rev, UUID requestId, точную confirmUsd, refsConsent=true,
 reviewConsent=true и masterGateConsent=true. Дополнительный masterRetryConsent=true разрешает
 ограниченные quality-retries; retryMaster=true явно заменяет отклонённый master в той же серии.
@@ -180,8 +186,12 @@ reviewConsent=true и masterGateConsent=true. Дополнительный maste
 локальных training refs, делает JPEG-копии max1568 и одним Codex-вызовом получает описание лица,
 причёски, телосложения/пропорций, общего облика и связанные prompts. Profile хранит evidence/unknowns,
 источник character/reference IDs и upload IDs. Нет локальных refs или usable=false — master не запускается.
-Каждый image prompt обязан дословно включать anchorEn, укладываться в 40–200 слов; motionPrompt
-не меняется. Исходный план сохраняется; `boundPrompts` выбирает привязанные тексты для отправки.
+Для events-v1 исходный master/person/detail prompt содержит один {{identity}} (40–125 слов).
+Appearance заполняет только этот слот: master/person — полный anchorEn, detail — до 35 слов о
+видимой части тела; none остаётся дословным. Валидатор сравнивает префикс/суффикс шаблона, поэтому
+переписать событие, crop, локацию или свет нельзя. После binding — 40–200 слов без placeholders;
+motionPrompt неизменен. Без выбранного персонажа сервер вставляет нейтральное описание.
+Legacy требует полный anchorEn в каждом image prompt по прежнему контракту. Исходный план сохраняется; `boundPrompts` выбирает привязанные тексты для отправки.
 
 `masterReview` хранится отдельно от финального `review` и проверяет только текущий master плюс
 identity refs и профиль. `masterApproved` требует exact master artifact ID, текущий appearance request,
@@ -206,8 +216,8 @@ Legacy/paused данные не мигрируются в новые LLM-выз�
 pending master+n плюс резерв на оставшиеся попытки до трёх master всего. Core quote без retries сохраняет
 старый контракт. photos.budget хранит remainingUsd/perImageUsd/masterLimit; сумма резервируется до intent,
 смена цены останавливает отправки. masterHistory хранит прежние item/artifactId/review; все файлы остаются.
-Новое качество проверяется до I2I. Первый pass отменяет дальнейшие запасные попытки. После третьего отказа
-серия останавливается; четвёртый master и замена master после старта I2I запрещены. Новый intent имеет
+Новое качество проверяется до остальных кадров. Первый pass отменяет дальнейшие запасные попытки. После третьего отказа
+серия останавливается; четвёртый master и замена master после старта кадров запрещены. Новый intent имеет
 уникальный tag. Ошибка Codex, неизвестный submit, пауза и рестарт не запускают quality-retry.
 Retry `/:id/photos/retry` только для download_failed/POLL_TIMEOUT. Unknown не пересоздаётся.
 Финальный `review` остаётся обязательным перед ручной приёмкой: владелец может принять shot с

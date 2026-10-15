@@ -6,6 +6,7 @@ import type { GenRuntime } from '../gen/runtime.ts';
 import { SubmitError } from '../gen/runtime.ts';
 import { appearanceReady, boundPrompts, pendingAppearance } from '../../core/production/appearance.ts';
 import { masterApproved, pendingReview } from '../../core/production/review.ts';
+import { hasStoryEvents } from '../../core/production/plan.ts';
 
 interface Store {
   get(id: string): Promise<ProductionRun>;
@@ -49,7 +50,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       run.photos.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       run.photos.status = 'running';
       run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
-      record(run, now(), `Подтверждено до ${quote.count} изображений, включая ${quote.reserveCount} запасных попыток master: оценка до $${quote.usd.toFixed(3)}. Reference сцены и Soul ID передаются Higgsfield. Видео и upscale отключены.`);
+      record(run, now(), `Подтверждено до ${quote.count} изображений, включая ${quote.reserveCount} запасных попыток master: оценка до $${quote.usd.toFixed(3)}. ${hasStoryEvents(run.scenePlan) ? 'Кадры создаются независимо; Soul ID применяется к кадрам с персонажем.' : 'Reference сцены и Soul ID передаются Higgsfield.'} Видео и upscale отключены.`);
     });
   }
 
@@ -87,7 +88,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         item.mediaId = media.id;
         const artifact: Artifact = {
           id: `${item.key}-photo-${media.id}`, shotId: item.key, kind: 'photo', version: 1,
-          sourceId: item.key === 'scene' ? null : run.photos.masterArtifactId,
+          sourceId: item.key === 'scene' || hasStoryEvents(run.scenePlan) ? null : run.photos.masterArtifactId,
           url: `/api/library/${media.id}/file`, poster: `/api/library/${media.id}/file`, prompt: job.prompt,
           model: 'Soul 2 · Higgsfield', providerModel: job.providerModel, taskId: job.taskId ?? job.id,
           createdAt: media.savedAt, qc: 'review', qcNote: 'Файл скачан и проверен декодированием. Визуальная оценка критика показана отдельно; получение файла не подтверждает его качество.',
@@ -133,8 +134,11 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         }
         if (state.budget) state.budget.remainingUsd = Number((state.budget.remainingUsd - price).toFixed(6));
         item.status = 'submitting';
-        record(run, now(), `${item.key === 'scene' ? 'Опорная сцена' : run.shots.find((s) => s.id === item.key)!.title}: отправка в Higgsfield.`);
-        intent = { key: item.key, tag: item.tag, prompt, masterMediaId, identityId: state.identityId };
+        record(run, now(), `${item.key === 'scene' ? 'Опорный кадр' : run.shots.find((s) => s.id === item.key)!.title}: отправка в Higgsfield.`);
+        const independent = hasStoryEvents(run.scenePlan);
+        const visibility = run.scenePlan?.shots.find(s => s.id === item.key)?.subjectVisibility;
+        intent = { key: item.key, tag: item.tag, prompt, masterMediaId: independent ? null : masterMediaId,
+          identityId: independent && item.key !== 'scene' && visibility !== 'person' ? null : state.identityId };
       });
       if (!intent) return;
       const sent = intent;
@@ -151,7 +155,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         const unitPrice = quotePhotos(current).perImageUsd;
         const result = await gen.submit({ modelId: PHOTO_MODEL, prompt: sent.prompt,
           params: { ...PHOTO_PARAMS, soulId: sent.identityId ?? '' }, count: 1, confirmCredits: unitPrice, refsConsent: true, tag: sent.tag,
-          refs: sent.key === 'scene' ? [] : [{ source: { type: 'media', mediaId: sent.masterMediaId! }, role: 'ref', label: 'Общая сцена серии' }],
+          refs: sent.key === 'scene' || !sent.masterMediaId ? [] : [{ source: { type: 'media', mediaId: sent.masterMediaId }, role: 'ref', label: 'Общая сцена серии' }],
         });
         await store.update(id, (run) => {
           const item = run.photos!.items.find((i) => i.key === sent.key)!;

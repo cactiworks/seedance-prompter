@@ -94,3 +94,9 @@ Production prompt validation: imagePrompt содержит 40–200 слов; а
 Это детерминированный контракт формы/длительности, а не semantic или visual continuity QC.
 Регрессии alpha-аудита: `tests/{core,server}/alpha*.test.ts`, плюс unknown-submit в `gen.test.ts`.
 `alphaMedia.test.ts` использует реальный ffmpeg/ffprobe и синтетическое видео, без внешних провайдеров.
+
+Production events-v1: цитата → beat → событие/action → startFrame → sceneId. Appearance может
+заполнить только {{identity}}, остальной imagePrompt и motionPrompt неизменны. Для person/master
+полный якорь, для detail без лица локальная внешность, для none текст неизменен. На new route
+image reference master отсутствует физически в submit. Текстовые проверки не доказывают, что
+модель исполнит событие; финальный visual critic оценивает shotMatch/startFrame и дубли.

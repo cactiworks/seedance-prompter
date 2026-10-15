@@ -13,7 +13,7 @@ export function record(run: ProductionRun, now: number, message: string): void {
 }
 export function newRun(id: string, input: RunInput, now: number, delay: number): ProductionRun {
   return { ...input, id, rev: 0, createdAt: iso(now), updatedAt: iso(now), paused: false, planned: false, dueAt: now + delay,
-    shots: [], artifacts: [], approvals: [], events: [{ at: iso(now), message: input.planningMode === 'codex' ? input.mode === 'photos' ? 'Codex готовит сцену и prompts. Фото запустятся только после подтверждения стоимости.' : 'Запущена подготовка Codex. Медиа и QC остаются mock; медиа-кредиты не расходуются.' : 'Запущена mock-серия. Внешние сервисы не вызываются; стоимость 0.' }],
+    shots: [], artifacts: [], approvals: [], events: [{ at: iso(now), message: input.planningMode === 'codex' ? input.mode === 'photos' ? 'Codex готовит события, сцены и prompts. Фото запустятся только после подтверждения стоимости.' : 'Запущена подготовка Codex. Медиа и QC остаются mock; медиа-кредиты не расходуются.' : 'Запущена mock-серия. Внешние сервисы не вызываются; стоимость 0.' }],
     ...(input.planningMode === 'codex' ? { preparation: { status: 'running' as const, stage: 'scene' as const, attempt: 1, startedAt: iso(now), error: null, calls: [] } } : {}) };
 }
 export function completePreparation(source: ProductionRun, now: number, delay: number): ProductionRun {
@@ -26,7 +26,7 @@ export function completePreparation(source: ProductionRun, now: number, delay: n
   }));
   run.planned = true;
   run.preparation!.status = 'complete';
-  record(run, now, `Codex подготовил сцену и prompts для ${run.shots.length} кадров. ${run.mode === 'photos' ? 'Ожидается подтверждение стоимости реальных фото.' : 'Дальше — только mock-медиа и mock QC.'}`);
+  record(run, now, `Codex подготовил план событий и prompts для ${run.shots.length} кадров. ${run.mode === 'photos' ? 'Ожидается подтверждение стоимости реальных фото.' : 'Дальше — только mock-медиа и mock QC.'}`);
   return run;
 }
 function makeArtifact(run: ProductionRun, shot: ProductionShot, kind: Artifact['kind'], now: number): Artifact {

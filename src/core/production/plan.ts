@@ -2,27 +2,39 @@ import { z } from 'zod';
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const ArtDirectionSchema = z.object({ concept: text(700), visualHook: text(500), captureTexture: text(500) }).strict();
+const SceneSchema = z.object({
+  title: text(120), location: text(800), subject: text(500), wardrobe: text(500),
+  timeOfDay: text(200), weather: text(300), lighting: text(700), palette: text(300),
+  continuity: z.array(text(400)).min(1).max(8),
+}).strict();
+const StorySceneSchema = SceneSchema.extend({ id: text(30) });
 export const SceneDraftSchema = z.object({
   artDirection: ArtDirectionSchema.optional(),
-  scene: z.object({
-    title: text(120), location: text(800), subject: text(500), wardrobe: text(500),
-    timeOfDay: text(200), weather: text(300), lighting: text(700), palette: text(300),
-    continuity: z.array(text(400)).min(1).max(8),
-  }).strict(),
+  scene: SceneSchema,
+  storyboardVersion: z.literal('events-v1').optional(),
+  scenes: z.array(StorySceneSchema).min(1).max(8).optional(),
   shots: z.array(z.object({
     title: text(100), scriptExcerpt: text(1500), purpose: text(500),
     framing: text(250), action: text(700), camera: text(600), visualAnchor: text(500).optional(),
+    sceneId: text(30).optional(), beat: text(500).optional(), startFrame: text(700).optional(),
+    subjectVisibility: z.enum(['person', 'detail', 'none']).optional(),
     durationSec: z.number().int().min(4).max(12),
   }).strict()).min(1).max(8),
   assumptions: z.array(text(500)).max(8),
   warnings: z.array(text(500)).max(8),
 }).strict();
-/** New plans must contain an art direction; stored legacy plans remain readable. */
-export const GeneratedSceneDraftSchema = SceneDraftSchema.extend({
+/** New output has scene-scoped events. `scene` is a stored legacy alias, never authored twice. */
+export const GeneratedSceneDraftSchema = SceneDraftSchema.omit({ scene: true }).extend({
+  storyboardVersion: z.literal('events-v1'),
+  scenes: z.array(StorySceneSchema).min(1).max(8),
   artDirection: ArtDirectionSchema,
-  shots: z.array(SceneDraftSchema.shape.shots.element.extend({ visualAnchor: text(500) })).min(1).max(8),
+  shots: z.array(SceneDraftSchema.shape.shots.element.extend({
+    visualAnchor: text(500), sceneId: text(30), beat: text(500), startFrame: text(700),
+    subjectVisibility: z.enum(['person', 'detail', 'none']),
+  })).min(1).max(8),
 });
 export type SceneDraft = z.infer<typeof SceneDraftSchema>;
+export type GeneratedSceneDraft = z.infer<typeof GeneratedSceneDraftSchema>;
 export type PlannedShot = SceneDraft['shots'][number] & { id: string };
 export type ScenePlan = Omit<SceneDraft, 'shots'> & { shots: PlannedShot[] };
 export const PromptPlanSchema = z.object({
@@ -42,20 +54,52 @@ export interface PreparationState {
   status: 'running' | 'failed' | 'interrupted' | 'complete'; stage: PreparationStage;
   attempt: number; startedAt: string; error: string | null; calls: PreparationCall[];
 }
-export function validateScene(draft: SceneDraft, script: string): string[] {
-  return draft.shots.flatMap((s, i) => script.includes(s.scriptExcerpt) ? [] : [`Кадр ${i + 1}: scriptExcerpt должен быть точной цитатой сценария.`]);
+export const hasStoryEvents = (plan: ScenePlan | undefined): boolean => plan?.storyboardVersion === 'events-v1';
+export const sceneForShot = (plan: ScenePlan, shot: PlannedShot) => plan.scenes?.find(s => s.id === shot.sceneId) ?? plan.scene;
+const normalized = (value: string) => value.toLocaleLowerCase().replace(/[\p{P}\p{S}\s]+/gu, ' ').trim();
+export function validateScene(draft: SceneDraft | GeneratedSceneDraft, script: string): string[] {
+  const errors = draft.shots.flatMap((s, i) => script.includes(s.scriptExcerpt) ? [] : [`Кадр ${i + 1}: scriptExcerpt должен быть точной цитатой сценария.`]);
+  if (draft.storyboardVersion !== 'events-v1') return errors;
+  const scenes = draft.scenes ?? [];
+  if (!scenes.length || new Set(scenes.map(s => s.id)).size !== scenes.length) errors.push('Паспорта сцен должны иметь уникальные IDs.');
+  const events = new Set<string>(); const frames = new Set<string>();
+  let previous = 0;
+  for (const [i, shot] of draft.shots.entries()) {
+    if (!scenes.some(s => s.id === shot.sceneId)) errors.push(`Кадр ${i + 1}: sceneId не связан с паспортом сцены.`);
+    if (!shot.beat || !shot.startFrame || !shot.subjectVisibility) errors.push(`Кадр ${i + 1}: нужны смысл, стартовое состояние и видимость персонажа.`);
+    const position = script.indexOf(shot.scriptExcerpt, previous);
+    if (position < 0) errors.push(`Кадр ${i + 1}: цитаты должны следовать порядку сценария.`);
+    else previous = position;
+    const event = `${shot.sceneId}:${normalized(shot.action)}`;
+    const frame = normalized(shot.startFrame ?? '');
+    if (events.has(event) || frames.has(frame)) errors.push(`Кадр ${i + 1}: повтор события или стартового изображения. Нужен следующий смысловой момент, а не другой ракурс дубля.`);
+    events.add(event); frames.add(frame);
+  }
+  if (scenes.some(s => !draft.shots.some(shot => shot.sceneId === s.id))) errors.push('Каждая сцена должна использоваться в плане кадров.');
+  return errors;
 }
-export function withShotIds(draft: SceneDraft): ScenePlan {
-  return { ...draft, shots: draft.shots.map((s, i) => ({ ...s, id: `shot-${i + 1}` })) };
+export function withShotIds(draft: SceneDraft | GeneratedSceneDraft): ScenePlan {
+  const scene = SceneSchema.strip().parse('scene' in draft ? draft.scene : draft.scenes[0]);
+  return { ...draft, scene, shots: draft.shots.map((s, i) => ({ ...s, id: `shot-${i + 1}` })) };
 }
-export function validatePrompts(plan: PromptPlan, scene: ScenePlan): string[] {
+export const IDENTITY_SLOT = '{{identity}}';
+export function validatePrompts(plan: PromptPlan, scene: ScenePlan, identityBound = false): string[] {
   const expected = scene.shots.map((s) => s.id);
   const ids = plan.shots.map((s) => s.shotId);
   const errors: string[] = [];
+  if (hasStoryEvents(scene) && new Set(plan.shots.map(s => normalized(s.imagePrompt))).size !== plan.shots.length) errors.push('Разные события получили одинаковые imagePrompt. Сохрани отдельное стартовое изображение каждого события.');
   if (ids.length !== expected.length || new Set(ids).size !== ids.length || expected.some((id) => !ids.includes(id))) errors.push('Нужен ровно один набор prompts для каждого ID из shot plan.');
   if (plan.masterPrompt) {
     const words = plan.masterPrompt.split(/\s+/).length;
     if (words < 40 || words > 200 || /[а-яё]|@Image\d|<<<image_/i.test(plan.masterPrompt)) errors.push('masterPrompt: нужен английский prompt 40–200 слов без фиктивных references.');
+  }
+  if (hasStoryEvents(scene)) {
+    for (const entry of [{ id: 'master', value: plan.masterPrompt ?? '', needsIdentity: true }, ...plan.shots.map(s => ({ id: s.shotId, value: s.imagePrompt, needsIdentity: scene.shots.find(shot => shot.id === s.shotId)?.subjectVisibility !== 'none' }))]) {
+      const slots = entry.value.split(IDENTITY_SLOT).length - 1;
+      if (slots !== Number(!identityBound && entry.needsIdentity)) errors.push(`${entry.id}: нужен ровно один {{identity}} для видимого персонажа и ни одного для предметного кадра; после привязки слоты должны быть заполнены.`);
+      if (!identityBound && entry.value.split(/\s+/).length > 125) errors.push(`${entry.id}: оставь место для внешности, до 125 слов в исходном image prompt.`);
+      if (/\{\{|\}\}/.test(entry.value.replaceAll(IDENTITY_SLOT, ''))) errors.push(`${entry.id}: неизвестный placeholder.`);
+    }
   }
   for (const shot of plan.shots) {
     const words = shot.imagePrompt.split(/\s+/).length;
@@ -69,6 +113,7 @@ export function validatePrompts(plan: PromptPlan, scene: ScenePlan): string[] {
     if (expectedShot && (intervals.length === 0 || intervals[0]?.[0] !== 0 || intervals.at(-1)?.[1] !== expectedShot.durationSec || intervals.some(([start, end], i) => end <= start || (i > 0 && intervals[i - 1]?.[1] !== start)))) errors.push(`${shot.shotId}: интервалы motionPrompt должны непрерывно покрывать 0–${expectedShot.durationSec} s без изменения длительности.`);
     if (words > 200) errors.push(`${shot.shotId}: imagePrompt длиннее 200 слов.`);
     if (/@Image\d|<<<image_|\{\{(?:ref|intro):/.test(`${shot.imagePrompt} ${shot.motionPrompt}`)) errors.push(`${shot.shotId}: ссылки на неподключённые references запрещены.`);
+    if (/\{\{|\}\}/.test(shot.motionPrompt)) errors.push(`${shot.shotId}: motionPrompt должен быть самостоятельным, без placeholders.`);
   }
   return errors;
 }

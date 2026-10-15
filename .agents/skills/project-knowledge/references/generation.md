@@ -31,8 +31,8 @@ Seedream и upscale. Расширение каталога и эти новые 
   Soul ID из веба не работал 28.09 (404); нужен completed reference версии v2 того же API-аккаунта.
   Свой мудборд через API не создаётся (решение 27).
 - Soul 2 `image-to-image` доступен в текущей официальной документации: `image_url` — reference сцены,
-  `custom_reference_id` — identity; это разные входы. В локальном каталоге пока только text-to-image.
-  Новый endpoint не запускался; он кандидат для фиксации сцены после выявленного drift независимых кадров.
+  `custom_reference_id` — identity; это разные входы. Адаптер выбирает T2I без image ref и I2I при
+  image ref. Production events-v1 использует T2I; legacy сохраняет I2I.
 - Каталог моделей и инструментов — `src/core/gen/models.ts`; схемы, умолчания и цены у провайдеров —
   `docs/research/kie-models.md` (с датой прайса); схемы и ступени цены Topaz для картинок там нет — они в
   решении 34 и комментарии `src/core/gen/models.ts`. Поля с расходящимися умолчаниями передаются явно.
@@ -97,7 +97,8 @@ Seedream и upscale. Расширение каталога и эти новые 
 Canvas хранит выбор независимо в каждой ноде; Studio запоминает его в localStorage и возвращает
 после reload/смены модели. Другие модели Soul ID не получают. Старый UUID вне списка не стирается
 автоматически: UI предлагает синхронизацию или новый выбор. Polling персонажей работает только
-в открытом picker. В Production mode photos выбор применяется к master и всем кадрам; mode mock остаётся demo.
+в открытом picker. В Production events-v1 Soul ID применяется к master и кадрам person, включая крупные планы лица;
+для detail без лица и предметных none он не отправляется. Legacy применяет его ко всем кадрам. Mode mock остаётся demo.
 
 Создание персонажа отдельно от mock-медиа: `POST /v1/custom-references`, обязательно
 `model_version: v2`. Принимаются 1–100 локальных JPG/PNG/WebP, до 30 МБ (локальный лимит).
@@ -130,14 +131,18 @@ ffmpeg/ffprobe теперь нужны также для проверки вхо
 
 ## Production photos (15.10.2026)
 
-После Codex и отдельного cost/refs-consent gate создаётся master Soul 2 standard, затем кадры
-Soul 2 image-to-image. `image_url` — общий master, `custom_reference_id` — выбранный ready/v2 Soul ID.
-1080p/9:16, batch_size=1; I2I требует enhance_prompt=true. Price gate из общего каталога:
+После Codex и отдельного cost/refs-consent gate создаётся master Soul 2 standard, затем независимые
+Soul 2 standard по событиям и сценам плана events-v1. `image_url` не передаётся: композиция master не
+копируется; `custom_reference_id` — выбранный ready/v2 Soul ID только для person/master. Detail
+получает описание видимой части тела без портрета, none не получает привязку внешности.
+Legacy без events-v1 использует общий master как image_url и Soul ID для каждого I2I.
+1080p/9:16, batch_size=1; T2I enhance_prompt=false, legacy I2I требует enhance_prompt=true. Price gate из общего каталога:
 $0.006 × (до 3 master + 1–8 кадров) для нового consent; рядом показывается сумма без запаса.
 Это оценка каталога, не подтверждение списания; неиспользованный резерв не отправляется. Оба стиля — Soul 2.
 Поддержка одного ref и signed upload также доступны общему Soul 2 adapter. Signed PUT получает
 только upload_headers, без API authorization, без redirects/retry. Soul ID использует тот же helper.
-Опорная сцена помогает continuity, но не доказывает её. На milestone — только saved файлы;
+Master проверяет внешность и художественный вектор. В новых сериях continuity внутри локации задаётся
+паспортом и проверяется критиком; независимый T2I не гарантирует точного сохранения геометрии. На milestone — только saved файлы;
 критик Codex выполняет предварительный visual QC, владелец принимает финальное решение.
 Cost gate включает отдельное явное согласие на Codex-проверку (квота ChatGPT, не цена Higgsfield).
 Видео, upscale, reruns готовых кадров и editing в Production пока отключены. Ограниченный повтор
@@ -152,7 +157,7 @@ Cost gate включает отдельное явное согласие на C
 
 Production master gate (15.10.2026): перед первым новым master выбранный персонаж получает
 профиль внешности целиком по локальным Soul ID refs и привязанные prompts. После сохранения master
-критик проверяет его до любых I2I кадров. Только положительный отчёт для актуального master и
+критик проверяет его до любых кадров серии. Только положительный отчёт для актуального master и
 профиля разрешает продолжение; uncertain/error/legacy не проходят. Новый masterGateConsent
 разрешает профиль/master/финальный отбор и до шести identity refs. Дополнительный masterRetryConsent
 включает максимум три master всего и до пяти Codex-вызовов; верхняя сумма проверяется сервером.
