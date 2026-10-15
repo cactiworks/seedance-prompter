@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { RetouchStartSchema } from '../../core/production/retouch.ts';
 import { z } from 'zod';
 import { CHARACTER_ID } from '../../core/production/character.ts';
 import type { Characters } from './characters.ts';
@@ -32,6 +33,21 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       const input = ReviewStartSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Подтверди передачу изображений и расход квоты Codex.' }, 422);
       return c.json(await runtime.review.start(c.req.param('id'), input.data));
+    })
+    .post('/:id/retouch/quote', async (c) => {
+      const input = z.object({ ids: z.array(z.string()).min(1).max(8) }).strict().safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Выбери фотографии для проверки деталей.' }, 422);
+      return c.json(await runtime.retouch.quote(c.req.param('id'), input.data.ids));
+    })
+    .post('/:id/retouch/start', async (c) => {
+      const input = RetouchStartSchema.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Подтверди бюджет автоправок и передачу изображений.' }, 422);
+      return c.json(await runtime.retouch.start(c.req.param('id'), input.data));
+    })
+    .post('/:id/retouch/retry', async (c) => {
+      const input = z.object({ jobId: z.string().min(1).max(100) }).strict().safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Нужен ID задачи правки.' }, 422);
+      return c.json(await runtime.retouch.retry(c.req.param('id'), input.data.jobId));
     })
     .get('/:id/photos/quote', async (c) => c.json(await runtime.photos.quote(c.req.param('id'), c.req.query('retryMaster') === 'true')))
     .post('/:id/photos/start', async (c) => {
@@ -69,6 +85,6 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       const run = await runtime.get(c.req.param('id'));
       const ids = new Set(run.shots.flatMap((s) => [s.acceptedPhotoId, ...(s.step === 'ready' ? [s.finalId] : [])]));
       c.header('content-disposition', `attachment; filename="${run.id}-manifest.json"`);
-      return c.json({ mode: run.mode, character: run.character ?? null, title: run.title, script: run.script, direction: run.direction, planningMode: run.planningMode ?? 'mock', scenePlan: run.scenePlan ?? null, promptPlan: run.promptPlan ?? null, note: run.mode === 'photos' ? `Реальные фото. Приняты владельцем; ${run.review?.status === 'complete' ? 'отчёт критика приложен отдельно' : 'сохранены до подключения критика'}. Видео и upscale отключены.` : 'Медиа — локальные демонстрационные материалы, не иллюстрация реального плана. Итоговое видео остаётся 480p.', review: run.review ?? null, masterReview: run.masterReview ?? null, appearance: run.appearance ?? null, artifacts: run.artifacts.filter((a) => ids.has(a.id)), approvals: run.approvals });
+      return c.json({ mode: run.mode, character: run.character ?? null, title: run.title, script: run.script, direction: run.direction, planningMode: run.planningMode ?? 'mock', scenePlan: run.scenePlan ?? null, promptPlan: run.promptPlan ?? null, note: run.mode === 'photos' ? `Реальные фото. Приняты владельцем; ${run.review?.status === 'complete' ? 'отчёт критика приложен отдельно' : 'сохранены до подключения критика'}. Видео и upscale отключены.` : 'Медиа — локальные демонстрационные материалы, не иллюстрация реального плана. Итоговое видео остаётся 480p.', retouch: run.retouch ?? null, review: run.review ?? null, masterReview: run.masterReview ?? null, appearance: run.appearance ?? null, artifacts: run.artifacts.filter((a) => ids.has(a.id)), approvals: run.approvals });
     });
 }

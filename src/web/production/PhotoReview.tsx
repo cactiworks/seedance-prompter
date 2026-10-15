@@ -7,7 +7,7 @@ import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 
 export const VERDICT = { keep: 'Рекомендован', uncertain: 'Проверь вручную', reject: 'Есть замечание' };
-const CHECKS = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Выразительность' };
+const CHECKS = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', identityLeakage: 'Лицо на других людях', text: 'Текст в кадре', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Выразительность' };
 const RESULT = { pass: 'без видимых проблем', variation: 'допустимое отклонение', fail: 'существенная проблема', uncertain: 'не уверен', not_visible: 'вне кадра', not_applicable: 'привязка к внешности не задана' };
 export function PhotoVerdict({ result, compact = false }: { result?: ReviewResult; compact?: boolean }) {
   if (!result) return <Text variant="caption" tone="secondary">Проверяется</Text>;
@@ -25,6 +25,7 @@ export function PhotoReview({ run, scope = 'series' }: { run: ProductionRun; sco
   const state = master ? run.masterReview : run.review;
   const activeMedia = run.photos?.status === 'running' || run.photos?.items.some(i => ['submitting', 'queued', 'running', 'downloading'].includes(i.status));
   const hasPhotos = master ? !!run.photos?.masterArtifactId && appearanceReady(run) : run.shots.some(s => s.photoId);
+  if (run.retouch?.status === 'running') return null;
   if (['running', 'pending'].includes(state?.status ?? '') || activeMedia || !hasPhotos) return null;
   if (state?.status === 'complete' && (!master || masterApproved(run))) return null;
   return <details className={styles.detail} open={state?.status !== 'complete'}>

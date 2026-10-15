@@ -100,6 +100,7 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
   const run = structuredClone(source);
   if (action.type === 'pause' || action.type === 'resume') {
     run.paused = action.type === 'pause';
+    if (run.retouch?.status === 'running' && run.paused) { run.retouch.status = 'stopped'; for (const item of run.retouch.items) if (item.status === 'checking') { item.status = 'pending'; item.error = 'Проверка прервана паузой.'; } }
     if (run.photos?.status === 'running' && run.paused) run.photos.status = 'stopped';
     record(run, now, run.paused ? 'Производство поставлено на паузу.' : 'Производство продолжено с сохранённого этапа.');
     return run;
@@ -116,11 +117,11 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
       const artifact = currentArtifact(run, id);
       if (run.mode === 'photos' && artifact && !reviewedPhoto(run, id)) throw new ProductionError('INVALID', 'Сначала дождись проверки этого кадра критиком перед milestone.');
       if (!shot || !artifact || (artifact.qc !== 'pass' && !(run.mode === 'photos' && artifact.qc === 'review' && artifact.mediaId)) || shot.step !== (photo ? 'photoReview' : 'videoReview')) throw new ProductionError('INVALID', 'Принимать можно только текущие проверенные результаты этого milestone.');
-      if (photo) { shot.acceptedPhotoId = id; shot.step = run.mode === 'photos' ? 'ready' : 'videos'; }
+      if (run.mode === 'photos') throw new ProductionError('INVALID', 'После milestone нужна проверка деталей и автоправки. Подтверди их стоимость.');
+      if (photo) { shot.acceptedPhotoId = id; shot.step = 'videos'; }
       else { shot.acceptedVideoId = id; shot.step = 'upscale'; }
       shot.dueAt = now + delay;
       run.approvals.push({ kind: photo ? 'photo' : 'video', artifactId: id, at: iso(now) });
-      if (run.mode === 'photos') { artifact.qc = 'pass'; artifact.qcNote = 'Фотография принята владельцем после отчёта критика. Оценка модели сохранена отдельно.'; }
     }
     if (run.photos && run.shots.every((s) => s.step === 'ready')) run.photos.status = 'complete';
     record(run, now, `${photo ? 'Milestone 1: приняты фотографии' : 'Milestone 2: приняты видео до Topaz'} — ${ids.size}. Остальные ветви остаются на своём этапе.`);

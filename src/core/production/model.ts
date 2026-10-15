@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { RetouchState } from './retouch.ts';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
 import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 import type { PhotoState } from './photos.ts';
@@ -43,6 +44,7 @@ export interface ProductionShot {
   dueAt: number; error: string | null; editNote: string; editSourceId: string | null;
 }
 export interface ProductionRun extends RunInput {
+  retouch?: RetouchState;
   photos?: PhotoState;
   review?: ReviewState;
   masterReview?: ReviewState;
@@ -84,6 +86,8 @@ export function runLabel(run: ProductionRun): string {
   if (run.paused) return 'На паузе';
   if (run.preparation?.status === 'failed' || run.preparation?.status === 'interrupted') return 'Подготовка остановлена';
   if (run.mode === 'photos' && run.planned) {
+    if (run.retouch?.status === 'running') return 'Исправляем детали';
+    if (run.retouch?.status === 'stopped') return 'Правки требуют внимания';
     if (run.appearance?.status === 'running') return 'Фиксируется внешность';
     if (run.appearance?.status === 'failed' || run.appearance?.status === 'interrupted') return 'Внешность не закреплена';
     if (run.masterReview?.status === 'complete' && !masterApproved(run)) return 'Master не принят';

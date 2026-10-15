@@ -10,6 +10,7 @@ import { Preparation } from './Preparation.tsx';
 import { useProduction } from './store.ts';
 import { PhotoReview, PhotoVerdict } from './PhotoReview.tsx';
 import { PhotoStart } from './PhotoStart.tsx';
+import { RetouchStart } from './RetouchStart.tsx';
 import styles from './Production.module.css';
 
 const STATUS: Record<string, string> = { pending: 'Ожидает', submitting: 'Отправляется', queued: 'В очереди', running: 'Генерируется', downloading: 'Скачивается', saved: 'Сохранено', failed: 'Ошибка', unknown: 'Исход неизвестен', download_failed: 'Не скачано' };
@@ -21,13 +22,16 @@ export function ReusePlan({ run }: { run: ProductionRun }) {
 function progress(run: ProductionRun): number {
   if (!run.planned) return 0;
   if (!masterApproved(run)) return 1;
-  if (run.photos?.status === 'complete') return 4;
+  if (run.photos?.status === 'complete') return 5;
+  if (run.retouch?.status === 'running' || run.retouch?.status === 'stopped') return 4;
   return run.review?.status === 'complete' ? 3 : 2;
 }
 function nextStep(run: ProductionRun): [string, string] {
   if (run.paused) return ['На паузе', 'Серия сохранена. Уже отправленные фото завершатся; новые ждут продолжения.'];
   if (!run.planned) return [run.preparation?.status === 'running' ? 'Готовим сцену и план' : 'Подготовка остановлена', 'Сценарий сохранён.'];
   if (run.photos?.status === 'complete') return ['Фото готовы к монтажу', 'Скачай принятые кадры ниже.'];
+  if (run.retouch?.status === 'running') return ['Исправляем детали', `${run.retouch.items.filter(i => i.status === 'complete').length} из ${run.shots.length} проверено. Лицо, руки, фоновые люди и текст; затем — готовые фото.`];
+  if (run.retouch?.status === 'stopped') return ['Есть незавершённые кадры', 'Исходники сохранены. Причина указана на кадре; продолжить проверку можно ниже.'];
   if (run.appearance?.status === 'running' || run.appearance?.status === 'pending') return ['Закрепляем внешность', 'Сравниваем референсы и готовим опорный кадр.'];
   if (run.appearance?.error && run.appearance.status !== 'complete') return ['Не удалось закрепить внешность', 'Продолжи серию, чтобы повторить этот этап. Фото ещё не отправлялись.'];
   const failed = run.photos?.items.find(i => ['failed', 'unknown', 'download_failed'].includes(i.status));
@@ -41,7 +45,7 @@ function nextStep(run: ProductionRun): [string, string] {
     ? ['Создаём опорный кадр', `Попытка ${(run.photos.masterHistory?.length ?? 0) + 1} из ${run.photos.budget?.masterLimit ?? 1}.`]
     : ['Создаём фотографии', `${run.shots.filter(s => s.photoId).length} из ${run.shots.length} готово. Затем — отбор и твоя приёмка.`];
   if (run.review?.status === 'running' || (run.review?.status === 'pending' && run.photos?.status === 'review')) return ['Отбираем фотографии', 'Проверяем узнаваемость, руки и цельность всей серии.'];
-  if (run.review?.status === 'complete') return ['Выбери фото для монтажа', 'Рекомендованные уже отмечены. Итоговое решение за тобой.'];
+  if (run.review?.status === 'complete') return ['Выбери фото для монтажа', 'Выбери подходящие по замыслу. Детали система проверит и исправит после milestone.'];
   if (run.photos?.status === 'review') return ['Отбор требует внимания', 'Фото сохранены. Повтори проверку, чтобы перейти к приёмке.'];
   return [run.photos ? 'Продолжить эту серию' : 'План готов — можно создавать фото', run.photos ? 'Сохранённые этапы повторяться не будут.' : `Кадров: ${run.shots.length} · Soul 2 · 1080p · 9:16`];
 }
@@ -51,9 +55,9 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const [selected, setSelected] = useState<string[] | null>(null);
   const artifact = currentArtifact(run, inspect);
   const master = currentArtifact(run, run.photos?.masterArtifactId ?? null);
-  const eligible = run.shots.filter(s => s.step === 'photoReview' && s.photoId && reviewedPhoto(run, s.photoId)).map(s => s.photoId!);
+  const eligible = run.retouch?.status === 'running' ? [] : run.shots.filter(s => ['photoReview', 'ready'].includes(s.step) && s.photoId && (reviewedPhoto(run, s.photoId) || run.retouch?.items.some(i => i.shotId === s.id)) && !run.retouch?.items.some(i => i.shotId === s.id && i.status === 'complete')).map(s => s.photoId!);
   const recommended = eligible.filter(id => reviewedPhoto(run, id)?.verdict === 'keep');
-  const selection = (selected ?? recommended).filter(id => eligible.includes(id));
+  const selection = (selected ?? eligible).filter(id => eligible.includes(id));
   const withIssues = selection.filter(id => reviewedPhoto(run, id)?.verdict !== 'keep').length;
   const accepted = run.shots.filter(s => s.acceptedPhotoId).length;
   const step = progress(run);
@@ -63,7 +67,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const replan = () => { setDraft({ title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); };
   return <>
     <header className={styles.header}><div><Text variant="caption" tone="secondary">Серия фотографий{run.character && ` · ${run.character.name}`}</Text><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Снять паузу' : 'Пауза'}</Button>}</div></header>
-    <ol className={styles.productionPath} aria-label="Путь серии">{['План', 'Опорный кадр', 'Фотографии', 'Твоя приёмка', 'Готово'].map((label, i) => <li key={label} aria-current={step === i ? 'step' : undefined} data-complete={step > i}><span>{String(i + 1).padStart(2, '0')}</span>{label}</li>)}</ol>
+    <ol className={styles.productionPath} aria-label="Путь серии">{['План', 'Опорный кадр', 'Фотографии', 'Твоя приёмка', 'Правки деталей', 'Готово'].map((label, i) => <li key={label} aria-current={step === i ? 'step' : undefined} data-complete={step > i}><span>{String(i + 1).padStart(2, '0')}</span>{label}</li>)}</ol>
     <section className={`${styles.productionFocus} ${eligible.length ? styles.milestoneFocus : ''}`} aria-label="Следующий шаг">
       <div role="status"><Text as="h2" variant="title-s">{title}</Text><Text variant="label" tone="secondary">{note}</Text></div>
       {!run.planned && <Preparation run={run} />}
@@ -77,7 +81,8 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
         <Text variant="caption">{item.key === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === item.key)?.title}: {item.error}</Text>
         {item.jobId && (item.status === 'download_failed' || item.errorCode === 'POLL_TIMEOUT') && <div><Button variant="border" disabled={busy} onClick={() => void photoCommand('photos/retry', { jobId: item.jobId })}>Повторить {item.status === 'download_failed' ? 'скачивание' : 'проверку статуса'} · без генерации</Button></div>}
       </div>)}
-      {eligible.length > 0 && <div className={styles.gateActions}><Tag tone="warning">Milestone · приёмка фото</Tag><Text variant="caption">Выбрано {selection.length}{withIssues > 0 && ` · с замечаниями: ${withIssues}`}</Text><Button variant="primary" disabled={!selection.length || busy || run.paused} onClick={() => void act({ type: 'approvePhotos', ids: selection }).then(ok => { if (ok) setSelected(null); })}>Принять выбранные фото</Button></div>}
+      {eligible.length > 0 && <div className={styles.gateActions}><Tag tone="warning">Milestone · приёмка фото</Tag><Text variant="caption">Выбрано {selection.length}{withIssues > 0 && ` · с замечаниями: ${withIssues}`}</Text><RetouchStart run={run} ids={selection} onStarted={() => setSelected(null)} /></div>}
+      {accepted > 0 && accepted < run.shots.length && <Text variant="caption">Готово {accepted} из {run.shots.length}. Остальные позиции ещё не закрыты.</Text>}
       {accepted > 0 && <a className={styles.download} href={`/api/production/${run.id}/manifest`} download>Скачать список принятых фото · {accepted}</a>}
     </section>
     <section className={styles.productionResults} aria-label="Изображения серии">
@@ -85,7 +90,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       {master && <div className={styles.masterStrip}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорный кадр"><img src={master.url} alt="Опорный кадр" /></button><div><Text variant="label" medium>Опорный кадр · {masterAttempts(run)} / 3</Text><Text variant="caption" tone="secondary">{masterApproved(run) ? hasStoryEvents(run.scenePlan) ? 'Образ проверен · у кадров своя композиция' : 'Задаёт образ и сцену для серии' : masterRejected(run) ? 'Требует внимания' : 'Проверяется'}</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Рассмотреть</Button></div></div>}
       {run.shots.some(s => s.photoId) ? <div className={styles.grid}>{run.shots.map(shot => {
         const photo = currentArtifact(run, shot.photoId); if (!photo) return null;
-        return <article className={styles.asset} key={photo.id}><button type="button" className={`${styles.thumbnail} ${styles.photoThumbnail}`} onClick={() => setInspect(photo.id)} aria-label={`Открыть ${shot.title}`}><img src={photo.url} alt={shot.title} /></button><div className={styles.assetBody}><div className={styles.assetTitle}><Text variant="label" medium>{shot.title}</Text>{eligible.includes(photo.id) && <input type="checkbox" aria-label={`Принять ${shot.title}`} checked={selection.includes(photo.id)} disabled={busy || run.paused} onChange={() => setSelected(selection.includes(photo.id) ? selection.filter(id => id !== photo.id) : [...selection, photo.id])} />}</div>{shot.acceptedPhotoId ? <><Tag tone="success">Принято тобой</Tag><a className={styles.download} href={photo.url} download>Скачать фото</a></> : <PhotoVerdict compact result={reviewedPhoto(run, photo.id)} />}</div></article>;
+        return <article className={styles.asset} key={photo.id}><button type="button" className={`${styles.thumbnail} ${styles.photoThumbnail}`} onClick={() => setInspect(photo.id)} aria-label={`Открыть ${shot.title}`}><img src={photo.url} alt={shot.title} /></button><div className={styles.assetBody}><div className={styles.assetTitle}><Text variant="label" medium>{shot.title}</Text>{eligible.includes(photo.id) && <input type="checkbox" aria-label={`Принять ${shot.title}`} checked={selection.includes(photo.id)} disabled={busy || run.paused} onChange={() => setSelected(selection.includes(photo.id) ? selection.filter(id => id !== photo.id) : [...selection, photo.id])} />}</div>{run.retouch?.items.find(i => i.shotId === shot.id)?.error && <Text variant="caption">{run.retouch.items.find(i => i.shotId === shot.id)!.error}</Text>}{shot.acceptedPhotoId ? <><Tag tone="success">{run.retouch?.items.some(i => i.shotId === shot.id && i.status === 'complete') ? 'Детали проверены' : 'Принято ранее'}</Tag><a className={styles.download} href={photo.url} download>Скачать фото</a></> : <PhotoVerdict compact result={reviewedPhoto(run, photo.id)} />}</div></article>;
       })}</div> : <div className={styles.resultEmpty}><Text variant="label" tone="secondary">Здесь появятся кадры серии после проверки опорного изображения.</Text></div>}
     </section>
     <details className={styles.productionDetails}><summary>Детали производства</summary><div className={styles.detailsBody}>
@@ -93,12 +98,13 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       <details className={styles.detail}><summary>Внешность и prompts</summary>{run.appearance?.error && <Text>{run.appearance.error}</Text>}{run.appearance?.output && <><Text>{run.appearance.output.profile.summaryRu}</Text><pre>{JSON.stringify(run.appearance.output.profile, null, 2)}</pre></>}<pre>{boundPrompts(run)?.masterPrompt}</pre>{boundPrompts(run)?.shots.map(shot => <pre key={shot.shotId}>{shot.shotId}: {shot.imagePrompt}</pre>)}</details>
       <details className={styles.detail}><summary>Задачи и проверки</summary>{run.photos?.items.map(item => <div className={styles.photoJob} key={item.tag}><div><Text variant="label">{item.key === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === item.key)?.title}</Text><Text variant="caption">{item.taskId} {item.error}</Text></div><Tag>{STATUS[item.status]}</Tag></div>)}{[run.appearance, run.masterReview, run.review].filter(Boolean).map((state, i) => <pre key={i}>{JSON.stringify(state, null, 2)}</pre>)}</details>
       {!!run.photos?.masterHistory?.length && <details className={styles.detail}><summary>Предыдущие опорные кадры · {run.photos.masterHistory.length}</summary><div className={styles.grid}>{run.photos.masterHistory.map((history, i) => { const old = currentArtifact(run, history.artifactId); return old && <article key={old.id} className={styles.asset}><button className={styles.thumbnail} onClick={() => setInspect(old.id)} aria-label={`Открыть попытку ${i + 1}`}><img src={old.url} alt={`Опорный кадр, попытка ${i + 1}`} /></button><div className={styles.assetBody}><Text variant="caption">{history.review.report?.results[0]?.reason}</Text></div></article>; })}</div></details>}
+      {run.retouch && <details className={styles.detail}><summary>Автоправки · версии и проверки</summary><pre>{JSON.stringify(run.retouch, null, 2)}</pre></details>}
       <details className={styles.detail}><summary>История · {run.events.length}</summary><ol className={styles.events}>{run.events.map((event, i) => <li key={i}><time>{new Date(event.at).toLocaleTimeString('ru-RU')}</time>{event.message}</li>)}</ol></details>
       <Button variant="border" disabled={busy} onClick={replan}>Изменить замысел — открыть заполненный brief</Button><Text variant="caption" tone="secondary">Новая версия плана создаётся отдельно. Текущая серия и фото сохраняются.</Text>
       {failures.some(i => i.status === 'failed' || i.status === 'unknown') && <ReusePlan run={run} />}
     </div></details>
     <Dialog open={!!artifact} onOpenChange={open => { if (!open) setInspect(null); }} size="l" title={artifact?.shotId === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === artifact?.shotId)?.title ?? 'Фотография'} description="Фото и результат проверки">
-      {artifact && <div className={styles.inspect}><img className={styles.preview} src={artifact.url} alt={artifact.shotId === 'scene' ? 'Опорный кадр' : 'Фотография серии'} /><div className={styles.inspectData}><PhotoVerdict result={inspectReview || undefined} /><a className={styles.download} href={artifact.url} download>Скачать исходный файл</a><details className={styles.detail}><summary>Prompt и данные задачи</summary><Text variant="caption">{artifact.model} · {artifact.taskId} · оценка {photoPrice(artifact.cost)}</Text><Text variant="caption">{artifact.qcNote}</Text><pre>{artifact.prompt}</pre></details></div></div>}
+      {artifact && <div className={styles.inspect}><img className={styles.preview} src={artifact.url} alt={artifact.shotId === 'scene' ? 'Опорный кадр' : 'Фотография серии'} /><div className={styles.inspectData}><PhotoVerdict result={inspectReview || undefined} /><a className={styles.download} href={artifact.url} download>Скачать эту версию</a>{artifact.sourceId && currentArtifact(run, artifact.sourceId) && <Button variant="border" onClick={() => setInspect(artifact.sourceId)}>Посмотреть до правки</Button>}<details className={styles.detail}><summary>Prompt и данные задачи</summary><Text variant="caption">{artifact.model} · {artifact.taskId} · оценка {photoPrice(artifact.cost)}</Text><Text variant="caption">{artifact.qcNote}</Text><pre>{artifact.prompt}</pre></details></div></div>}
     </Dialog>
   </>;
 }

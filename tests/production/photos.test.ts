@@ -7,6 +7,7 @@ import { createGenRuntime, type GenRuntime } from '../../src/server/gen/runtime.
 import { GenError, type GenProvider } from '../../src/server/gen/provider.ts';
 import type { Runner } from '../../src/server/llm/tasks/write.ts';
 import { DEMO_INPUT } from '../../src/core/production/model.ts';
+import { quoteRetouch } from '../../src/core/production/retouch.ts';
 import { PhotoStartSchema, quotePhotos } from '../../src/core/production/photos.ts';
 import type { CharacterSelection } from '../../src/core/production/character.ts';
 import { SoulIdError } from '../../src/server/production/soulId.ts';
@@ -42,12 +43,13 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
   const calls: LlmRequest[] = [];
   const runLlm: Runner = async <T>(request: LlmRequest) => {
     calls.push(request);
+    const retouch = request.taskRu === 'Автоправки деталей Production';
     const critic = request.taskRu === 'Критик фотографий Production';
     const appearance = request.taskRu === 'Внешность персонажа Production';
     const reviewer = JSON.parse(request.user).scope === 'master' ? masterRunner : reviewRunner;
     if (critic && reviewer) return reviewer<T>(request);
     if (appearance && appearanceRunner) return appearanceRunner<T>(request);
-    return { data: (critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : appearance ? appearanceOutput(count) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T,
+    return { data: (retouch ? { result: reviewReport([JSON.parse(request.user).candidate.artifactId]).results[0], preserved: 'pass', fixes: [] } : critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : appearance ? appearanceOutput(count) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T,
       meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } };
   };
   const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, now: () => clock, delayMs: 1 });
@@ -56,9 +58,10 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
   await rt.waitForPreparation(created.id);
   const get = () => rt.get(created.id);
   const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const, reviewConsent: true as const, masterGateConsent: true as const }; };
-  const cycle = async (waitReview = true) => { clock += 60_000; await gen.tick(); await rt.tick(); await rt.appearance.wait(created.id); if (waitReview) await rt.review.wait(created.id); };
+  const cycle = async (waitReview = true) => { clock += 60_000; await gen.tick(); await rt.tick(); await rt.appearance.wait(created.id); if (waitReview) await rt.review.wait(created.id); await rt.retouch.wait(created.id); };
   const dispatch = async () => { await rt.tick(); await rt.appearance.wait(created.id); await rt.tick(); };
-  return { dispatch, rt, gen, dir, provider, submit, calls, id: created.id, get, input, cycle, failDownload: (value: boolean) => { failDownload = value; } };
+  const accept = async (ids: string[]) => { const run = await get(); await rt.retouch.start(run.id, { rev: run.rev, requestId: crypto.randomUUID(), ids, confirmUsd: quoteRetouch(run, ids).usd, consent: true }); for (let n = 0; n < count + 1; n++) await cycle(); return get(); };
+  return { accept, dispatch, rt, gen, dir, provider, submit, calls, id: created.id, get, input, cycle, failDownload: (value: boolean) => { failDownload = value; } };
 }
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
@@ -105,7 +108,7 @@ describe('real photos with injected providers only', () => {
     expect(run.artifacts[1]!.sourceId).toBe(run.photos!.masterArtifactId);
     expect(run.scenePlan!.storyboardVersion).toBeUndefined();
   });
-  it('keeps rejected files and permits an explicit owner override without new media', async () => {
+  it('keeps rejected files and requires a detail audit after the owner accepts their intent', async () => {
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
       for (const result of report.results) { result.verdict = 'reject'; result.checks.shotMatch = 'fail'; }
@@ -118,7 +121,8 @@ describe('real photos with injected providers only', () => {
     expect(run.review?.report?.results.every(r => r.verdict === 'reject')).toBe(true);
     expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true);
     expect(await s.gen.library.get(run.artifacts[1]!.mediaId!)).toBeTruthy();
-    const accepted = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids });
+    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids })).rejects.toThrow('автоправки');
+    const accepted = await s.accept(ids);
     expect(accepted.shots[0]!.acceptedPhotoId).toBe(ids[0]);
     expect(accepted.artifacts).toHaveLength(2); expect(s.submit).toHaveBeenCalledTimes(2);
   });
@@ -157,7 +161,7 @@ describe('real photos with injected providers only', () => {
     const ids = run.shots.map((shot) => shot.photoId!);
     expect(run.artifacts.find((a) => a.id === ids[0])!.sourceId).toBeNull();
     await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids: [run.photos!.masterArtifactId!] })).rejects.toThrow('milestone');
-    run = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids });
+    run = await s.accept(ids);
     expect(run.photos!.status).toBe('complete');
     expect(run.shots.every((shot) => shot.step === 'ready')).toBe(true);
     for (let i = 0; i < 4; i++) await s.cycle();
@@ -240,10 +244,10 @@ describe('real photos with injected providers only', () => {
     for (let i = 0; i < 15; i++) await s.cycle();
     let run = await s.get(); expect(paid).toHaveBeenCalledTimes(3); expect(run.photos!.status).toBe('stopped');
     expect(run.shots[0]!.step).toBe('photoReview'); expect(run.shots[1]!.photoId).toBeNull(); expect(run.photos!.items[3]!.status).toBe('pending');
-    run = await s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids: [run.shots[0]!.photoId!] });
+    run = await s.accept([run.shots[0]!.photoId!]);
     const fresh = await s.rt.forkPhotos(s.id, run.rev, crypto.randomUUID());
     expect(fresh.photos).toBeUndefined(); expect(fresh.artifacts).toEqual([]); expect(fresh.approvals).toEqual([]);
-    expect(s.calls).toHaveLength(5); expect((await s.get()).shots[0]!.acceptedPhotoId).not.toBeNull();
+    expect(s.calls).toHaveLength(6); expect((await s.get()).shots[0]!.acceptedPhotoId).not.toBeNull();
   });
   it('reuses old Codex plans without another LLM call, media or approvals; accepts old plans without masterPrompt', async () => {
     const s = await setup(1); const old = await s.get();

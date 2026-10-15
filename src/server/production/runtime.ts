@@ -11,6 +11,7 @@ import type { GenRuntime } from '../gen/runtime.ts';
 import { createPhotoProduction } from './photos.ts';
 import { createAppearancePreparation } from './appearance.ts';
 import { createPhotoReview } from './review.ts';
+import { createRetouch } from './retouch.ts';
 import { agentError, directScene, writePrompts, type AgentOptions } from './agents.ts';
 
 const ID = /^pr-[a-z0-9-]{6,70}$/;
@@ -64,6 +65,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   const photos = createPhotoProduction(photoStore, options.gen, now);
   const appearance = createAppearancePreparation(photoStore, { ...options, now });
   const review = createPhotoReview(photoStore, { dataDir: options.dataDir, gen: options.gen, runLlm: options.runLlm, now });
+  const retouch = createRetouch(photoStore, { ...options, now });
   async function tick(): Promise<void> {
     await exclusive(async () => {
       for (const run of await list()) {
@@ -71,7 +73,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
         if (next !== run) await write(next);
       }
     });
-    for (const run of await list()) if (run.mode === 'photos' && run.photos) { await appearance.tick(run.id); await photos.tick(run.id); await review.tick(run.id); }
+    for (const run of await list()) if (run.mode === 'photos' && run.photos) { await appearance.tick(run.id); await photos.tick(run.id); await review.tick(run.id); await retouch.tick(run.id); }
   }
   async function updatePreparation(id: string, attempt: number, change: (run: ProductionRun) => ProductionRun | void, includeStopped = false): Promise<void> {
     await exclusive(async () => {
@@ -123,7 +125,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     });
   }
   return {
-    get: read, list, tick, photos, review, appearance,
+    get: read, list, tick, photos, review, appearance, retouch,
     forkPhotos: (id: string, rev: number, requestId: string): Promise<ProductionRun> => exclusive(async () => {
       const existing = (await list()).find((r) => r.requestId === requestId);
       if (existing) {
@@ -189,7 +191,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
         }
         return write(next);
       });
-      if (action.type === 'pause') { pending.get(id)?.controller.abort(); review.cancel(id); appearance.cancel(id); }
+      if (action.type === 'pause') { pending.get(id)?.controller.abort(); review.cancel(id); appearance.cancel(id); retouch.cancel(id); }
       if (action.type === 'retryPreparation') launchPreparation(id, run.preparation!.attempt);
       return run;
     },
@@ -204,7 +206,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
           await write(run);
         }
       });
-      for (const run of await list()) if (run.mode === 'photos') { await appearance.recover(run.id); await review.recover(run.id); if (run.photos && options.gen) await photos.recover(run.id); }
+      for (const run of await list()) if (run.mode === 'photos') { await appearance.recover(run.id); await review.recover(run.id); if (run.photos && options.gen) await photos.recover(run.id); await retouch.recover(run.id); }
       timer = setInterval(() => {
         if (ticking) return;
         ticking = true;
@@ -212,7 +214,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
       }, 450);
       timer.unref();
     },
-    stop(): void { photos.stop(); review.stop(); appearance.stop(); if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
+    stop(): void { retouch.stop(); photos.stop(); review.stop(); appearance.stop(); if (timer) clearInterval(timer); timer = undefined; for (const job of pending.values()) job.controller.abort(); },
   };
 }
 export type ProductionRuntime = ReturnType<typeof createProductionRuntime>;

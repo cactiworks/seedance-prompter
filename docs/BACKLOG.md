@@ -5,6 +5,17 @@
 
 ## Статус этапов
 
+15.10.2026 (автоправки): после выбора замысла на photo milestone — Codex audit деталей,
+локальные правки Seedream 5 Pro / KIE и повторная проверка. Отдельные identityLeakage/text checks,
+борода в character/appearance, физика рук. До трёх edit attempts на кадр; cost/refs/quota consent
+отдельно от генерации Soul. Пиксели вне областей берутся из исходника. Все версии сохраняются;
+незакрытые позиции не становятся ready и не пропадают. Старые серии можно продолжить на месте.
+Две волны prompt review, финальная clean. Yab: milestone/cost gate; Chromium: 1440/1024/767,
+светлая/тёмная темы, смена выбора, inspector, остановленная правка — без overflow и page errors.
+Полный npm run check: 479 tests / 44 files, включая fake-провайдеров и попиксельный compositor.
+Продуктовые LLM и платные медиа не запускались.
+
+
 15.10.2026 (события сценария): новые планы events-v1 содержат отдельные beat/action/startFrame и
 паспорта локаций. Master проверяет образ до серии, но не передаётся в image reference новых кадров.
 Soul ID сохраняется для person, включая крупные планы лица; detail без лица получает локальную
