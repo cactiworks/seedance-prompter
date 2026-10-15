@@ -172,22 +172,38 @@ repair; ошибки провайдера не повторяются автом
 Codex. Async `start()` помечает незавершённые вызовы interrupted, без автоповтора после рестарта.
 Runtime принимает общий `GenRuntime`; секреты не читает. `server/production/photos.ts` хранит
 intent перед submit, связывает GenJob по id/tag, импортирует только saved/readable image в artifacts.
-Порядок: master T2I → каждый кадр I2I с master image_url; Soul ID отдельным custom_reference_id.
-Quote включает master+n; POST `/:id/photos/start` принимает rev, UUID requestId, confirmUsd,
-refsConsent=true и reviewConsent=true. Числовой гейт проверяется до job creation; повтор UUID идемпотентен. Выбор Soul ID
-проверяется HTTP-слоем и фиксируется после начала фото. Ошибка останавливает будущие отправки.
-Pause/restart требуют новой цены на pending; известные задачи продолжают poll/download.
+Порядок: фиксация внешности → master T2I → обязательный critic gate → I2I каждого кадра → финальный отбор.
+POST `/:id/photos/start` принимает rev, UUID requestId, точную confirmUsd, refsConsent=true,
+reviewConsent=true и новый masterGateConsent=true. Старые клиенты без нового consent отклоняются.
+Для выбранного Soul ID `server/production/appearance.ts` берёт до шести равномерно распределённых
+локальных training refs, делает JPEG-копии max1568 и одним Codex-вызовом получает описание лица,
+причёски, телосложения/пропорций, общего облика и связанные prompts. Profile хранит evidence/unknowns,
+источник character/reference IDs и upload IDs. Нет локальных refs или usable=false — master не запускается.
+Каждый image prompt обязан дословно включать anchorEn, укладываться в 40–200 слов; motionPrompt
+не меняется. Исходный план сохраняется; `boundPrompts` выбирает привязанные тексты для отправки.
+
+`masterReview` хранится отдельно от финального `review` и проверяет только текущий master плюс
+identity refs и профиль. `masterApproved` требует exact master artifact ID, текущий appearance request,
+полный pass по character/face/likeness/continuity/shotMatch/visualInterest, допустимые руки и keep.
+Обязательность проверяется в photos.tick перед intent и повторно перед submit. Reject, uncertain,
+legacy без character check, ошибка/пауза/рестарт блокируют следующие кадры; автоматического override
+и перегенерации нет. Для серии без Soul ID likeness=not_applicable, остальные master-критерии действуют.
+B-roll без человека может иметь character=not_visible только в финальном отборе, не в master gate.
+
+`review.ts` выполняет master и series вызовы по сохранённому согласию. Модель критика:
+SP_PRODUCTION_CRITIC_MODEL → SP_LLM_MODEL → default. Новый запуск разрешает до шести refs,
+старое сохранённое согласие без referenceLimit остаётся ограничено двумя. Отчёты содержат точные
+artifact IDs, consent, usage и status; валидатор проверяет покрытие и согласованность вердиктов.
+POST `/:id/review` принимает scope=master|series (по умолчанию series), rev/requestId/consent и
+optional referenceLimit=6. Повтор проверки master не возобновляет платную генерацию: после остановки
+нужен новый cost gate. После complete reject/uncertain photos/start не обходит gate.
+Pause/restart прерывают appearance, masterReview и review; поздние ответы не применяются, автоповтора нет.
+Legacy/paused данные не мигрируются в новые LLM-вызовы автоматически. Quote включает только pending
+master+n, подтверждение стоимости разрешает последовательные отправки только до следующего блокера.
 Retry `/:id/photos/retry` только для download_failed/POLL_TIMEOUT. Unknown не пересоздаётся.
-Artifact qc=review до решения владельца. `server/production/review.ts` после остановки media
-передаёт реальные JPEG-копии (max1568) master+shots и до двух локальных identity refs в один
-Codex vision вызов. Model: SP_PRODUCTION_CRITIC_MODEL → SP_LLM_MODEL → default.
-`core/production/review.ts` проверяет схему, точное покрытие artifact IDs и согласованность
-вердиктов; без identity видимое лицо не получает подтверждения likeness. Отчёт хранится в review
-вместе с snapshot IDs, consent, usage, статусом и ошибкой. Приёмка разрешена только для
-проверенного ID, но владелец может принять reject/uncertain. Критик не удаляет и не генерирует.
-POST `/:id/review` (rev/requestId/consent) запускает проверку legacy или явный retry.
-Ошибка блокирует приёмку, не повторяет LLM; pause/restart помечают interrupted. Legacy без
-согласия не запускается при tick/restart. Manifest включает отчёт, но выдаёт только принятые фото.
+Финальный `review` остаётся обязательным перед ручной приёмкой: владелец может принять shot с
+замечаниями, но этим нельзя разблокировать master. Manifest включает оба отчёта и профиль с
+привязанными prompts; исходные фото и training refs на GitHub не попадают.
 Принятие переводит ветвь в ready, видео/upscale запрещены.
 `/:id/fork-photos` копирует готовый Codex-план без LLM/artifacts/approvals, с дедупликацией requestId.
 Старые планы без masterPrompt используют establishing-вариант первого prompt. Новые требуют поле.

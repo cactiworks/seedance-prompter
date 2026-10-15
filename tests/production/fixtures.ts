@@ -16,7 +16,14 @@ export function promptPlan(count = 3): PromptPlan {
 export function reviewReport(ids: string[]) {
   return { summary: 'Тестовый отчёт, без оценки настоящего качества.', results: ids.map((artifactId) => ({
     artifactId, verdict: 'keep' as const, reason: 'Соответствует плану в тестовом ответе.',
-    checks: { face: 'pass' as const, likeness: 'pass' as const, hands: 'pass' as const, continuity: 'pass' as const, shotMatch: 'pass' as const, visualInterest: 'pass' as const },
+    checks: { character: 'pass' as const, face: 'pass' as const, likeness: 'pass' as const, hands: 'pass' as const, continuity: 'pass' as const, shotMatch: 'pass' as const, visualInterest: 'pass' as const },
     observations: [{ region: 'Весь кадр', evidence: 'Тестовые признаки сцены присутствуют.' }],
   })) };
+}
+
+export function appearanceOutput(count = 2) {
+  const anchorEn = 'An adult man with short dark wavy hair, a broad forehead, straight eyebrows and a defined jaw. His visible shoulders are moderately broad and his torso has a straight natural silhouette, consistently preserved across the photographs.';
+  const source = promptPlan(count);
+  return { profile: { anchorEn, summaryRu: 'Синтетический профиль для теста.', traits: { presentation: 'Взрослый мужской образ', face: 'Выраженная челюсть', hair: 'Короткие волнистые волосы', build: 'Прямой силуэт' }, evidence: [{ imageIndex: 1, observation: 'Тестовое наблюдение' }], unknowns: [], usable: true },
+    prompts: { ...source, masterPrompt: `${anchorEn} ${source.masterPrompt}`, shots: source.shots.map(s => ({ ...s, imagePrompt: `${anchorEn} ${s.imagePrompt}` })) } };
 }

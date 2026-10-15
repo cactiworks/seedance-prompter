@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
 import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 import type { PhotoState } from './photos.ts';
-import type { ReviewState } from './review.ts';
+import { masterApproved, type ReviewState } from './review.ts';
+import type { AppearanceState } from './appearance.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
@@ -44,6 +45,8 @@ export interface ProductionShot {
 export interface ProductionRun extends RunInput {
   photos?: PhotoState;
   review?: ReviewState;
+  masterReview?: ReviewState;
+  appearance?: AppearanceState;
   planSourceId?: string;
   character?: CharacterSelection | null;
   id: string; rev: number; createdAt: string; updatedAt: string; paused: boolean;
@@ -81,6 +84,12 @@ export function runLabel(run: ProductionRun): string {
   if (run.paused) return 'На паузе';
   if (run.preparation?.status === 'failed' || run.preparation?.status === 'interrupted') return 'Подготовка остановлена';
   if (run.mode === 'photos' && run.planned) {
+    if (run.appearance?.status === 'running') return 'Фиксируется внешность';
+    if (run.appearance?.status === 'failed' || run.appearance?.status === 'interrupted') return 'Внешность не закреплена';
+    if (run.masterReview?.status === 'complete' && !masterApproved(run)) return 'Master не принят';
+    if (run.masterReview?.status === 'failed' || run.masterReview?.status === 'interrupted') return 'Проверка master остановлена';
+    if (run.masterReview?.status === 'running') return 'Критик проверяет master';
+    if (run.photos?.status === 'running' && run.masterReview?.status === 'pending' && run.photos.masterArtifactId) return 'Кадры ждут проверки master';
     if (run.review?.status === 'running') return 'Критик проверяет фото';
     if (run.review?.status === 'pending' && run.photos?.status === 'review') return 'Ожидает критика';
     if (run.review?.status === 'failed' || run.review?.status === 'interrupted') return 'Проверка остановлена';

@@ -3,7 +3,8 @@ import { ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, Artifact } from '../../core/production/model.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
 import { SubmitError } from '../gen/runtime.ts';
-import { pendingReview } from '../../core/production/review.ts';
+import { appearanceReady, boundPrompts, pendingAppearance } from '../../core/production/appearance.ts';
+import { masterApproved, pendingReview } from '../../core/production/review.ts';
 
 interface Store {
   get(id: string): Promise<ProductionRun>;
@@ -29,18 +30,21 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       if (run.photos?.requests.some((r) => r.id === input.requestId)) return;
       if (run.rev !== input.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Проверь стоимость и персонажа заново.');
       readyForPhotos(run);
-      if (run.review?.status === 'running') throw new ProductionError('INVALID', 'Сначала дождись критика или поставь серию на паузу.');
+      if ([run.review, run.masterReview, run.appearance].some(s => s?.status === 'running')) throw new ProductionError('INVALID', 'Сначала дождись критика или поставь серию на паузу.');
       if (run.photos?.status === 'running' || run.photos?.items.some(failed)) throw new ProductionError('INVALID', 'Сначала дождись текущих задач или разбери остановленную генерацию. Повтора платных задач нет.');
       const quote = quotePhotos(run);
-      if (!quote.count || quote.usd !== input.confirmUsd || input.refsConsent !== true || input.reviewConsent !== true) throw new ProductionError('INVALID', 'Стоимость или согласие не совпали. Подтверди также проверку изображений через Codex.');
+      if (!quote.count || quote.usd !== input.confirmUsd || input.refsConsent !== true || input.reviewConsent !== true || input.masterGateConsent !== true) throw new ProductionError('INVALID', 'Стоимость или согласие не совпали. Подтверди также проверку изображений через Codex.');
       if (!run.photos) {
         run.photos = { status: 'stopped', identityId: run.character?.referenceId ?? null, masterArtifactId: null, requests: [],
           items: ['scene', ...run.shots.map((s) => s.id)].map((key) => ({ key, tag: `production:${run.id}:${input.requestId}:${key}`, jobId: null, taskId: null, status: 'pending', mediaId: null, error: null, errorCode: null })) };
       }
       if (run.photos.identityId !== (run.character?.referenceId ?? null)) throw new ProductionError('INVALID', 'Персонаж изменился после начала серии. Создай отдельную серию.');
+      if (run.masterReview?.status === 'complete' && !masterApproved(run)) throw new ProductionError('INVALID', 'Master отклонён или сомнителен. Продолжение заблокировано. Создай новую серию либо явно повтори проверку master без генерации.');
+      if (run.character && !appearanceReady(run)) run.appearance = pendingAppearance(run, input.requestId, now());
+      if (!masterApproved(run)) run.masterReview = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
       run.photos.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       run.photos.status = 'running';
-      run.review = pendingReview(input.requestId, now());
+      run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
       record(run, now(), `Подтверждена генерация ${quote.count} изображений: оценка $${quote.usd.toFixed(3)}. Reference сцены и Soul ID передаются Higgsfield. Видео и upscale отключены.`);
     });
   }
@@ -104,16 +108,17 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       let intent: { key: string; tag: string; prompt: string; masterMediaId: string | null; identityId: string | null } | undefined;
       await store.update(id, (run) => {
         const state = run.photos;
-        if (run.paused || !state || state.status !== 'running' || state.items.some(failed)) return;
+        if (run.paused || !state || state.status !== 'running' || state.items.some(failed) || !run.masterReview || !appearanceReady(run)) return;
         if (state.items.some((i) => !['pending', 'saved'].includes(i.status))) return;
         const item = state.items.find((i) => i.status === 'pending');
         if (!item) return;
         const masterMediaId = state.items.find((i) => i.key === 'scene')?.mediaId ?? null;
-        if (item.key !== 'scene' && !masterMediaId) return;
-        const first = run.promptPlan!.shots[0]!.imagePrompt;
+        if (item.key !== 'scene' && (!masterMediaId || !masterApproved(run))) return;
+        const prompts = boundPrompts(run)!;
+        const first = prompts.shots[0]!.imagePrompt;
         const prompt = item.key === 'scene'
-          ? run.promptPlan!.masterPrompt ?? `${first} Wide establishing composition showing the entire room, the subject, wardrobe, main objects and light direction. This image establishes the location for a consistent photo series.`
-          : run.promptPlan!.shots.find((s) => s.shotId === item.key)!.imagePrompt;
+          ? prompts.masterPrompt ?? `${first} Wide establishing composition showing the entire room, the subject, wardrobe, main objects and light direction. This image establishes the location for a consistent photo series.`
+          : prompts.shots.find((s) => s.shotId === item.key)!.imagePrompt;
         item.status = 'submitting';
         record(run, now(), `${item.key === 'scene' ? 'Опорная сцена' : run.shots.find((s) => s.id === item.key)!.title}: отправка в Higgsfield.`);
         intent = { key: item.key, tag: item.tag, prompt, masterMediaId, identityId: state.identityId };
@@ -122,7 +127,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       const sent = intent;
       try {
         const current = await store.get(id);
-        if (stopped || current.paused || current.photos?.status !== 'running') {
+        if (stopped || current.paused || current.photos?.status !== 'running' || !appearanceReady(current) || (sent.key !== 'scene' && !masterApproved(current))) {
           await store.update(id, (run) => {
             const item = run.photos!.items.find((i) => i.key === sent.key)!;
             item.status = 'pending'; record(run, now(), 'Отправка отложена до подтверждённого продолжения.');

@@ -146,3 +146,11 @@ Cost gate включает отдельное явное согласие на C
 [Прайс I2I](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/playground)
 указывает $0.0057 при 1080p; каталог хранит округлённую оценку $0.006 из account /estimate.
 Платной проверки текущего маршрута не было.
+
+
+Production master gate (15.10.2026): перед первым новым master выбранный персонаж получает
+профиль внешности целиком по локальным Soul ID refs и привязанные prompts. После сохранения master
+критик проверяет его до любых I2I кадров. Только положительный отчёт для актуального master и
+профиля разрешает продолжение; uncertain/error/legacy не проходят. Новый masterGateConsent
+явно разрешает до трёх Codex-вызовов и до шести identity refs. Pause/restart/reject не вызывают
+платный retry. Проверки с injected providers подтверждают gate, не качество новых фото.

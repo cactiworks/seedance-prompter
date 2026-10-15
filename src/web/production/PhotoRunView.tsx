@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { currentArtifact, runLabel, type ProductionRun } from '../../core/production/model.ts';
 import { photoPrice, type PhotoQuote } from '../../core/production/photos.ts';
-import { reviewedPhoto } from '../../core/production/review.ts';
+import { masterApproved, reviewedPhoto } from '../../core/production/review.ts';
+import { boundPrompts } from '../../core/production/appearance.ts';
 import { Button, Dialog, Tag, Text } from '../ui/components/index.ts';
 import { CharacterField } from './CharacterField.tsx';
 import { Preparation } from './Preparation.tsx';
@@ -43,21 +44,22 @@ function PhotoStart({ run }: { run: ProductionRun }) {
     finally { setLoading(false); }
   }
   if (!run.planned) return <Text variant="label" tone="secondary">Ожидает сцены и prompts от Codex.</Text>;
-  if (active) return <Text variant="label" tone="secondary">Создаётся опорная сцена, затем кадры с её reference. Новые задачи отправляются последовательно. Пауза остановит будущие отправки; уже отправленная задача завершится.</Text>;
+  if (run.masterReview?.status === 'complete' && !masterApproved(run)) return <Text role="alert">Master не принят критиком. Продолжение этой серии заблокировано; причина и повтор проверки доступны ниже.</Text>;
+  if (active) return <Text variant="label" tone="secondary">Сначала фиксируется внешность по референсам, затем создаётся master. Кадры ждут положительного вердикта критика по master. Новые задачи отправляются последовательно. Пауза остановит будущие отправки; уже отправленная задача завершится.</Text>;
   if (blocked) return <div className={styles.notice}><Text variant="label">Генерация остановлена. Сохранённые фото доступны ниже. Платные задачи автоматически не повторяются; причина показана у конкретного кадра.</Text><Text variant="caption">Если исход отправки неизвестен, сначала сверь историю Higgsfield. Новая серия по этому плану оплачивается отдельно.</Text><ReusePlan run={run} /></div>;
   if (!remaining) return null;
   return <div className={styles.notice} data-photo-cost>
     <Text variant="label" medium>{run.photos ? 'Продолжить оставшиеся фото' : 'Готово к генерации реальных фото'}</Text>
-    <Text variant="caption" tone="secondary">Soul 2 · 1080p · 9:16. Один опорный кадр задаёт сцену; каждый кадр плана получает его как reference. Phone и Cinematic меняют манеру съёмки. {run.character ? `Лицо: ${run.character.name}.` : 'Soul ID не выбран — фото будут без привязки к твоему лицу.'}</Text>
+    <Text variant="caption" tone="secondary">Soul 2 · 1080p · 9:16. Один опорный кадр задаёт сцену; каждый кадр плана получает его как reference. Phone и Cinematic меняют манеру съёмки. {run.character ? `Персонаж: ${run.character.name}.` : 'Soul ID не выбран — фото будут без привязки к твоему лицу.'}</Text>
     {error && <Text role="alert">{error}</Text>}
     {quote && <>
       <Text variant="title-s">Оценка {photoPrice(quote.usd)} · фото: {quote.count}</Text>
       <Text variant="label">Опорная сцена: {quote.sceneCount} · кадры: {quote.shotCount} · {photoPrice(quote.perImageUsd)} за изображение.</Text>
       <Text variant="caption" tone="secondary">Оценка из каталога приложения. Фактическое списание определяет Higgsfield. Видео, upscale и повторные генерации сюда не входят.</Text>
-      <label className={styles.check}><input type="checkbox" checked={consent} disabled={busy || run.paused} onChange={(e) => setConsent(e.target.checked)} />Подтверждаю стоимость и передачу prompts, reference сцены и Soul ID в Higgsfield. Разрешаю последующую проверку фото серии, опорной сцены и до двух локальных фото Soul ID через Codex / OpenAI — один вызов из квоты ChatGPT.</label>
+      <label className={styles.check}><input type="checkbox" checked={consent} disabled={busy || run.paused} onChange={(e) => setConsent(e.target.checked)} />Подтверждаю стоимость и передачу prompts, reference сцены и Soul ID в Higgsfield. Разрешаю передать до шести локальных фото Soul ID в Codex / OpenAI для фиксации внешности и привязки prompts; затем проверить master до остальных кадров и выполнить финальный отбор. До трёх вызовов из квоты ChatGPT; ошибки не повторяются автоматически.</label>
     </>}
     <div className={styles.gateActions}><Button variant="border" disabled={busy || run.paused} loading={loading} onClick={() => void price()}>{quote ? 'Обновить стоимость' : 'Рассчитать стоимость фото'}</Button>
-      {quote && <Button variant="primary" disabled={!consent || busy || run.paused} loading={busy} onClick={() => void photoCommand('photos/start', { rev: quote.rev, requestId, confirmUsd: quote.usd, refsConsent: true, reviewConsent: true }).then((ok) => { if (ok) { setQuote(null); setConsent(false); setRequestId(crypto.randomUUID()); } })}>Создать фото · {photoPrice(quote.usd)}</Button>}
+      {quote && <Button variant="primary" disabled={!consent || busy || run.paused} loading={busy} onClick={() => void photoCommand('photos/start', { rev: quote.rev, requestId, confirmUsd: quote.usd, refsConsent: true, reviewConsent: true, masterGateConsent: true }).then((ok) => { if (ok) { setQuote(null); setConsent(false); setRequestId(crypto.randomUUID()); } })}>Создать фото · {photoPrice(quote.usd)}</Button>}
     </div>
   </div>;
 }
@@ -72,10 +74,11 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const selection = (selected ?? recommended).filter((id) => eligible.includes(id));
   const withIssues = selection.filter((id) => reviewedPhoto(run, id)?.verdict !== 'keep').length;
   const accepted = run.shots.filter((s) => s.acceptedPhotoId).length;
+  const appearance = run.appearance;
   const saved = run.photos?.items.filter((i) => i.mediaId).length ?? 0;
   return <>
     <header className={styles.header}><div><div className={styles.eyebrow}><Tag tone="outline">Codex → Soul 2</Tag><Text variant="caption" tone="secondary">Реальные фотографии</Text></div><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}><Tag dot>{runLabel(run)}</Tag>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Снять паузу' : 'Пауза'}</Button>}</div></header>
-    <div className={styles.mockNote}>Сценарий → режиссура → опорная сцена → фотографии → критик Codex → твоя приёмка. Видео и upscale в этой серии отключены.</div>
+    <div className={styles.mockNote}>Сценарий → режиссура → внешность по референсам → master → обязательный критик → фотографии → отбор → твоя приёмка. Видео и upscale в этой серии отключены.</div>
     <CharacterField value={run.characterId ?? null} name={run.character?.name} disabled={busy || !!run.photos} onChange={setCharacter} />
     {run.photos && <Text variant="caption" tone="secondary">Персонаж зафиксирован для этой серии.</Text>}
     {run.paused && <div className={styles.notice} role="status">Новые отправки на паузе. Уже отправленные задачи продолжают проверяться и скачиваться. После снятия паузы оставшиеся фото потребуют подтверждения стоимости.</div>}
@@ -85,17 +88,25 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
         <details className={styles.detail}><summary>Сценарий и визуальный вектор</summary><pre>{run.script}</pre><pre>{run.direction}</pre></details>
         <div><Button variant="border" disabled={busy} onClick={() => { setDraft({ title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); }}>Новая режиссура по этому сценарию</Button><Text variant="caption" tone="secondary">Откроется заполненный brief. Новая подготовка расходует квоту ChatGPT и запускается отдельно; текущая серия сохраняется.</Text></div>
       </Section>
-      <Section number="02" title="Создание фотографий" subtitle="Опорная сцена → кадры с общим reference · Soul 2" status={`${saved} / ${run.planned ? run.shots.length + 1 : '—'}`}>
+      <Section number="02" title="Внешность и запуск" subtitle="Референсы персонажа → закреплённые prompts · Codex" status={appearance?.status === 'complete' ? 'Закреплена' : appearance?.status === 'running' ? 'Изучает фото' : appearance?.error ? 'Остановлено' : 'Ожидает'}>
         <PhotoStart run={run} />
-        {master && <div className={styles.masterScene}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорную сцену"><img src={master.url} alt="Опорная сцена серии" /></button><div><Text variant="label" medium>Общая сцена</Text><Text variant="caption" tone="secondary">Это изображение передаётся во все кадры. Сравни с ним комнату, одежду, погоду и свет при приёмке.</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Открыть сцену и prompt</Button></div></div>}
-        {master && run.review?.status === 'complete' && <PhotoVerdict result={reviewedPhoto(run, master.id)} />}
+        {appearance?.error && <Text role="alert">{appearance.error}</Text>}
+        {appearance?.output && <><Text variant="label">{appearance.output.profile.summaryRu}</Text><dl className={styles.planFields}>{Object.entries(appearance.output.profile.traits).map(([key, value]) => <div key={key}><dt>{{ presentation: 'Общий образ', face: 'Лицо', hair: 'Причёска', build: 'Телосложение' }[key]}</dt><dd>{value}</dd></div>)}</dl><Text variant="caption" tone="secondary">Референсов: {appearance.uploadIds.length}. {appearance.model} · input {appearance.inputTokens ?? 'неизвестно'} / output {appearance.outputTokens ?? 'неизвестно'}. Профиль не заменяет проверку результата.</Text>{appearance.output.profile.unknowns.length > 0 && <Text variant="caption">Не определено по фото: {appearance.output.profile.unknowns.join(' ')}</Text>}<details className={styles.detail}><summary>Якорь внешности и prompts для отправки</summary><pre>{appearance.output.profile.anchorEn}</pre><pre>{boundPrompts(run)?.masterPrompt}</pre>{boundPrompts(run)?.shots.map(shot => <pre key={shot.shotId}>{shot.shotId}: {shot.imagePrompt}</pre>)}</details></>}
+      </Section>
+      <Section number="03" title="Master и обязательная проверка" subtitle="Soul 2 → критик Codex → разрешение остальных кадров" status={masterApproved(run) ? 'Принят критиком' : run.masterReview?.status === 'running' ? 'Проверяется' : master ? 'Кадры заблокированы' : 'Ожидает'}>
+        {master && <div className={styles.masterScene}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорную сцену"><img src={master.url} alt="Опорная сцена серии" /></button><div><Text variant="label" medium>Общая сцена</Text><Text variant="caption" tone="secondary">Только после положительной проверки это изображение может стать reference следующих кадров. Проверяются персонаж целиком, лицо, руки и сцена.</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Открыть сцену и prompt</Button></div></div>}
+        {master && <PhotoVerdict result={reviewedPhoto(run, master.id)} />}
+        <PhotoReview run={run} scope="master" />
+      </Section>
+      <Section number="04" title="Создание фотографий" subtitle="Кадры по проверенному master · Soul 2" status={`${saved} / ${run.planned ? run.shots.length + 1 : '—'} с master`}>
+        {!masterApproved(run) && <Text variant="label" tone="secondary">Новые кадры не отправляются, пока master не прошёл обязательную проверку.</Text>}
         {run.photos && <div className={styles.qcList} aria-label="Задачи фотографий">{run.photos.items.map((item) => <div className={styles.photoJob} key={item.key}>
           <div><Text variant="label" medium>{item.key === 'scene' ? 'Опорная сцена' : run.shots.find((s) => s.id === item.key)?.title}</Text>{item.error && <Text variant="caption" role="alert">{item.error}</Text>}{item.taskId && <Text variant="caption" tone="tertiary">Задача: {item.taskId}</Text>}</div><Tag tone={item.error ? 'warning' : item.mediaId ? 'success' : 'neutral'}>{STATUS[item.status]}</Tag>
           {item.jobId && (item.status === 'download_failed' || item.errorCode === 'POLL_TIMEOUT') && <Button variant="border" disabled={busy} onClick={() => void photoCommand('photos/retry', { jobId: item.jobId })}>Повторить {item.status === 'download_failed' ? 'скачивание' : 'проверку статуса'} · без генерации</Button>}
         </div>)}</div>}
       </Section>
-      <Section number="03" title="Проверка и отбор" subtitle="Критик · Codex vision" status={run.review?.status === 'complete' ? 'Отчёт готов' : run.review?.status === 'running' ? 'Проверяет' : run.review?.error ? 'Остановлено' : 'Ожидает'}><PhotoReview run={run} /></Section>
-      <Section number="04" title="Принять фотографии" subtitle="Milestone · решение после критика" status={eligible.length ? 'Твоё решение' : accepted ? `${accepted} принято` : 'Ожидает проверки'} milestone={eligible.length > 0}>
+      <Section number="05" title="Проверка и отбор" subtitle="Критик · Codex vision" status={run.review?.status === 'complete' ? 'Отчёт готов' : run.review?.status === 'running' ? 'Проверяет' : run.review?.error ? 'Остановлено' : 'Ожидает'}><PhotoReview run={run} /></Section>
+      <Section number="06" title="Принять фотографии" subtitle="Milestone · решение после критика" status={eligible.length ? 'Твоё решение' : accepted ? `${accepted} принято` : 'Ожидает проверки'} milestone={eligible.length > 0}>
         <Text variant="label" tone="secondary">Критик рекомендует кадры, ты принимаешь итоговое решение. Рекомендованные выбраны заранее. Можно принять и кадр с замечаниями; все исходники сохраняются.</Text>
         {run.shots.some((s) => s.photoId) ? <div className={styles.grid}>{run.shots.map((shot) => {
           const photo = currentArtifact(run, shot.photoId);
@@ -107,7 +118,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
         })}</div> : <Text variant="label" tone="tertiary">Здесь появятся реальные скачанные кадры.</Text>}
         {eligible.length > 0 && <div className={styles.gateActions}><Button variant="ghost" disabled={busy || run.paused} onClick={() => setSelected(recommended)}>Выбрать рекомендованные</Button><Button variant="ghost" disabled={busy || run.paused} onClick={() => setSelected(eligible)}>Выбрать все, включая замечания</Button><span className={styles.spacer} /><Text variant="caption">{selection.length} выбрано{withIssues > 0 && ` · с замечаниями: ${withIssues}`}</Text><Button variant="primary" disabled={!selection.length || busy || run.paused} onClick={() => void act({ type: 'approvePhotos', ids: selection }).then((ok) => { if (ok) setSelected(null); })}>Принять фото</Button></div>}
       </Section>
-      <Section number="05" title="Материалы для монтажа" subtitle="Только принятые фотографии" status={`${accepted} / ${run.shots.length || '—'}`}>
+      <Section number="07" title="Материалы для монтажа" subtitle="Только принятые фотографии" status={`${accepted} / ${run.shots.length || '—'}`}>
         <Text variant="label" tone="secondary">{accepted ? 'Принятые фото можно скачать с карточек выше или открыть в «Материалах». Список сохраняет prompts и связь с опорной сценой.' : 'После приёмки здесь будет список готовых файлов.'}</Text>
         {accepted > 0 && <a className={styles.download} href={`/api/production/${run.id}/manifest`} download>Скачать список принятых фото</a>}
         <Text variant="caption" tone="tertiary">Создание видео → milestone перед Topaz → upscale: пока недоступны.</Text>
