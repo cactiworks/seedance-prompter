@@ -133,13 +133,15 @@ ffmpeg/ffprobe теперь нужны также для проверки вхо
 После Codex и отдельного cost/refs-consent gate создаётся master Soul 2 standard, затем кадры
 Soul 2 image-to-image. `image_url` — общий master, `custom_reference_id` — выбранный ready/v2 Soul ID.
 1080p/9:16, batch_size=1; I2I требует enhance_prompt=true. Price gate из общего каталога:
-$0.006 × (1 master + 1–8 кадров); без утверждения фактического списания. Оба стиля — Soul 2.
+$0.006 × (до 3 master + 1–8 кадров) для нового consent; рядом показывается сумма без запаса.
+Это оценка каталога, не подтверждение списания; неиспользованный резерв не отправляется. Оба стиля — Soul 2.
 Поддержка одного ref и signed upload также доступны общему Soul 2 adapter. Signed PUT получает
 только upload_headers, без API authorization, без redirects/retry. Soul ID использует тот же helper.
 Опорная сцена помогает continuity, но не доказывает её. На milestone — только saved файлы;
 критик Codex выполняет предварительный visual QC, владелец принимает финальное решение.
 Cost gate включает отдельное явное согласие на Codex-проверку (квота ChatGPT, не цена Higgsfield).
-Видео, upscale, платные reruns и editing в Production пока отключены.
+Видео, upscale, reruns готовых кадров и editing в Production пока отключены. Ограниченный повтор
+отклонённого master доступен в той же серии до начала остальных кадров.
 
 Контракты проверены по [T2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/standard/api-reference)
 и [I2I API](https://open.higgsfield.ai/models/higgsfield-ai/soul/v2/image-to-image/api-reference).
@@ -152,5 +154,10 @@ Production master gate (15.10.2026): перед первым новым master �
 профиль внешности целиком по локальным Soul ID refs и привязанные prompts. После сохранения master
 критик проверяет его до любых I2I кадров. Только положительный отчёт для актуального master и
 профиля разрешает продолжение; uncertain/error/legacy не проходят. Новый masterGateConsent
-явно разрешает до трёх Codex-вызовов и до шести identity refs. Pause/restart/reject не вызывают
-платный retry. Проверки с injected providers подтверждают gate, не качество новых фото.
+разрешает профиль/master/финальный отбор и до шести identity refs. Дополнительный masterRetryConsent
+включает максимум три master всего и до пяти Codex-вызовов; верхняя сумма проверяется сервером.
+Допустимая вариация одежды не требует нового master. Завершённый визуальный отказ/неопределённость
+может вызвать следующую попытку только в активном бюджете. Pause/restart, ошибка критика и unknown
+не вызывают платный retry. Старые согласия не расширяются; owner может отдельно перепроверить фото
+без генерации или подтвердить новый master и остаток серии. Проверки с injected providers подтверждают
+переходы/лимиты, не реальную точность vision или качество новых фото.

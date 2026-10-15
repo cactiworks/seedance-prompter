@@ -3,7 +3,7 @@ import type { ProductionRun } from './model.ts';
 import { appearanceReady, MAX_IDENTITY_REFS } from './appearance.ts';
 
 const text = (max: number) => z.string().trim().min(1).max(max);
-const check = z.enum(['pass', 'fail', 'uncertain', 'not_visible', 'not_applicable']);
+const check = z.enum(['pass', 'variation', 'fail', 'uncertain', 'not_visible', 'not_applicable']);
 export const ReviewResultSchema = z.object({
   artifactId: text(120), verdict: z.enum(['keep', 'reject', 'uncertain']), reason: text(700),
   checks: z.object({ face: check, likeness: check, character: check.optional(), hands: check, continuity: check, shotMatch: check, visualInterest: check }).strict(),
@@ -18,13 +18,14 @@ export const ReviewStateSchema = z.object({
   consentedAt: z.string(), artifactIds: z.array(z.string()), identityCount: z.number().int().min(0).max(MAX_IDENTITY_REFS),
   referenceLimit: z.number().int().min(1).max(MAX_IDENTITY_REFS).optional(),
   appearanceRequestId: z.string().nullable().optional(),
+  criteriaVersion: z.literal('creator-v2').optional(),
   report: ReviewReportSchema.nullable(), error: z.string().nullable(),
   model: z.string().nullable(), inputTokens: z.number().nullable(), outputTokens: z.number().nullable(),
 });
 export type ReviewState = z.infer<typeof ReviewStateSchema>;
 export const ReviewStartSchema = z.object({ rev: z.number().int().nonnegative(), requestId: z.uuid(), consent: z.literal(true), scope: z.enum(['master', 'series']).optional(), referenceLimit: z.literal(6).optional() }).strict();
 export const pendingReview = (requestId: string, now: number): ReviewState => ({
-  status: 'pending', requestId, consentedAt: new Date(now).toISOString(), artifactIds: [], identityCount: 0,
+  criteriaVersion: 'creator-v2', status: 'pending', requestId, consentedAt: new Date(now).toISOString(), artifactIds: [], identityCount: 0,
   report: null, error: null, model: null, inputTokens: null, outputTokens: null,
 });
 export const reviewArtifacts = (run: ProductionRun) => run.artifacts.filter((a) => a.kind === 'photo' && a.mediaId && (a.id === run.photos?.masterArtifactId || run.shots.some((s) => s.photoId === a.id)));
@@ -41,7 +42,7 @@ export function masterApproved(run: ProductionRun): boolean {
     && review.appearanceRequestId === (run.character ? run.appearance?.requestId : null)
     && (!run.character || review.identityCount > 0) && result?.verdict === 'keep'
     && result.checks.character === 'pass' && result.checks.face === 'pass'
-    && result.checks.continuity === 'pass' && result.checks.shotMatch === 'pass' && result.checks.visualInterest === 'pass'
+    && ['pass', 'variation'].includes(result.checks.continuity) && ['pass', 'variation'].includes(result.checks.shotMatch) && ['pass', 'variation'].includes(result.checks.visualInterest)
     && ['pass', 'not_visible'].includes(result.checks.hands)
     && result.checks.likeness === (run.character ? 'pass' : 'not_applicable');
 }
@@ -51,6 +52,7 @@ export function validateReview(report: ReviewReport, ids: string[], identityCoun
   if (results.length !== ids.length || new Set(results).size !== ids.length || ids.some((id) => !results.includes(id))) throw new Error('Критик вернул неполный список кадров.');
   return { ...report, results: report.results.map((r) => {
     const checks = { ...r.checks };
+    if (Object.entries(checks).some(([key, value]) => value === 'variation' && !['continuity', 'shotMatch', 'visualInterest'].includes(key))) throw new Error('Допустимое отклонение не заменяет проверку внешности и анатомии.');
     if (['continuity', 'shotMatch', 'visualInterest'].some((key) => checks[key as keyof typeof checks] === 'not_visible') || Object.entries(checks).some(([key, value]) => value === 'not_applicable' && (key !== 'likeness' || identityRequired))) throw new Error('Критик пропустил обязательный критерий.');
     if (!identityRequired) checks.likeness = 'not_applicable';
     else if (checks.face === 'not_visible') checks.likeness = 'not_visible';

@@ -33,7 +33,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       if (!input.success) return c.json({ messageRu: 'Подтверди передачу изображений и расход квоты Codex.' }, 422);
       return c.json(await runtime.review.start(c.req.param('id'), input.data));
     })
-    .get('/:id/photos/quote', async (c) => c.json(await runtime.photos.quote(c.req.param('id'))))
+    .get('/:id/photos/quote', async (c) => c.json(await runtime.photos.quote(c.req.param('id'), c.req.query('retryMaster') === 'true')))
     .post('/:id/photos/start', async (c) => {
       const input = PhotoStartSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Подтверди стоимость и передачу references.' }, 422);

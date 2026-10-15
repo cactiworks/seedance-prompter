@@ -1,4 +1,5 @@
-import { PHOTO_MODEL, PHOTO_PARAMS, quotePhotos, type PhotoStart, type PhotoState } from '../../core/production/photos.ts';
+import { randomUUID } from 'node:crypto';
+import { canRegenerateMaster, masterAttempts, masterRejected, replaceRejectedMaster, PHOTO_MODEL, PHOTO_PARAMS, quotePhotos, type PhotoStart, type PhotoState } from '../../core/production/photos.ts';
 import { ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, Artifact } from '../../core/production/model.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
@@ -32,20 +33,23 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       readyForPhotos(run);
       if ([run.review, run.masterReview, run.appearance].some(s => s?.status === 'running')) throw new ProductionError('INVALID', 'Сначала дождись критика или поставь серию на паузу.');
       if (run.photos?.status === 'running' || run.photos?.items.some(failed)) throw new ProductionError('INVALID', 'Сначала дождись текущих задач или разбери остановленную генерацию. Повтора платных задач нет.');
-      const quote = quotePhotos(run);
+      if (input.retryMaster && (!input.masterRetryConsent || !canRegenerateMaster(run))) throw new ProductionError('INVALID', 'Повтор master недоступен: нужны завершённая проверка, согласие на бюджет и не более трёх попыток в серии.');
+      const quote = quotePhotos(run, { retries: input.masterRetryConsent, retryMaster: input.retryMaster });
       if (!quote.count || quote.usd !== input.confirmUsd || input.refsConsent !== true || input.reviewConsent !== true || input.masterGateConsent !== true) throw new ProductionError('INVALID', 'Стоимость или согласие не совпали. Подтверди также проверку изображений через Codex.');
       if (!run.photos) {
         run.photos = { status: 'stopped', identityId: run.character?.referenceId ?? null, masterArtifactId: null, requests: [],
           items: ['scene', ...run.shots.map((s) => s.id)].map((key) => ({ key, tag: `production:${run.id}:${input.requestId}:${key}`, jobId: null, taskId: null, status: 'pending', mediaId: null, error: null, errorCode: null })) };
       }
       if (run.photos.identityId !== (run.character?.referenceId ?? null)) throw new ProductionError('INVALID', 'Персонаж изменился после начала серии. Создай отдельную серию.');
-      if (run.masterReview?.status === 'complete' && !masterApproved(run)) throw new ProductionError('INVALID', 'Master отклонён или сомнителен. Продолжение заблокировано. Создай новую серию либо явно повтори проверку master без генерации.');
+      if (masterRejected(run) && !input.retryMaster) throw new ProductionError('INVALID', 'Master не принят. Повтори проверку без генерации или пересоздай опорный кадр в этой серии.');
+      if (input.retryMaster) replaceRejectedMaster(run, input.requestId, now());
+      run.photos.budget = { remainingUsd: quote.usd, perImageUsd: quote.perImageUsd, masterLimit: input.masterRetryConsent ? 3 : 1 };
       if (run.character && !appearanceReady(run)) run.appearance = pendingAppearance(run, input.requestId, now());
       if (!masterApproved(run)) run.masterReview = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
       run.photos.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       run.photos.status = 'running';
       run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
-      record(run, now(), `Подтверждена генерация ${quote.count} изображений: оценка $${quote.usd.toFixed(3)}. Reference сцены и Soul ID передаются Higgsfield. Видео и upscale отключены.`);
+      record(run, now(), `Подтверждено до ${quote.count} изображений, включая ${quote.reserveCount} запасных попыток master: оценка до $${quote.usd.toFixed(3)}. Reference сцены и Soul ID передаются Higgsfield. Видео и upscale отключены.`);
     });
   }
 
@@ -110,6 +114,10 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         const state = run.photos;
         if (run.paused || !state || state.status !== 'running' || state.items.some(failed) || !run.masterReview || !appearanceReady(run)) return;
         if (state.items.some((i) => !['pending', 'saved'].includes(i.status))) return;
+        if (canRegenerateMaster(run) && state.budget?.masterLimit === 3 && masterAttempts(run) < state.budget.masterLimit && state.budget.remainingUsd >= state.budget.perImageUsd) {
+          replaceRejectedMaster(run, randomUUID(), now());
+          record(run, now(), `Опорный кадр не прошёл проверку. Попытка ${(state.masterHistory?.length ?? 0) + 1} из 3 в пределах подтверждённого бюджета.`);
+        }
         const item = state.items.find((i) => i.status === 'pending');
         if (!item) return;
         const masterMediaId = state.items.find((i) => i.key === 'scene')?.mediaId ?? null;
@@ -119,6 +127,11 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         const prompt = item.key === 'scene'
           ? prompts.masterPrompt ?? `${first} Wide establishing composition showing the entire room, the subject, wardrobe, main objects and light direction. This image establishes the location for a consistent photo series.`
           : prompts.shots.find((s) => s.shotId === item.key)!.imagePrompt;
+        const price = quotePhotos(run).perImageUsd;
+        if (state.budget && (state.budget.perImageUsd !== price || state.budget.remainingUsd < price)) {
+          state.status = 'stopped'; record(run, now(), 'Цена изменилась или бюджет исчерпан. Подтверди новую оценку перед продолжением.'); return;
+        }
+        if (state.budget) state.budget.remainingUsd = Number((state.budget.remainingUsd - price).toFixed(6));
         item.status = 'submitting';
         record(run, now(), `${item.key === 'scene' ? 'Опорная сцена' : run.shots.find((s) => s.id === item.key)!.title}: отправка в Higgsfield.`);
         intent = { key: item.key, tag: item.tag, prompt, masterMediaId, identityId: state.identityId };
@@ -130,6 +143,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         if (stopped || current.paused || current.photos?.status !== 'running' || !appearanceReady(current) || (sent.key !== 'scene' && !masterApproved(current))) {
           await store.update(id, (run) => {
             const item = run.photos!.items.find((i) => i.key === sent.key)!;
+            if (run.photos!.budget) run.photos!.budget.remainingUsd = Number((run.photos!.budget.remainingUsd + run.photos!.budget.perImageUsd).toFixed(6));
             item.status = 'pending'; record(run, now(), 'Отправка отложена до подтверждённого продолжения.');
           });
           return;
@@ -160,7 +174,11 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
   }
   return {
     start, tick,
-    quote: async (id: string) => { const run = await store.get(id); readyForPhotos(run); return quotePhotos(run); },
+    quote: async (id: string, retryMaster = false) => {
+      const run = await store.get(id); readyForPhotos(run);
+      if (retryMaster && !canRegenerateMaster(run)) throw new ProductionError('INVALID', 'Новый master недоступен: лимит три попытки, до запуска остальных кадров.');
+      return quotePhotos(run, { retries: true, retryMaster });
+    },
     retry: async (id: string, jobId: string) => {
       const run = await store.get(id);
       if (!run.photos?.items.some((i) => i.jobId === jobId)) throw new ProductionError('INVALID', 'Задача не относится к этой серии.');

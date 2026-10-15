@@ -447,3 +447,95 @@ describe('appearance reference consent and cancellation', () => {
     expect(s.submit).not.toHaveBeenCalled(); expect(s.calls).toHaveLength(3);
   });
 });
+
+describe('creator tolerance and bounded master recovery', () => {
+  const meta = { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 };
+  const budgetInput = async (s: Awaited<ReturnType<typeof setup>>, retryMaster = false) => ({ ...await s.input(), confirmUsd: quotePhotos(await s.get(), { retries: true, retryMaster }).usd, masterRetryConsent: true as const, ...(retryMaster ? { retryMaster: true as const } : {}) });
+  const reportFor = (request: LlmRequest) => ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
+  it('accepts minor wardrobe and framing variation without relaxing anatomy or identity checks', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = reportFor(request); Object.assign(report.results[0]!.checks, { continuity: 'variation', shotMatch: 'variation' });
+      report.results[0]!.reason = 'Рукава короче; образ, внешность и смысл сцены сохранены.';
+      return { data: report as T, meta };
+    };
+    const s = await setup(2, {}, identity, undefined, critic);
+    await s.rt.photos.start(s.id, await budgetInput(s));
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get(); expect(masterApproved(run)).toBe(true); expect(s.submit).toHaveBeenCalledTimes(3);
+    expect(run.photos!.budget!.remainingUsd).toBe(0.012); expect(run.photos!.masterHistory).toBeUndefined();
+    expect(s.calls.find(c => c.taskRu === 'Критик фотографий Production')!.system).toContain('Короткие рукава');
+  });
+  it.each(['face', 'likeness', 'character', 'hands'] as const)('does not allow variation to hide a %s defect', check => {
+    const report = ReviewReportSchema.parse(reviewReport(['master'])); report.results[0]!.checks[check] = 'variation';
+    expect(() => validateReview(report, ['master'], 2)).toThrow('анатомии');
+  });
+  it('retries a rejected master in the same series, keeps history, and uses only the passing master for shots', async () => {
+    let calls = 0;
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = reportFor(request); if (++calls < 3) report.results[0]!.checks.character = 'fail';
+      return { data: report as T, meta };
+    };
+    const s = await setup(2, {}, identity, undefined, critic);
+    const input = await budgetInput(s); expect(input.confirmUsd).toBe(0.030);
+    await Promise.all([s.rt.photos.start(s.id, input), s.rt.photos.start(s.id, input)]);
+    for (let i = 0; i < 24; i++) await s.cycle();
+    const run = await s.get(); expect(s.submit).toHaveBeenCalledTimes(5); expect(calls).toBe(3);
+    expect(run.photos!.requests).toHaveLength(1); expect(run.photos!.masterHistory).toHaveLength(2); expect(run.artifacts).toHaveLength(5);
+    expect(run.photos!.masterHistory!.every(h => h.review.report!.results[0]!.verdict === 'reject' && h.item.status === 'saved')).toBe(true);
+    expect(run.photos!.budget!.remainingUsd).toBe(0); expect(masterApproved(run)).toBe(true);
+    const jobs = await s.gen.jobs.all(); expect(new Set(jobs.map(j => j.tag)).size).toBe(5);
+    expect(run.artifacts.filter(a => a.shotId !== 'scene').every(a => a.sourceId === run.photos!.masterArtifactId)).toBe(true);
+    expect(JSON.parse(s.calls.at(-1)!.user).candidates).toHaveLength(3);
+  });
+  it('stops after three unsuitable masters and cannot buy a fourth through the same endpoint', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => { const report = reportFor(request); report.results[0]!.checks.character = 'uncertain'; return { data: report as T, meta }; };
+    const s = await setup(2, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await budgetInput(s));
+    for (let i = 0; i < 24; i++) await s.cycle();
+    const run = await s.get(); expect(s.submit).toHaveBeenCalledTimes(3); expect(run.photos!.status).toBe('stopped');
+    expect(run.photos!.items.slice(1).every(i => i.status === 'pending')).toBe(true);
+    await expect(s.rt.photos.start(s.id, await budgetInput(s, true))).rejects.toThrow('трёх попыток');
+    expect(s.submit).toHaveBeenCalledTimes(3);
+  });
+  it('does not spend a legacy consent reserve; explicit regeneration keeps the script and appearance', async () => {
+    let fail = true;
+    const critic: Runner = async <T>(request: LlmRequest) => { const report = reportFor(request); if (fail) report.results[0]!.checks.continuity = 'fail'; return { data: report as T, meta }; };
+    const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 10; i++) await s.cycle();
+    const before = await s.get(); expect(s.submit).toHaveBeenCalledTimes(1);
+    await expect(s.rt.photos.start(s.id, { ...await s.input(), retryMaster: true })).rejects.toThrow('согласие');
+    fail = false; await s.rt.photos.start(s.id, await budgetInput(s, true));
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get(); expect(run.id).toBe(before.id); expect(run.script).toBe(before.script); expect(run.appearance).toEqual(before.appearance);
+    expect(run.photos!.masterHistory).toHaveLength(1); expect(s.submit).toHaveBeenCalledTimes(3);
+    expect(s.calls.filter(c => c.taskRu === 'Внешность персонажа Production')).toHaveLength(1);
+  });
+  it('never regenerates on critic protocol failure or unknown provider submission even with a three-attempt budget', async () => {
+    const critic: Runner = async <T>() => ({ data: reviewReport(['wrong']) as T, meta });
+    const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await budgetInput(s));
+    for (let i = 0; i < 14; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(1); expect((await s.get()).masterReview?.status).toBe('failed');
+    const unknown = vi.fn(async () => { throw new GenError('NETWORK', 'Ответ потерян'); });
+    const u = await setup(1, { submit: unknown }); await u.rt.photos.start(u.id, await budgetInput(u));
+    for (let i = 0; i < 12; i++) await u.cycle();
+    expect(unknown).toHaveBeenCalledTimes(1); expect((await u.get()).photos?.status).toBe('stopped');
+  });
+  it.each(['price', 'budget'])('stops dispatch if the confirmed %s no longer covers the next image', async (change) => {
+    const s = await setup(1); await s.rt.photos.start(s.id, await budgetInput(s));
+    await s.rt.tick(); await s.rt.appearance.wait(s.id);
+    const run = await s.get();
+    if (change === 'price') run.photos!.budget!.perImageUsd += 0.001;
+    else run.photos!.budget!.remainingUsd = 0;
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    for (let i = 0; i < 5; i++) await s.cycle();
+    expect(s.submit).not.toHaveBeenCalled(); expect((await s.get()).photos!.status).toBe('stopped');
+  });
+  it('pausing between rejection and retry cancels automatic paid continuation', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => { const report = reportFor(request); report.results[0]!.checks.face = 'fail'; return { data: report as T, meta }; };
+    const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await budgetInput(s));
+    for (let i = 0; i < 9 && (await s.get()).masterReview?.status !== 'complete'; i++) await s.cycle();
+    let run = await s.get(); expect(run.masterReview?.status).toBe('complete'); expect(s.submit).toHaveBeenCalledTimes(1);
+    await s.rt.act(s.id, { type: 'pause', rev: run.rev }); run = await s.get(); await s.rt.act(s.id, { type: 'resume', rev: run.rev });
+    for (let i = 0; i < 8; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(1); expect((await s.get()).photos!.status).toBe('stopped');
+  });
+});

@@ -679,3 +679,123 @@
 .liveStageBody > .detail {
   margin-top: 0;
 }
+
+.productionPath {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+  padding: 0;
+  margin: var(--lab-space-16) 0;
+  gap: var(--lab-space-8);
+}
+
+.productionPath li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lab-space-4);
+  padding-bottom: var(--lab-space-6);
+  border-bottom: 1px solid var(--lab-border-subtle);
+  font-size: var(--lab-type-caption-size);
+  color: var(--lab-text-tertiary);
+}
+
+.productionPath li[aria-current='step'] {
+  color: var(--lab-accent);
+  border-color: var(--lab-accent);
+}
+
+.productionPath li[data-complete='true'] {
+  color: var(--lab-text-primary);
+}
+
+.productionPath li > span {
+  font-family: var(--lab-font-mono);
+}
+
+.productionFocus {
+  display: grid;
+  gap: var(--lab-space-10);
+  padding: var(--lab-space-12);
+  background: var(--lab-bg-surface);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+}
+
+.productionFocus > div[role='status'] {
+  display: grid;
+  gap: var(--lab-space-4);
+}
+
+.milestoneFocus {
+  border-color: var(--lab-warning-ring);
+}
+
+.costControls,
+.detailsBody {
+  display: grid;
+  gap: var(--lab-space-8);
+  min-width: 0;
+}
+
+.detailsBody > button {
+  justify-self: start;
+}
+
+.productionResults {
+  display: grid;
+  gap: var(--lab-space-10);
+  margin-top: var(--lab-space-16);
+}
+
+.masterStrip {
+  display: flex;
+  align-items: center;
+  gap: var(--lab-space-8);
+}
+
+.masterStrip > button {
+  width: 5rem;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--lab-radius-m);
+  flex: none;
+}
+
+.masterStrip > div {
+  display: grid;
+  justify-items: start;
+  gap: var(--lab-space-3);
+}
+
+.photoThumbnail {
+  aspect-ratio: 3 / 4;
+}
+
+.resultEmpty {
+  padding: var(--lab-space-16) var(--lab-space-10);
+  border: 1px dashed var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+}
+
+.productionDetails {
+  border-top: 1px solid var(--lab-border-subtle);
+  margin-top: var(--lab-space-16);
+  font-size: var(--lab-type-label-size);
+  color: var(--lab-text-secondary);
+}
+
+.productionDetails > summary {
+  padding-block: var(--lab-space-10);
+  cursor: pointer;
+}
+
+.productionDetails pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 48rem) {
+  .productionPath {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
