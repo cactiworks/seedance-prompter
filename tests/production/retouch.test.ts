@@ -23,10 +23,11 @@ function defects(id: string): RetouchAudit {
 async function setup(audit: (id: string, call: number) => RetouchAudit | Promise<RetouchAudit> = id => clean(id), count = 1, patch: Partial<GenProvider> = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'retouch-test-'));
   let time = 100_000, calls = 0;
+  const requests: Parameters<Runner>[0][] = [];
   const submit = vi.fn(async () => `task-${submit.mock.calls.length}`);
   const provider: GenProvider = { id: 'kie', hasKey: () => true, submit, upload: async () => 'https://test.invalid/ref.png', freshUrl: async () => null, poll: async () => ({ state: 'success', providerState: 'success', urls: ['https://test.invalid/result.png'], creditsConsumed: 14, failMsg: null }), ...patch };
   const gen = createGenRuntime({ dataDir: dir, now: () => time, providers: { kie: provider }, fetch: (async () => new Response(png, { headers: { 'content-type': 'image/png' } })) as typeof fetch });
-  const runner: Runner = async <T>(request: Parameters<Runner>[0]) => ({ data: (request.taskRu === 'Автоправки деталей Production' ? await audit(JSON.parse(request.user).candidate.artifactId, ++calls) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T, meta: { model: 'fixture', inputTokens: 1, outputTokens: 1, durationMs: 1, turns: 1 } });
+  const runner: Runner = async <T>(request: Parameters<Runner>[0]) => { requests.push(request); return { data: (request.taskRu === 'Автоправки деталей Production' ? await audit(JSON.parse(request.user).candidate.artifactId, ++calls) : request.taskRu === 'Режиссёр Production' ? sceneDraft(count) : promptPlan(count)) as T, meta: { model: 'fixture', inputTokens: 1, outputTokens: 1, durationMs: 1, turns: 1 } }; };
   const rt = createProductionRuntime({ dataDir: dir, gen, runLlm: runner, now: () => time }); resources.push({ dir, rt, gen });
   const run = await rt.create({ ...DEMO_INPUT, mode: 'photos', planningMode: 'codex', script: SCRIPT, characterId: null }); await rt.waitForPreparation(run.id);
   const ready = await rt.get(run.id);
@@ -41,7 +42,7 @@ async function setup(audit: (id: string, call: number) => RetouchAudit | Promise
   const get = () => rt.get(run.id);
   const input = async (ids?: string[]) => { const r = await get(); ids ??= r.shots.map(s => s.photoId!); return { rev: r.rev, requestId: crypto.randomUUID(), ids, confirmUsd: quoteRetouch(r, ids).usd, consent: true as const }; };
   const cycle = async () => { time += 60_000; await gen.tick(); await rt.tick(); await rt.retouch.wait(run.id); };
-  return { dir, rt, gen, submit, get, input, cycle, calls: () => calls, id: run.id };
+  return { dir, rt, gen, submit, get, input, cycle, requests, calls: () => calls, id: run.id };
 }
 afterEach(async () => { for (const r of resources.splice(0)) { r.rt.stop(); r.gen.stop(); for (const run of await r.rt.list()) await r.rt.retouch.wait(run.id); rmSync(r.dir, { recursive: true, force: true }); } });
 
@@ -57,6 +58,21 @@ describe('post-milestone automatic regional repair', () => {
     await Promise.all([s.rt.tick(), s.rt.tick()]); await s.rt.retouch.wait(s.id);
     expect(s.calls()).toBe(1); expect((await s.get()).retouch!.requests).toHaveLength(1);
     expect((await s.get()).photos!.status).toBe('complete'); expect(s.submit).not.toHaveBeenCalled();
+  });
+  it('passes the saved cinema choice into QC and blocks a global style mismatch without charging an edit', async () => {
+    const s = await setup(id => {
+      const audit = clean(id); audit.result.checks.visualInterest = 'fail';
+      audit.result.observations.find(o => o.check === 'visualInterest')!.evidence = 'Вместо cinema — селфи-перспектива и плоский бытовой свет.';
+      return audit;
+    });
+    const run = await s.get(); run.style = 'cinema';
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    await s.rt.retouch.start(s.id, await s.input()); await s.cycle();
+    const qc = s.requests.find(r => r.taskRu === 'Автоправки деталей Production')!;
+    expect(JSON.parse(qc.user).style).toBe('cinema');
+    expect((await s.get()).retouch!.items[0]!.status).toBe('blocked');
+    expect((await s.get()).shots[0]!.acceptedPhotoId).toBeNull();
+    expect(s.submit).not.toHaveBeenCalled();
   });
   it('edits beard, hand, secondary face and lettering in separate boxes then rechecks before delivery', async () => {
     const s = await setup((id, n) => n === 1 ? defects(id) : clean(id)); const original = (await s.get()).artifacts[0]!;

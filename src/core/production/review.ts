@@ -10,7 +10,7 @@ const faceDetail = z.object({ leftEye: detailCheck, rightEye: detailCheck, mouth
 const observation = z.object({ check: z.enum(['face', 'character', 'hands', 'identityLeakage', 'text', 'likeness', 'continuity', 'shotMatch', 'visualInterest', 'wardrobe', 'sceneLogic']).optional(), region: text(120), evidence: text(500) }).strict();
 export const DETAIL_CRITERIA = 'details-v4' as const;
 export const LOGIC_CRITERIA = 'logic-v5' as const;
-const LOGIC_EVIDENCE = ['wardrobe', 'sceneLogic'] as const;
+const LOGIC_EVIDENCE = ['wardrobe', 'sceneLogic', 'visualInterest'] as const;
 const DETAIL_EVIDENCE = ['face', 'character', 'hands', 'identityLeakage', 'text'] as const;
 export const ReviewResultSchema = z.object({
   artifactId: text(120), verdict: z.enum(['keep', 'reject', 'uncertain']), reason: text(700),
@@ -28,7 +28,7 @@ export const LogicReviewResultSchema = GeneratedReviewResultSchema.extend({
   wardrobeDetail,
 });
 export const LogicReviewReportSchema = ReviewReportSchema.extend({ results: z.array(LogicReviewResultSchema.extend({
-  faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(7).max(10),
+  faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(8).max(10),
 })).min(1).max(9) });
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;
@@ -126,7 +126,7 @@ export function logicReviewPassed(result: ReviewResult | undefined): boolean {
 }
 export function validateLogicResult(result: ReviewResult): void {
   LogicReviewResultSchema.parse(result);
-  if (!logicReviewed(result)) throw new Error('Критик не описал одежду и логику сцены.');
+  if (!logicReviewed(result)) throw new Error('Критик не описал одежду, логику сцены и манеру съёмки.');
 }
 export function validateLogicReview(report: ReviewReport, ids: string[], identityCount: number, identityRequired: boolean, faceExpected: string[] = []): ReviewReport {
   const current = LogicReviewReportSchema.parse(report);

@@ -7,7 +7,7 @@ import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 
 export const VERDICT = { keep: 'Рекомендован', uncertain: 'Проверь вручную', reject: 'Есть замечание' };
-const CHECKS = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', identityLeakage: 'Лицо на других людях', text: 'Текст в кадре', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Выразительность', wardrobe: 'Целостность одежды', sceneLogic: 'Логика сцены' };
+const CHECKS = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', identityLeakage: 'Лицо на других людях', text: 'Текст в кадре', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Манера съёмки и выразительность', wardrobe: 'Целостность одежды', sceneLogic: 'Логика сцены' };
 const RESULT = { pass: 'без видимых проблем', variation: 'допустимое отклонение', fail: 'существенная проблема', uncertain: 'не уверен', not_visible: 'вне кадра', not_applicable: 'привязка к внешности не задана' };
 export function PhotoVerdict({ result, compact = false }: { result?: ReviewResult; compact?: boolean }) {
   if (!result) return <Text variant="caption" tone="secondary">Проверяется</Text>;
@@ -37,7 +37,7 @@ export function PhotoReview({ run, scope = 'series', allowComplete = false }: { 
     <summary>{outdated ? master ? 'Перепроверить одежду и логику master' : 'Перепроверить одежду и логику сцены' : master ? 'Перепроверить этот кадр без генерации' : 'Повторить отбор фотографий'}</summary>
     {outdated && <Text variant="caption">В прежнем отчёте нет отдельной проверки одежды и логики сцены. Сохранённые фото можно проверить заново; генерация не запускается.</Text>}
     {master && state?.status === 'complete' && <Text variant="caption">{state.criteriaVersion ? 'Кадр будет проверен заново; фото не перегенерируются.' : 'Короткие рукава и мелкие отличия одежды теперь допустимы. Кадр будет проверен заново; фото не перегенерируются.'}</Text>}
-    <Text variant="caption" tone="secondary">Критик увидит общий кадр и четыре крупных фрагмента каждого исходника. Проверит глаза, рот, руки, фоновые лица, текст, комплект одежды и физическую логику сцены; художественные отклонения оценивает отдельно.</Text>
+    <Text variant="caption" tone="secondary">Критик увидит общий кадр и четыре крупных фрагмента каждого исходника. Проверит глаза, рот, руки, фоновые лица, текст, комплект одежды, физическую логику сцены и выбранную манеру съёмки; художественные отклонения оценивает отдельно.</Text>
     <label className={styles.check}><input type="checkbox" checked={consent} disabled={busy || run.paused} onChange={e => setConsent(e.target.checked)} />Разрешаю отправить {master ? 'master' : 'фото серии'} с крупными фрагментами и до шести фото Soul ID в Codex / OpenAI. Один вызов из квоты ChatGPT; крупные фрагменты увеличивают расход.</label>
     <Button variant="border" disabled={!consent || busy || run.paused} onClick={() => void photoCommand('review', { rev: run.rev, requestId, consent: true, scope, referenceLimit: 6 }).then(ok => { if (ok) { setConsent(false); setRequestId(crypto.randomUUID()); } })}>{master ? 'Перепроверить master' : 'Проверить фотографии'}</Button>
   </details>;

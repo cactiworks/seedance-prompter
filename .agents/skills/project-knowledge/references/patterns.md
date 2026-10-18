@@ -114,7 +114,7 @@ GeneratedBrollDraftSchema и semantic validation отклоняют неправ
 буквальные дубли идей/приёмов/действий/фото и предметные none. Для 1–3 кадров все person, для 4–8 максимум один POV detail. Режиссура делает владельца главным героем, выбирает простую физику, читаемое лицо и выразительные одежду/ситуацию. Явные требования владельца не заменяются допущениями. Это не оценка творческого качества.
 
 
-Production logic-v5: отсутствие wardrobeDetail, wardrobe/sceneLogic или их observations отклоняет
+Production logic-v5: отсутствие wardrobeDetail, wardrobe/sceneLogic или observations одежды/логики/visualInterest отклоняет
 новый ответ. Fail/uncertain части одежды понижает wardrobe и общий keep; sceneLogic не может
 быть variation/not_visible. Старые отчёты сохраняются, но отсутствие новых проверок не считается
 актуальной рекомендацией. Тесты labelled reports доказывают gate, не точность распознавания.

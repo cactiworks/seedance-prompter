@@ -312,7 +312,7 @@ LLM/submit; запрос продолжения подтверждает ост�
 imageMap связывает view/box с тем же artifactId; refs внешности остаются отдельными общими видами.
 Один Codex-вызов на проверку, effort=high; больше изображений расходует больше квоты. Новый отчёт
 обязан дать faceDetail (два глаза по сторонам для зрителя и рот), wardrobeDetail (верх/низ/обувь)
-и семь check/evidence: face, character, hands, identityLeakage, text, wardrobe, sceneLogic. Валидатор понижает keep при fail/uncertain деталей; ожидаемое, но
+и восемь check/evidence: face, character, hands, identityLeakage, text, wardrobe, sceneLogic, visualInterest. Валидатор понижает keep при fail/uncertain деталей; ожидаемое, но
 непроверяемое лицо master/person B-roll не получает рекомендацию. Master gate требует нового evidence.
 Старые отчёты не мигрируют. Старый pending/автоповтор сохраняет criteriaVersion и referenceLimit;
 новое явное согласие включает одежду и логику сцены. Повторный отбор не генерирует и не удаляет фотографии.
@@ -329,3 +329,11 @@ Director описывает полный комплект одежды и физ
 без обязательного faceDetail/четырёх фрагментов; сохранённые старые audits читаются прежней схемой.
 Локальный wardrobe/sceneLogic fail исправляется только при сохранении позы/замысла и существующих
 лимитах областей; глобальный дефект блокирует локальную правку. Готовность требует чистого QC.
+
+В выборе cinema director фиксирует рисунок света/теней, отделение героя от фона, положение и
+дистанцию внешней камеры, глубину/композицию и тонально-цветовую организацию в существующих
+lighting/camera/framing/captureTexture. Prompter передаёт видимые решения в каждом кадре.
+visualInterest в logic-v5/logic-audit-v5 требует observation с выбранным style и признаками на
+изображении; смена cinema на UGC — fail. Retouch получает сохранённый run.style явно; глобальная
+смена съёмки не является локальной правкой. Phone/cinema используют Soul 2 с теми же параметрами
+и без автоматического style_id; это текстовая режиссура и visual QC, не отдельная cinema-модель.

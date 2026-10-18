@@ -53,6 +53,14 @@ describe('Production agent contracts', () => {
     expect(scene.shots.map(s => s.id)).toEqual(['shot-1', 'shot-2', 'shot-3']);
     expect(calls[0]).toMatchObject({ status: 'accepted', inputTokens: 100, outputTokens: 200 });
   });
+  it.each(['phone', 'cinema'] as const)('preserves the chosen %s mode from direction through image prompts', async style => {
+    const r = runner([sceneDraft(), promptPlan()]);
+    const options = { run: r.run, model: 'test-model', signal: new AbortController().signal, onCall: async () => {} };
+    const scene = await directScene({ ...input, style }, options);
+    await writePrompts(scene, style, options);
+    expect(r.requests.map(request => JSON.parse(request.user).style)).toEqual([style, style]);
+    expect(JSON.parse(r.requests[1]!.user).scenePlan).toEqual(scene);
+  });
   it('repairs a wrong quote once and reports every invocation', async () => {
     const bad = sceneDraft(); bad.shots[0]!.scriptExcerpt = 'Выдуманная реплика';
     const r = runner([bad, sceneDraft()]); const calls: PreparationCall[] = [];

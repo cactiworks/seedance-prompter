@@ -43,10 +43,22 @@ describe('clothing coverage and scene logic (labelled reports, not a vision benc
   });
   it('requires separate evidence and refuses to label clothing failure an artistic variation', () => {
     const input = report(); input.results[0]!.observations.find(o => o.check === 'wardrobe')!.check = 'face';
-    expect(() => inspect(input)).toThrow('одежду и логику');
+    expect(() => inspect(input)).toThrow('одежду, логику');
     const variation = ReviewReportSchema.parse(reviewReport(['photo']));
     variation.results[0]!.checks.wardrobe = 'variation';
     expect(() => validateReview(variation, ['photo'], 2)).toThrow('отклонение');
+  });
+  it('rejects a labelled UGC/cinema mismatch without offering a local repaint', () => {
+    const input = report(); const result = input.results[0]!;
+    result.checks.visualInterest = 'fail';
+    result.observations.find(o => o.check === 'visualInterest')!.evidence = 'Выбран cinema; видны селфи-перспектива и ровный бытовой свет без постановочного рисунка.';
+    const checked = inspect(input);
+    expect(checked.verdict).toBe('reject'); expect(checked.reason).toContain('cinema');
+    expect(logicReviewPassed(checked)).toBe(false);
+    const audit = validateRetouchAudit({ result, preserved: 'pass', fixes: [] }, 'photo', 2, true);
+    expect(auditPassed(audit)).toBe(false); expect(repairable(audit)).toBe(false);
+    result.observations = result.observations.filter(o => o.check !== 'visualInterest');
+    expect(() => validateRetouchAudit({ result, preserved: 'pass', fixes: [] }, 'photo', 2, true)).toThrow('манеру съёмки');
   });
   it('reads a legacy keep but does not call its missing clothing/logic checks a recommendation', () => {
     const old = ReviewReportSchema.parse(reviewReport(['photo'])); const result = old.results[0]!;
