@@ -385,11 +385,11 @@ describe('whole-character lock and mandatory master gate', () => {
     expect(run.masterReview?.report?.results[0]!.reason).toContain('Смазанный глаз');
     const call = s.calls.find(c => c.taskRu === 'Критик фотографий Production')!;
     const payload = JSON.parse(call.user);
-    expect(payload.inspectionMode).toBe('details-v4'); expect(call.effort).toBe('high');
+    expect(payload.inspectionMode).toBe('logic-v5'); expect(call.effort).toBe('high');
     expect(payload.imageMap.slice(3).map((i: { view: string }) => i.view)).toEqual(['full', 'top-left', 'top-right', 'bottom-left', 'bottom-right']);
     expect(new Set(payload.imageMap.slice(3).map((i: { artifactId: string }) => i.artifactId)).size).toBe(1);
   });
-  it.each(['character', 'likeness', 'face', 'hands', 'continuity', 'shotMatch', 'visualInterest'] as const)('stops at one paid stub when master fails %s, even with a keep verdict', async (check) => {
+  it.each(['character', 'likeness', 'face', 'hands', 'continuity', 'shotMatch', 'visualInterest', 'wardrobe', 'sceneLogic'] as const)('stops at one paid stub when master fails %s, even with a keep verdict', async (check) => {
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
       report.results[0]!.checks[check] = 'fail';
@@ -545,8 +545,10 @@ describe('creator tolerance and bounded master recovery', () => {
     let calls = 0;
     const critic: Runner = async <T>(request: LlmRequest) => {
       const report = reportFor(request); if (++calls === 1) report.results[0]!.checks.hands = 'fail';
-      delete report.results[0]!.faceDetail;
-      report.results[0]!.observations = [{ region: 'Кадр', evidence: 'Старый формат проверки.' }];
+      if (JSON.parse(request.user).inspectionMode === 'overview') {
+        delete report.results[0]!.faceDetail;
+        report.results[0]!.observations = [{ region: 'Кадр', evidence: 'Старый формат проверки.' }];
+      }
       return { data: report as T, meta };
     };
     const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await budgetInput(s));
@@ -560,7 +562,7 @@ describe('creator tolerance and bounded master recovery', () => {
       expect(c.images).toHaveLength(JSON.parse(c.user).scope === 'master' ? 4 : 5);
     }
     await s.rt.review.start(s.id, { rev: run.rev, requestId: crypto.randomUUID(), consent: true, referenceLimit: 6 }); await s.rt.review.wait(s.id);
-    expect((await s.get()).review?.criteriaVersion).toBe('details-v4'); expect(s.calls.at(-1)!.images).toHaveLength(13);
+    expect((await s.get()).review).toMatchObject({ criteriaVersion: 'logic-v5', status: 'complete' }); expect(s.calls.at(-1)!.images).toHaveLength(13);
     expect(s.submit).toHaveBeenCalledTimes(3);
   });
   it('accepts minor wardrobe and framing variation without relaxing anatomy or identity checks', async () => {

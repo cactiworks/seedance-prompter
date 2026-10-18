@@ -30,9 +30,10 @@ export function brollDraft(count = 4): GeneratedBrollDraft {
 export function reviewReport(ids: string[]) {
   return { summary: 'Тестовый отчёт, без оценки настоящего качества.', results: ids.map((artifactId) => ({
     artifactId, verdict: 'keep' as const, reason: 'Соответствует плану в тестовом ответе.',
-    checks: { character: 'pass' as const, face: 'pass' as const, likeness: 'pass' as const, identityLeakage: 'pass', text: 'not_visible', hands: 'pass' as const, continuity: 'pass' as const, shotMatch: 'pass' as const, visualInterest: 'pass' as const },
+    checks: { character: 'pass' as const, face: 'pass' as const, likeness: 'pass' as const, identityLeakage: 'pass', text: 'not_visible', hands: 'pass' as const, continuity: 'pass' as const, shotMatch: 'pass' as const, visualInterest: 'pass' as const, wardrobe: 'pass' as const, sceneLogic: 'pass' as const },
+    wardrobeDetail: { upperBody: 'pass', lowerBody: 'pass', footwear: 'not_visible' },
     faceDetail: { leftEye: 'pass', rightEye: 'pass', mouth: 'pass' },
-    observations: (['face', 'character', 'hands', 'identityLeakage', 'text'] as const).map(check => ({ check, region: `Тестовая область ${check}`, evidence: 'Синтетическое наблюдение; настоящие пиксели моделью не оценивались.' })),
+    observations: (['face', 'character', 'hands', 'identityLeakage', 'text', 'wardrobe', 'sceneLogic'] as const).map(check => ({ check, region: `Тестовая область ${check}`, evidence: 'Синтетическое наблюдение; настоящие пиксели моделью не оценивались.' })),
   })) };
 }
 

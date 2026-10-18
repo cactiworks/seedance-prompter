@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { estimate, findModel, paramsFor } from '../gen/models.ts';
 import { buildRegionPrompt } from '../gen/regionEdit.ts';
 import type { ProductionRun } from './model.ts';
-import { GeneratedReviewResultSchema, validateReview } from './review.ts';
+import { GeneratedReviewResultSchema, LogicReviewResultSchema, logicReviewPassed, validateLogicResult, validateReview } from './review.ts';
 
 export const RETOUCH_MODEL = 'kie/seedream-5-pro';
 export const RETOUCH_PARAMS = { resolution: '2K', aspectRatio: '9:16' };
@@ -12,10 +12,11 @@ export const RetouchAuditSchema = z.object({
   result: GeneratedReviewResultSchema,
   preserved: z.enum(['pass', 'fail', 'uncertain']),
   fixes: z.array(z.object({
-    check: z.enum(['character', 'face', 'likeness', 'hands', 'identityLeakage', 'text']),
+    check: z.enum(['character', 'face', 'likeness', 'hands', 'identityLeakage', 'text', 'wardrobe', 'sceneLogic']),
     box, instructionEn: z.string().trim().min(10).max(550), reason: z.string().trim().min(1).max(220),
   }).strict()).max(6),
 }).strict();
+export const GeneratedRetouchAuditSchema = RetouchAuditSchema.extend({ result: LogicReviewResultSchema });
 export type RetouchAudit = z.infer<typeof RetouchAuditSchema>;
 export const RetouchItemSchema = z.object({
   shotId: z.string(), originalId: z.string(), currentId: z.string(),
@@ -46,6 +47,7 @@ export function quoteRetouch(run: ProductionRun, ids: string[]) {
   return { rev: run.rev, usd: Number((count * price.usd).toFixed(6)), perEditUsd: price.usd, count, checks: ids.length + count, referenceCount: uploads.length };
 }
 export function validateRetouchAudit(data: RetouchAudit, id: string, identities: number, identityRequired: boolean): RetouchAudit {
+  validateLogicResult(data.result);
   const result = validateReview({ summary: 'Проверка деталей', results: [data.result] }, [id], identities, identityRequired).results[0]!;
   for (const fix of data.fixes) {
     const b = fix.box;
@@ -57,7 +59,7 @@ export function validateRetouchAudit(data: RetouchAudit, id: string, identities:
   if (regions.reduce((sum, b) => sum + (b.x2 - b.x1) * (b.y2 - b.y1), 0) > 600_000) throw new Error('Правка охватывает слишком большую часть кадра.');
   return { ...data, result: GeneratedReviewResultSchema.parse(result) };
 }
-export const auditPassed = (audit: RetouchAudit) => audit.result.verdict === 'keep' && audit.preserved === 'pass' && audit.fixes.length === 0;
+export const auditPassed = (audit: RetouchAudit) => logicReviewPassed(audit.result) && audit.preserved === 'pass' && audit.fixes.length === 0;
 export function repairable(audit: RetouchAudit): boolean {
   const failures = Object.entries(audit.result.checks).filter(([, value]) => value === 'fail').map(([key]) => key);
   return audit.preserved === 'pass' && audit.fixes.length > 0 && failures.length > 0
