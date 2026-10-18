@@ -1,22 +1,45 @@
 import { useState } from 'react';
 import type { ProductionRun } from '../../core/production/model.ts';
-import { masterApproved, DETAIL_CRITERIA, type ReviewResult } from '../../core/production/review.ts';
+import { masterApproved, DETAIL_CRITERIA, dismissedChecks, originalPhotoReview, reviewedPhoto, REVIEW_CHECK_LABELS, type ReviewCheck, type ReviewResult } from '../../core/production/review.ts';
+import { canAcceptReviewedPhoto, reviewDecisionBlocked } from '../../core/production/reviewDecisions.ts';
 import { appearanceReady } from '../../core/production/appearance.ts';
 import { Button, Tag, Text } from '../ui/components/index.ts';
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 
 export const VERDICT = { keep: 'Рекомендован', uncertain: 'Проверь вручную', reject: 'Есть замечание' };
-const CHECKS = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', identityLeakage: 'Лицо на других людях', text: 'Текст в кадре', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Выразительность' };
+const CHECKS = REVIEW_CHECK_LABELS;
 const RESULT = { pass: 'без видимых проблем', variation: 'допустимое отклонение', fail: 'существенная проблема', uncertain: 'не уверен', not_visible: 'вне кадра', not_applicable: 'привязка к внешности не задана' };
-export function PhotoVerdict({ result, compact = false }: { result?: ReviewResult; compact?: boolean }) {
+export function PhotoVerdict({ result, compact = false, ownerDecision = false, originalResult }: { result?: ReviewResult; compact?: boolean; ownerDecision?: boolean; originalResult?: ReviewResult }) {
   if (!result) return <Text variant="caption" tone="secondary">Проверяется</Text>;
-  return <><Tag tone={result.verdict === 'keep' ? 'success' : 'warning'}>{VERDICT[result.verdict]}</Tag>{(!compact || result.verdict !== 'keep') && <Text variant="caption">{result.reason}</Text>}
-    {!compact && <details className={styles.detail}><summary>Что увидел критик</summary><ul className={styles.planNotes}>
-      {Object.entries(result.checks).map(([key, value]) => <li key={key}>{CHECKS[key as keyof typeof CHECKS]}: {RESULT[value]}</li>)}
-      {result.faceDetail && <li>Глаз слева на фото: {RESULT[result.faceDetail.leftEye]}; справа: {RESULT[result.faceDetail.rightEye]}; рот: {RESULT[result.faceDetail.mouth]}.</li>}
-      {result.observations.map((observation, i) => <li key={i}>{observation.region}: {observation.evidence}</li>)}
+  const original = originalResult ?? result;
+  return <><Tag tone={result.verdict === 'keep' ? 'success' : 'warning'}>{ownerDecision && result.verdict === 'keep' ? 'Замечания сняты' : VERDICT[result.verdict]}</Tag>{(!compact || result.verdict !== 'keep') && <Text variant="caption">{result.reason}</Text>}
+    {!compact && <details className={styles.detail}><summary>{ownerDecision ? 'Исходный отчёт критика' : 'Что увидел критик'}</summary><ul className={styles.planNotes}>
+      {Object.entries(original.checks).map(([key, value]) => <li key={key}>{CHECKS[key as keyof typeof CHECKS]}: {RESULT[value]}</li>)}
+      {original.faceDetail && <li>Глаз слева на фото: {RESULT[original.faceDetail.leftEye]}; справа: {RESULT[original.faceDetail.rightEye]}; рот: {RESULT[original.faceDetail.mouth]}.</li>}
+      {original.observations.map((observation, i) => <li key={i}>{observation.region}: {observation.evidence}</li>)}
     </ul></details>}</>;
+}
+export function PhotoReviewDecisions({ run, artifactId }: { run: ProductionRun; artifactId: string }) {
+  const { act, busy, error } = useProduction();
+  const result = originalPhotoReview(run, artifactId);
+  const effective = reviewedPhoto(run, artifactId);
+  const dismissed = dismissedChecks(run, artifactId);
+  const checks = result ? (Object.keys(result.checks) as ReviewCheck[]).filter(key => ['fail', 'uncertain'].includes(result.checks[key] ?? '') || dismissed.includes(key)) : [];
+  const blocked = reviewDecisionBlocked(run);
+  if (!result || !checks.length || (artifactId !== run.photos?.masterArtifactId && !run.shots.some(s => s.photoId === artifactId))) return null;
+  return <section className={styles.reviewDecisions} aria-label="Решение по замечаниям">
+    <Text variant="label" medium>Что исправлять</Text>
+    <Text variant="caption" tone="secondary">Если замечание не мешает результату, нажми «Не исправлять». Решение сохранится для этой версии фото.</Text>
+    {checks.map(check => <div className={styles.reviewIssue} key={check}>
+      <div><Text variant="label" medium>{CHECKS[check]}</Text><Text variant="caption" tone={dismissed.includes(check) ? 'secondary' : 'primary'}>{result.observations.filter(o => o.check === check).map(o => `${o.region}: ${o.evidence}`).join(' ') || result.reason}</Text>{dismissed.includes(check) && <Text variant="caption" tone="secondary">Снято тобой · исправление не требуется</Text>}</div>
+      <Button variant="ghost" disabled={busy || blocked} aria-label={`${dismissed.includes(check) ? 'Вернуть замечание' : 'Не исправлять'}: ${CHECKS[check]}`} onClick={() => void act({ type: 'setReviewDismissal', artifactId, check, dismissed: !dismissed.includes(check) })}>{dismissed.includes(check) ? 'Вернуть замечание' : 'Не исправлять'}</Button>
+    </div>)}
+    {blocked && <Text variant="caption" tone="secondary">Дождись текущих задач или поставь серию на паузу. Незавершённую отправку сначала нужно проверить.</Text>}
+    {error && <Text variant="caption" role="alert">{error}</Text>}
+    {canAcceptReviewedPhoto(run, artifactId) && <Button variant="border" disabled={busy} onClick={() => void act({ type: 'acceptReviewedPhoto', artifactId })}>Принять без правок</Button>}
+    {dismissed.length > 0 && effective?.verdict === 'keep' && artifactId === run.photos?.masterArtifactId && masterApproved(run) && <Text variant="caption">Опорный кадр принят с твоими решениями. Продолжить создание фото можно из серии после подтверждения стоимости.</Text>}
+  </section>;
 }
 export function PhotoReview({ run, scope = 'series', allowComplete = false }: { run: ProductionRun; scope?: 'master' | 'series'; allowComplete?: boolean }) {
   const { photoCommand, busy } = useProduction();

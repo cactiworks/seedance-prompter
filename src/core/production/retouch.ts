@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { estimate, findModel, paramsFor } from '../gen/models.ts';
 import { buildRegionPrompt } from '../gen/regionEdit.ts';
 import type { ProductionRun } from './model.ts';
-import { GeneratedReviewResultSchema, validateReview } from './review.ts';
+import { applyReviewDismissals, dismissedChecks, GeneratedReviewResultSchema, validateReview } from './review.ts';
 
 export const RETOUCH_MODEL = 'kie/seedream-5-pro';
 export const RETOUCH_PARAMS = { resolution: '2K', aspectRatio: '9:16' };
@@ -17,6 +17,10 @@ export const RetouchAuditSchema = z.object({
   }).strict()).max(6),
 }).strict();
 export type RetouchAudit = z.infer<typeof RetouchAuditSchema>;
+export function effectiveRetouchAudit(run: ProductionRun, audit: RetouchAudit): RetouchAudit {
+  const dismissed = dismissedChecks(run, audit.result.artifactId);
+  return { ...audit, result: GeneratedReviewResultSchema.parse(applyReviewDismissals(run, audit.result)), fixes: audit.fixes.filter(f => !dismissed.includes(f.check)) };
+}
 export const RetouchItemSchema = z.object({
   shotId: z.string(), originalId: z.string(), currentId: z.string(),
   status: z.enum(['pending', 'checking', 'planned', 'generating', 'blocked', 'complete']),

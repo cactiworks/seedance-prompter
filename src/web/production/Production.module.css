@@ -794,6 +794,33 @@
   overflow-wrap: anywhere;
 }
 
+.reviewDecisions {
+  display: grid;
+  gap: var(--lab-space-6);
+  min-width: 0;
+}
+
+.reviewIssue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--lab-space-4);
+  padding-block: var(--lab-space-6);
+  border-top: 1px solid var(--lab-border-subtle);
+}
+
+.reviewIssue > div {
+  display: grid;
+  flex: 1 1 15rem;
+  gap: var(--lab-space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reviewIssue > button {
+  flex-shrink: 0;
+}
+
 @media (width <= 48rem) {
   .productionPath {
     grid-template-columns: repeat(3, minmax(0, 1fr));

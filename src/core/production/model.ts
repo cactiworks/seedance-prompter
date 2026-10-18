@@ -3,7 +3,7 @@ import type { RetouchState } from './retouch.ts';
 import type { PreparationState, PromptPlan, ScenePlan } from './plan.ts';
 import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 import type { PhotoState } from './photos.ts';
-import { masterApproved, type ReviewState } from './review.ts';
+import { masterApproved, ReviewCheckSchema, type ReviewDismissal, type ReviewState } from './review.ts';
 import type { AppearanceState } from './appearance.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
@@ -27,6 +27,8 @@ export const CreateRunSchema = RunBriefSchema.superRefine((input, ctx) => {
 });
 export type RunInput = z.infer<typeof CreateRunSchema>;
 export const ActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('setReviewDismissal'), rev: z.number().int().nonnegative(), artifactId: z.string(), check: ReviewCheckSchema, dismissed: z.boolean() }),
+  z.object({ type: z.literal('acceptReviewedPhoto'), rev: z.number().int().nonnegative(), artifactId: z.string() }),
   z.object({ type: z.literal('pause'), rev: z.number().int().nonnegative() }),
   z.object({ type: z.literal('resume'), rev: z.number().int().nonnegative() }),
   z.object({ type: z.literal('retryPreparation'), rev: z.number().int().nonnegative() }),
@@ -50,6 +52,7 @@ export interface ProductionShot {
   dueAt: number; error: string | null; editNote: string; editSourceId: string | null;
 }
 export interface ProductionRun extends RunInput {
+  reviewDismissals?: ReviewDismissal[];
   retouch?: RetouchState;
   photos?: PhotoState;
   review?: ReviewState;
