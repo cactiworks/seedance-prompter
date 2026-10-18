@@ -132,29 +132,6 @@ describe('post-milestone automatic regional repair', () => {
     for (let i = 0; i < 7; i++) await s.cycle(); expect(submit).toHaveBeenCalledTimes(1);
     expect((await s.get()).shots[0]!.acceptedPhotoId).toBeNull(); await expect(s.rt.retouch.start(s.id, await s.input())).rejects.toThrow('незавершённую');
   });
-  it('honors a dismissed finding during the later detail audit and edits only remaining regions', async () => {
-    const s = await setup((id, n) => n === 1 ? defects(id) : clean(id));
-    const run = await s.get(); const artifactId = run.shots[0]!.photoId!;
-    run.review!.report!.results[0] = defects(artifactId).result;
-    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
-    await s.rt.act(s.id, { type: 'setReviewDismissal', rev: run.rev, artifactId, check: 'text', dismissed: true });
-    await s.rt.retouch.start(s.id, await s.input()); for (let i = 0; i < 9; i++) await s.cycle();
-    const job = (await s.gen.jobs.all())[0]!;
-    expect(job.prompt).not.toContain('Remove the decorative'); expect(job.prompt.match(/<bbox>/g)).toHaveLength(3);
-    expect((await s.get()).photos!.status).toBe('complete'); expect(s.submit).toHaveBeenCalledTimes(1);
-  });
-  it('can accept a blocked audited photo without more calls and revoke it on restore', async () => {
-    const s = await setup(id => ({ ...defects(id), fixes: [] }));
-    await s.rt.retouch.start(s.id, await s.input()); await s.cycle();
-    const artifactId = (await s.get()).shots[0]!.photoId!;
-    for (const check of ['character', 'hands', 'identityLeakage', 'text'] as const) await s.rt.act(s.id, { type: 'setReviewDismissal', rev: (await s.get()).rev, artifactId, check, dismissed: true });
-    await s.rt.act(s.id, { type: 'acceptReviewedPhoto', rev: (await s.get()).rev, artifactId });
-    expect((await s.get()).retouch!.status).toBe('complete');
-    await s.rt.act(s.id, { type: 'setReviewDismissal', rev: (await s.get()).rev, artifactId, check: 'hands', dismissed: false });
-    await s.cycle();
-    expect((await s.get()).shots[0]!.acceptedPhotoId).toBeNull(); expect((await s.get()).retouch!.status).toBe('stopped');
-    expect(s.calls()).toBe(1); expect(s.submit).not.toHaveBeenCalled();
-  });
   it('validates exact artifact, boxes, fail coverage and forbidden regional instructions', () => {
     expect(() => validateRetouchAudit(defects('wrong'), 'a', 1, true)).toThrow('неполный');
     const a = defects('a'); a.fixes[0]!.box.x2 = 0;

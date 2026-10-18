@@ -20,22 +20,6 @@ export const GeneratedReviewResultSchema = ReviewResultSchema.extend({ checks: R
 export const GeneratedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema).min(1).max(9) });
 export const DetailedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema.extend({ faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(5).max(10) })).min(1).max(9) });
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
-export const ReviewCheckSchema = ReviewResultSchema.shape.checks.keyof();
-export type ReviewCheck = z.infer<typeof ReviewCheckSchema>;
-export const ReviewDismissalSchema = z.object({ artifactId: text(120), check: ReviewCheckSchema, at: z.string() });
-export type ReviewDismissal = z.infer<typeof ReviewDismissalSchema>;
-export const REVIEW_CHECK_LABELS: Record<ReviewCheck, string> = { face: 'Лицо', likeness: 'Сходство лица', character: 'Персонаж целиком', hands: 'Руки', identityLeakage: 'Лицо на других людях', text: 'Текст в кадре', continuity: 'Единство сцены', shotMatch: 'Соответствие кадру', visualInterest: 'Выразительность' };
-export const dismissedChecks = (run: ProductionRun, id: string) => (run.reviewDismissals ?? []).filter(d => d.artifactId === id).map(d => d.check);
-/** Owner decisions affect workflow only; the critic's original report stays intact. */
-export function applyReviewDismissals(run: ProductionRun, result: ReviewResult): ReviewResult {
-  const dismissed = dismissedChecks(run, result.artifactId).filter(key => ['fail', 'uncertain'].includes(result.checks[key] ?? ''));
-  if (!dismissed.length) return result;
-  const checks = { ...result.checks };
-  for (const key of dismissed) checks[key] = key === 'likeness' && !run.character ? 'not_applicable' : 'pass';
-  const verdict = Object.values(checks).includes('fail') ? 'reject' : Object.values(checks).includes('uncertain') ? 'uncertain' : 'keep';
-  const issue = result.observations.find(o => o.check && ['fail', 'uncertain'].includes(checks[o.check] ?? ''));
-  return { ...result, checks, verdict, reason: verdict === 'keep' ? 'Замечания сняты владельцем для этой версии фото.' : issue ? `${issue.region}: ${issue.evidence}` : 'Остались замечания критика. Открой фото, чтобы проверить их.' };
-}
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;
 export const ReviewStateSchema = z.object({
   status: z.enum(['pending', 'running', 'complete', 'failed', 'interrupted']), requestId: z.uuid(),
@@ -53,22 +37,17 @@ export const pendingReview = (requestId: string, now: number): ReviewState => ({
   report: null, error: null, model: null, inputTokens: null, outputTokens: null,
 });
 export const reviewArtifacts = (run: ProductionRun) => run.artifacts.filter((a) => a.kind === 'photo' && a.mediaId && (a.id === run.photos?.masterArtifactId || run.shots.some((s) => s.photoId === a.id)));
-export const originalPhotoReview = (run: ProductionRun, id: string) => {
+export const reviewedPhoto = (run: ProductionRun, id: string) => {
   const repaired = run.retouch?.items.find(i => i.currentId === id && i.audit?.result.artifactId === id)?.audit?.result;
   if (repaired) return repaired;
   const review = id === run.photos?.masterArtifactId ? run.masterReview ?? run.review : run.review;
   return review?.status === 'complete' && review.artifactIds.includes(id) ? review.report?.results.find(r => r.artifactId === id) : undefined;
 };
-export const reviewedPhoto = (run: ProductionRun, id: string) => {
-  const result = originalPhotoReview(run, id);
-  return result ? applyReviewDismissals(run, result) : undefined;
-};
 /** Fail closed, including legacy reports without a whole-character check. */
 export function masterApproved(run: ProductionRun): boolean {
   const id = run.photos?.masterArtifactId;
   const review = run.masterReview;
-  const original = review?.report?.results.find(r => r.artifactId === id);
-  const result = original && applyReviewDismissals(run, original);
+  const result = review?.report?.results.find(r => r.artifactId === id);
   return !!id && appearanceReady(run) && review?.status === 'complete' && review.artifactIds.length === 1 && review.artifactIds[0] === id
     && review.appearanceRequestId === (run.character ? run.appearance?.requestId : null)
     && (!run.character || review.identityCount > 0) && result?.verdict === 'keep'
@@ -76,7 +55,7 @@ export function masterApproved(run: ProductionRun): boolean {
     && ['pass', 'variation'].includes(result.checks.continuity) && ['pass', 'variation'].includes(result.checks.shotMatch) && ['pass', 'variation'].includes(result.checks.visualInterest)
     && ['pass', 'not_visible'].includes(result.checks.hands)
     && (!['details-v3', DETAIL_CRITERIA].includes(review.criteriaVersion ?? '') || (result.checks.identityLeakage === 'pass' && ['pass', 'not_visible'].includes(result.checks.text ?? '')))
-    && (review.criteriaVersion !== DETAIL_CRITERIA || (!!result.faceDetail && (dismissedChecks(run, id).includes('face') || (Object.values(result.faceDetail).some(v => v === 'pass') && Object.values(result.faceDetail).every(v => ['pass', 'not_visible'].includes(v)))) && DETAIL_EVIDENCE.every(key => result.observations.some(o => o.check === key))))
+    && (review.criteriaVersion !== DETAIL_CRITERIA || (!!result.faceDetail && Object.values(result.faceDetail).some(v => v === 'pass') && Object.values(result.faceDetail).every(v => ['pass', 'not_visible'].includes(v)) && DETAIL_EVIDENCE.every(key => result.observations.some(o => o.check === key))))
     && result.checks.likeness === (run.character ? 'pass' : 'not_applicable');
 }
 /** Do not accept fabricated/missing IDs, contradictions or a face comparison without a reference. */

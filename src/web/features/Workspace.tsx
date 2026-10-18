@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { activeCritiqueFindings } from '../../core/review.ts';
 import { pendingLabels } from '../../core/compose.ts';
 import { buildShot, CUSTOM_KIT, holderName, shootingModeOf, type PackBundle } from '../../core/pipeline.ts';
 import { isCanvasRefKey } from '../../core/model/canvas.ts';
@@ -585,7 +586,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 </button>
               ) : (
                 <Text variant="caption" tone="secondary">
-                  {shot.critique?.prompt === build.prompt ? `Критик: ${shot.critique.verdict === 'ready' ? 'готов' : shot.critique.verdict === 'risky' ? 'с рисками' : 'не готов'}.` : 'Собран. Настройки, картинки по номерам и промпт — в одном окне.'}
+                  {shot.critique?.prompt === build.prompt ? `Критик: замечаний осталось ${activeCritiqueFindings(shot, build.prompt).length}.` : 'Собран. Настройки, картинки по номерам и промпт — в одном окне.'}
                 </Text>
               )}
             </div>
@@ -611,7 +612,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               const segment = paragraph.segmentId === undefined ? -1 : shot.segments.findIndex((s) => s.id === paragraph.segmentId);
               return segment === -1 ? `абзац ${index + 1} · ${BLOCK_RU[paragraph.kind] ?? paragraph.kind}` : `абзац ${index + 1} · отрезок ${segment + 1}`;
             }}
-            onSuppress={(fingerprint, reasonRu) => store.updateShot((s) => ({ ...s, suppressed: [...s.suppressed.filter((x) => x.fingerprint !== fingerprint), { fingerprint, reasonRu }] }))}
+            onSuppress={(fingerprint, reasonRu, messageRu) => store.updateShot((s) => ({ ...s, suppressed: [...s.suppressed.filter((x) => x.fingerprint !== fingerprint), { fingerprint, reasonRu, messageRu }] }))}
             onRestore={(fingerprint) => store.updateShot((s) => ({ ...s, suppressed: s.suppressed.filter((x) => x.fingerprint !== fingerprint) }))}
             critic={{ running: store.critiquing, error: store.critiqueError, onRun: () => void store.critiqueShot(), onCancel: store.cancelCritique }}
           />

@@ -138,6 +138,14 @@ describe('POST /api/llm/critique и экспорт панели', () => {
     const blocked = await app.request('/api/llm/critique', { method: 'POST', headers, body: JSON.stringify({ project: broken, shotId: 'shot-1' }) });
     expect(blocked.status).toBe(422);
     expect(calls).toHaveLength(1);
+
+    // Снятое владельцем требование учитывает тот же core и на сервере.
+    const brokenShot = broken.shots[0]!;
+    const finding = buildShot(broken, brokenShot, pack()).blockers.find((b) => b.code === 'NO_PLACE')!;
+    const accepted = { ...broken, shots: [{ ...brokenShot, suppressed: [{ fingerprint: finding.fingerprint!, reasonRu: 'Место видно на референсе.' }] }] };
+    const reviewed = await app.request('/api/llm/critique', { method: 'POST', headers, body: JSON.stringify({ project: accepted, shotId: 'shot-1' }) });
+    expect(reviewed.status).toBe(200);
+    expect(calls).toHaveLength(2);
   });
 
   it('экспорт панели: файлы 01-…, 02-… в порядке панели; референс без картинки — пропуск с пометкой', async () => {

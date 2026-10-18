@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { ShotBuild } from '../../core/pipeline.ts';
 import type { Finding } from '../../core/lint/index.ts';
 import type { Critique, Shot } from '../../core/model/project.ts';
-import { Button, Card, Icon, Tag, Text, TextField, type TagTone } from '../ui/components/index.ts';
+import { activeCritiqueFindings, critiqueFingerprint } from '../../core/review.ts';
+import { Button, Card, Icon, Tag, Text, type TagTone } from '../ui/components/index.ts';
 import styles from './Findings.module.css';
 
 const SEVERITY: Record<Finding['severity'], { tone: TagTone; label: string }> = {
@@ -26,7 +27,7 @@ interface FindingsProps {
   shot: Shot;
   /** Подпись блока промпта по индексу абзаца — чтобы находка называла место словами. */
   blockLabel: (paragraph: number) => string;
-  onSuppress: (fingerprint: string, reasonRu: string) => void;
+  onSuppress: (fingerprint: string, reasonRu: string, messageRu?: string) => void;
   onRestore: (fingerprint: string) => void;
   /** Критик: запускается только по клику, результат привязан к тексту промпта. */
   critic: { running: boolean; error: string | null; onRun: () => void; onCancel: () => void };
@@ -36,16 +37,11 @@ const jump = (paragraph: number | null): void => {
   if (paragraph !== null) document.getElementById(`p-${paragraph}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-function Row({ finding, blockLabel, onSuppress }: { finding: Finding; blockLabel: FindingsProps['blockLabel']; onSuppress: FindingsProps['onSuppress'] }) {
-  const [asking, setAsking] = useState(false);
-  const [reason, setReason] = useState('');
-  const confirm = (): void => {
-    if (reason.trim() === '') return;
-    onSuppress(finding.fingerprint, reason.trim());
-    setAsking(false);
-    setReason('');
-  };
+function Dismiss({ fingerprint, messageRu, onSuppress }: { fingerprint: string; messageRu: string; onSuppress: FindingsProps['onSuppress'] }) {
+  return <Button variant="ghost" size="xs" icon={<Icon name="eye-off" size={0.875} />} onClick={() => onSuppress(fingerprint, 'Не влияет на результат этого кадра — решение владельца.', messageRu)}>Не исправлять</Button>;
+}
 
+function Row({ finding, blockLabel, onSuppress }: { finding: Finding; blockLabel: FindingsProps['blockLabel']; onSuppress: FindingsProps['onSuppress'] }) {
   return (
     <div className={styles.finding}>
       <Tag tone={SEVERITY[finding.severity].tone} dot>{SEVERITY[finding.severity].label}</Tag>
@@ -57,18 +53,8 @@ function Row({ finding, blockLabel, onSuppress }: { finding: Finding; blockLabel
           <Text variant="caption" tone="tertiary" mono>{finding.ruleId}{finding.paragraph !== null ? ` · ${blockLabel(finding.paragraph)}` : ''}</Text>
           <span className={styles.spacer} />
           {finding.paragraph !== null && <Button variant="ghost" size="xs" onClick={() => jump(finding.paragraph)}>К абзацу</Button>}
-          {!asking && <Button variant="ghost" size="xs" icon={<Icon name="eye-off" size={0.875} />} onClick={() => setAsking(true)}>Здесь это не ошибка</Button>}
+          <Dismiss fingerprint={finding.fingerprint} messageRu={finding.messageRu} onSuppress={onSuppress} />
         </div>
-        {asking && (
-          <div className={styles.suppress}>
-            <TextField label="Почему здесь это допустимо" placeholder="Мимолётное отражение оператора — осознанно, как в Кадре 2 гайда" value={reason} onChange={(event) => setReason(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && confirm()} helper="Причина сохранится в кадре. Находка скроется только для этого места и вернётся, если текст изменится." />
-            <div className={styles.actions}>
-              <span className={styles.spacer} />
-              <Button variant="ghost" size="xs" onClick={() => setAsking(false)}>Отмена</Button>
-              <Button variant="secondary" size="xs" disabled={reason.trim() === ''} onClick={confirm}>Скрыть с причиной</Button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -84,6 +70,8 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
   const notes = build.findings.filter((f) => f.severity === 'info');
   const blocking = build.blockers.length + errors.length;
   const critique = shot.critique !== null && shot.critique.prompt === build.prompt ? shot.critique : null;
+  const activeCritic = activeCritiqueFindings(shot, build.prompt);
+  const dismissedCritic = (critique?.findings.length ?? 0) - activeCritic.length;
   const stale = shot.critique !== null && critique === null;
 
   return (
@@ -96,6 +84,8 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
         </div>
       </header>
 
+      <Text variant="caption" tone="tertiary">Если замечание не влияет на этот кадр, нажми «Не исправлять». Его можно вернуть из списка исключений.</Text>
+
       {blocking > 0 && (
         <section className={styles.group}>
           <Text variant="caption" tone="tertiary">Блокирует копирование — с этим промпт в генерацию не уйдёт</Text>
@@ -104,7 +94,12 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
               <Tag tone="danger" dot>не готово</Tag>
               <div className={styles.body}>
                 <Text variant="label">{blocker.messageRu}</Text>
-                <Text variant="caption" tone="tertiary" mono>{blocker.code}</Text>
+                <div className={styles.actions}>
+                  <Text variant="caption" tone="tertiary" mono>{blocker.code}</Text>
+                  <span className={styles.spacer} />
+                  {blocker.fingerprint !== undefined && <Dismiss fingerprint={blocker.fingerprint} messageRu={blocker.messageRu} onSuppress={onSuppress} />}
+                </div>
+                {blocker.fingerprint === undefined && <Text variant="caption" tone="tertiary">Нужно исправить, чтобы собрать промпт: исключение здесь недоступно.</Text>}
               </div>
             </div>
           ))}
@@ -126,7 +121,7 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
           <div className={styles.criticTitle}>
             <Icon name="sparkles" size={1} />
             <Text variant="label" medium>Критик — итоговая проверка агентом</Text>
-            {critique !== null && <Tag tone={VERDICT[critique.verdict].tone} dot>{VERDICT[critique.verdict].label}</Tag>}
+            {critique !== null && <Tag tone={dismissedCritic > 0 ? 'outline' : VERDICT[critique.verdict].tone} dot>{dismissedCritic > 0 ? `осталось замечаний: ${activeCritic.length}` : VERDICT[critique.verdict].label}</Tag>}
             {stale && <Tag tone="outline">промпт изменился после проверки</Tag>}
             {shot.critique === null && !critic.running && <Tag tone="outline">не запускался</Tag>}
           </div>
@@ -143,8 +138,9 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
         {critic.error !== null && <Text variant="label" tone="secondary">{critic.error}</Text>}
         {critique !== null && (
           <>
+            {dismissedCritic > 0 && <Text variant="caption" tone="tertiary">Не исправляем: {dismissedCritic}. Исходная оценка критика: «{VERDICT[critique.verdict].label}».</Text>}
             <Text variant="label">{critique.summaryRu}</Text>
-            {critique.findings.map((f, i) => (
+            {activeCritic.map((f, i) => (
               <div key={`${f.paragraph}-${i}`} className={styles.finding}>
                 <Tag tone={CRITIC_SEVERITY[f.severity].tone} dot>{CRITIC_SEVERITY[f.severity].label}</Tag>
                 <div className={styles.body}>
@@ -155,6 +151,7 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
                     <Text variant="caption" tone="tertiary" mono>критик · {f.category}{f.symptomId !== undefined ? ` · ${f.symptomId}` : ''} · {blockLabel(f.paragraph - 1)}</Text>
                     <span className={styles.spacer} />
                     <Button variant="ghost" size="xs" onClick={() => jump(f.paragraph - 1)}>К абзацу</Button>
+                    <Dismiss fingerprint={critiqueFingerprint(critique, f)} messageRu={f.problemRu} onSuppress={onSuppress} />
                   </div>
                 </div>
               </div>
@@ -194,13 +191,15 @@ export function Findings({ build, shot, blockLabel, onSuppress, onRestore, criti
           <Button variant="ghost" size="xs" icon={<Icon name={showSuppressed ? 'chevron-up' : 'chevron-down'} size={0.875} />} onClick={() => setShowSuppressed(!showSuppressed)}>
             Осознанные исключения · {shot.suppressed.length}
           </Button>
+          {showSuppressed && <Text variant="caption" tone="tertiary">Решения для сохранённых версий кадра. После изменения текста или новой проверки критика замечания могут появиться снова.</Text>}
           {showSuppressed && shot.suppressed.map((item) => (
             <div key={item.fingerprint} className={styles.finding}>
-              <Tag tone="outline">скрыто</Tag>
+              <Tag tone="outline">решение</Tag>
               <div className={styles.body}>
-                <Text variant="label">{item.reasonRu}</Text>
+                {item.messageRu !== undefined && <Text variant="label">{item.messageRu}</Text>}
+                <Text variant="caption" tone="secondary">{item.reasonRu}</Text>
                 <div className={styles.actions}>
-                  <Text variant="caption" tone="tertiary" mono>{item.fingerprint.slice(0, 70)}</Text>
+                  <Text variant="caption" tone="tertiary" mono>{item.messageRu === undefined ? item.fingerprint.slice(0, 70) : item.fingerprint.startsWith('critic:') ? 'Критик' : item.fingerprint.startsWith('blocker:') ? 'Проверка сборки' : 'Линтер'}</Text>
                   <span className={styles.spacer} />
                   <Button variant="ghost" size="xs" onClick={() => onRestore(item.fingerprint)}>Вернуть</Button>
                 </div>

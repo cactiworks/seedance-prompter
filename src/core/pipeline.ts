@@ -4,6 +4,7 @@ import { pendingLabels, staleFields } from './compose.ts';
 import type { AgentShooting } from './llm/buildWriter.ts';
 import { lintText, type Finding, type Lexicon, type LintParams } from './lint/index.ts';
 import { countWords } from './lint/tokenize.ts';
+import { reviewBlockers, type BuildBlocker } from './review.ts';
 import { activeStates, CUSTOM_SHOOTING, durationOf, GUIDE_SHOOTING, isObjectRef, shootingOf, type Project, type Shot, type Structure } from './model/project.ts';
 
 /** Всё, что ядру нужно знать о режиме съёмки. Код правил гайда не знает — он исполняет pack. */
@@ -52,7 +53,7 @@ export interface ShotBuild {
   /** Итог по абзацам — для предпросмотра и привязки находок. */
   resolvedParagraphs: string[];
   /** Блокирующие проблемы сборки: пока они есть, промпт копировать нельзя. */
-  blockers: { code: string; messageRu: string }[];
+  blockers: BuildBlocker[];
   findings: Finding[];
   metrics: { chars: number; words: number; speechWords: number; speechCapacity: number; refsInPanel: number; refsUsed: number };
 }
@@ -164,7 +165,9 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
       behavior: shot.behavior,
       operatorRule: shot.operatorRule,
       locationRule: shot.locationRule,
-      locationRefs: ref1 === undefined && !shooting.guide ? null : [ref1 ?? 'missing-location-ref', ref2 ?? ref1 ?? 'missing-location-ref'],
+      // Без картинки нельзя создавать фиктивную ссылку. Требование гайда остаётся
+      // отдельным блокером NO_LOCATION_REF, который владелец может осознанно снять.
+      locationRefs: ref1 === undefined ? null : [ref1, ref2 ?? ref1],
       // «Что брать с референса» — формула гайда; в интерфейсе её нет, поэтому пустое значение не ломает промпт.
       world: { placeEn: project.world.place.en.trim(), useOnlyEn: project.world.useOnlyEn.trim() === '' ? DEFAULT_USE_ONLY : project.world.useOnlyEn, weatherEn: project.world.weather.en.trim() },
       languageName: pack.dialects.languageNames[project.language] ?? project.language,
@@ -193,8 +196,6 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     const where = paragraph.segmentId === undefined ? '' : `Отрезок ${segmentNumber.get(paragraph.segmentId) ?? '?'}: `;
     for (const issue of out.issues) {
       unresolved.add(issue.placeholder);
-      // Про отсутствующий референс локации уже сказано отдельным блокером.
-      if (issue.placeholder.includes('missing-location-ref')) continue;
       const messageRu = `${where}${issue.messageRu}`;
       if (!blockers.some((b) => b.messageRu === messageRu)) blockers.push({ code: issue.code, messageRu });
     }
@@ -319,7 +320,7 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
     paragraphs: compiled.paragraphs,
     prompt,
     resolvedParagraphs,
-    blockers,
+    blockers: reviewBlockers(blockers, project, shot, prompt),
     findings: all,
     metrics: { chars: prompt.length, words: countWords(prompt), speechWords, speechCapacity: Math.round(durationSec * speakingShare * wordsPerSecond), refsInPanel: shot.panel.length, refsUsed: used.size },
   };

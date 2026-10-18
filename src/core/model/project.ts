@@ -208,8 +208,8 @@ export const ShotSchema = z.object({
   /** Кадр свободным русским текстом — вход планировщика. Реплики в «ёлочках» вынимаются как L-id. */
   synopsisRu: z.string().default(''),
   segments: z.array(SegmentSchema).default([]),
-  /** Отпечатки подавленных находок линтера с причиной. */
-  suppressed: z.array(z.object({ fingerprint: z.string(), reasonRu: z.string().min(1) })).default([]),
+  /** Осознанные исключения линтера, требований к содержанию и критика. */
+  suppressed: z.array(z.object({ fingerprint: z.string(), reasonRu: z.string().min(1), messageRu: z.string().optional() })).default([]),
   attempts: z.array(AttemptSchema).default([]),
   critique: CritiqueSchema.nullable().default(null),
 });

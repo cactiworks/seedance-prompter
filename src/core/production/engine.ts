@@ -1,6 +1,5 @@
 import { currentArtifact, isAutomatic, type Artifact, type ProductionRun, type ProductionShot, type RunAction, type RunInput } from './model.ts';
 import { reviewedPhoto } from './review.ts';
-import { applyReviewDecision } from './reviewDecisions.ts';
 
 export class ProductionError extends Error {
   readonly code: 'CONFLICT' | 'INVALID' | 'NOT_FOUND';
@@ -99,10 +98,6 @@ export function advanceRun(source: ProductionRun, now: number, delay: number): P
 export function applyRunAction(source: ProductionRun, action: RunAction, now: number, delay: number): ProductionRun {
   if (action.rev !== source.rev) throw new ProductionError('CONFLICT', 'Серия уже изменилась. Данные обновлены — повтори действие для текущей версии.');
   const run = structuredClone(source);
-  if (action.type === 'setReviewDismissal' || action.type === 'acceptReviewedPhoto') {
-    applyReviewDecision(run, action, now);
-    return run;
-  }
   if (action.type === 'pause' || action.type === 'resume') {
     run.paused = action.type === 'pause';
     if (run.retouch?.status === 'running' && run.paused) { run.retouch.status = 'stopped'; for (const item of run.retouch.items) if (item.status === 'checking') { item.status = 'pending'; item.error = 'Проверка прервана паузой.'; } }

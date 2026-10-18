@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { activeCritiqueFindings } from '../../core/review.ts';
 import { estimate, findModel, formatCost, paramsFor, validateGen } from '../../core/gen/models.ts';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import type { Project, Shot } from '../../core/model/project.ts';
@@ -36,11 +37,13 @@ interface GateItem {
  */
 export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build, durationSec, warnings }: ExportCardProps) {
   const store = useStore();
-  const [gate, setGate] = useState<{ prompt: string; ticks: string[] }>({ prompt: '', ticks: [] });
+  const [gate, setGate] = useState<{ reviewKey: string; ticks: string[] }>({ reviewKey: '', ticks: [] });
   const [copied, setCopied] = useState<string | null>(null);
   const [savedN, setSavedN] = useState<{ prompt: string; n: number } | null>(null);
 
-  const ticks = gate.prompt === build.prompt ? gate.ticks : [];
+  const reviewKey = JSON.stringify([build.prompt, shot.critique, shot.suppressed]);
+  const ticks = gate.reviewKey === reviewKey ? gate.ticks : [];
+  const activeCritic = activeCritiqueFindings(shot, build.prompt);
   const critique = shot.critique !== null && shot.critique.prompt === build.prompt ? shot.critique : null;
   const stale = shot.critique !== null && critique === null;
   const refByKey = new Map(project.refs.map((r) => [r.key, r]));
@@ -57,10 +60,12 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
       ? { id: 'no-critic', label: stale ? 'Промпт менялся после проверки критиком — иду без перепроверки, осознанно' : 'Иду без итоговой проверки критиком — осознанно' }
       : critique.findings.length === 0
         ? { id: 'critic-clean', label: 'Критик прочитал этот текст и замечаний не нашёл', auto: true }
-        : { id: 'critic', label: `Замечания критика (${critique.findings.length}) просмотрены` },
+        : activeCritic.length === 0
+          ? { id: 'critic-dismissed', label: `Все замечания критика (${critique.findings.length}) оставлены без исправления по твоему решению`, auto: true }
+          : { id: 'critic', label: `Оставшиеся замечания критика (${activeCritic.length}) просмотрены` },
   ];
   const passed = items.every((item) => item.auto === true || ticks.includes(item.id));
-  const tick = (id: string, on: boolean): void => setGate({ prompt: build.prompt, ticks: on ? [...ticks, id] : ticks.filter((x) => x !== id) });
+  const tick = (id: string, on: boolean): void => setGate({ reviewKey, ticks: on ? [...ticks, id] : ticks.filter((x) => x !== id) });
 
   // Генерация отсюда (решения 21–23): Seedance 2.5 через KIE. Формат и длительность — из кадра, картинки — панель по
   // порядку (@ImageN). Настройки Higgsfield и порядок загрузки сервер выставляет сам — эти пункты чек-листа не нужны.
@@ -249,9 +254,10 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
           ) : (
             <div className={styles.readback}>
               <div className={styles.chips}>
-                <Tag tone={VERDICT[critique.verdict]?.tone ?? 'neutral'} dot>{VERDICT[critique.verdict]?.label ?? critique.verdict}</Tag>
+                <Tag tone={activeCritic.length < critique.findings.length ? 'outline' : VERDICT[critique.verdict]?.tone ?? 'neutral'} dot>Исходная оценка: {VERDICT[critique.verdict]?.label ?? critique.verdict}</Tag>
                 <Text variant="label" tone="secondary">{critique.summaryRu}</Text>
               </div>
+              {activeCritic.length < critique.findings.length && <Text variant="caption" tone="secondary">Осталось замечаний: {activeCritic.length}. Оставлено без исправления: {critique.findings.length - activeCritic.length}.</Text>}
               {critique.readback.map((r) => (
                 <div key={r.paragraph} className={styles.readbackRow}>
                   <Text variant="caption" tone="tertiary" mono>{String(r.paragraph).padStart(2, '0')}</Text>

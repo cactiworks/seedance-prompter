@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { newProject, type Project, type Shot } from '../../src/core/model/project.ts';
+import { newProject, ProjectSchema, type Critique, type Project, type Shot } from '../../src/core/model/project.ts';
+import { activeCritiqueFindings, critiqueFingerprint, reviewBlockers } from '../../src/core/review.ts';
 import { buildShot, CUSTOM_KIT, type PackBundle } from '../../src/core/pipeline.ts';
 
 const DIR = path.join(import.meta.dirname, '../../packs/cinema-doc');
@@ -272,5 +273,90 @@ describe('длительность кадра — параметр, а не ко
     expect([finding?.severity, finding?.evidence]).toEqual(['warning', '30-second take']);
     // «shifts for two seconds» — тайминг внутри сцены, а не длительность дубля.
     expect(rules(run(CLEAN, {}, { durationSec: 15 }))).not.toContain('DURATION_MISMATCH');
+  });
+});
+
+
+describe('решение владельца в Seedance-промптере', () => {
+  const dismiss = (shot: Shot, fingerprint: string): Shot => ({ ...shot, suppressed: [...shot.suppressed, { fingerprint, reasonRu: 'Не влияет на этот кадр.', messageRu: 'Пример замечания' }] });
+
+  it('требование гайда снимается, сохраняется в кадре и возвращается одной отменой', () => {
+    const { project, shot } = make(CLEAN, {}, { locationRefs: [] });
+    const before = buildShot(project, shot, pack);
+    const finding = before.blockers.find((item) => item.code === 'NO_LOCATION_REF');
+    expect(finding?.fingerprint).toBeDefined();
+    const accepted = dismiss(shot, finding!.fingerprint!);
+    const saved = ProjectSchema.parse(JSON.parse(JSON.stringify({ ...project, shots: [accepted] })));
+    const after = buildShot(saved, saved.shots[0]!, pack);
+    expect(codes(after)).not.toContain('NO_LOCATION_REF');
+    expect(after.prompt).not.toContain('{{');
+    expect(after.prompt).toBe(before.prompt);
+    expect(saved.shots[0]?.suppressed[0]?.messageRu).toBe('Пример замечания');
+    expect(codes(buildShot(project, { ...accepted, suppressed: [] }, pack))).toContain('NO_LOCATION_REF');
+    expect(codes(buildShot(project, shot, pack))).toContain('NO_LOCATION_REF');
+  });
+
+  it('изменённый промпт или русский ввод возвращает блокер; сохранение и другие исключения — нет', () => {
+    const { project, shot } = make(CLEAN, {}, { locationRefs: [] });
+    const fingerprint = buildShot(project, shot, pack).blockers.find((b) => b.code === 'NO_LOCATION_REF')!.fingerprint!;
+    const accepted = dismiss(shot, fingerprint);
+    expect(codes(buildShot({ ...project, rev: 20 }, dismiss(accepted, 'another-finding'), pack))).not.toContain('NO_LOCATION_REF');
+    expect(codes(buildShot(project, { ...accepted, durationSec: 15 }, pack))).toContain('NO_LOCATION_REF');
+    const changed = { ...project, world: { ...project.world, place: { ...project.world.place, ru: 'Новое место', locked: false, enFor: '' } } };
+    expect(codes(buildShot(changed, accepted, pack))).toContain('NO_LOCATION_REF');
+  });
+
+  it('снятие NEEDS_COMPOSE не принимает следующую русскую правку с тем же текстом блокера', () => {
+    const { project, shot } = make(CLEAN);
+    const pending = { ...project, world: { ...project.world, place: { ...project.world.place, ru: 'Новое место', locked: false, enFor: '' } } };
+    const finding = buildShot(pending, shot, pack).blockers.find((b) => b.code === 'NEEDS_COMPOSE')!;
+    const accepted = dismiss(shot, finding.fingerprint!);
+    expect(codes(buildShot(pending, accepted, pack))).not.toContain('NEEDS_COMPOSE');
+    const changed = { ...pending, world: { ...pending.world, place: { ...pending.world.place, ru: 'Другое место' } } };
+    expect(buildShot(changed, accepted, pack).blockers.find((b) => b.code === 'NEEDS_COMPOSE')?.messageRu).toBe(finding.messageRu);
+  });
+
+  it('неразрешённые ссылки и ошибки pack нельзя снять, включая поддельный fingerprint', () => {
+    const { project, shot } = make([...CLEAN, '{{ref:missing-location-ref}}']);
+    const before = buildShot(project, shot, pack);
+    const technical = before.blockers.find((b) => b.code === 'REF_NOT_IN_PANEL');
+    expect(technical).toBeDefined();
+    expect(technical?.fingerprint).toBeUndefined();
+    const forged = dismiss(shot, 'forged');
+    expect(reviewBlockers([{ code: 'REF_NOT_IN_PANEL', messageRu: 'Нет ссылки', fingerprint: 'forged' }], project, forged, before.prompt)).toHaveLength(1);
+    expect(buildShot(project, { ...forged, kitId: 'missing-kit' }, pack).blockers[0]?.fingerprint).toBeUndefined();
+    expect(codes(buildShot(project, forged, pack))).toContain('REF_NOT_IN_PANEL');
+  });
+
+  const critiqueFor = (prompt: string): Critique => ({
+    prompt, createdAt: '2026-10-18T12:00:00Z', model: null, verdict: 'not-ready', summaryRu: 'Два замечания', readback: [], droppedRu: [],
+    findings: [
+      { severity: 'critical', category: 'physics', quote: 'Alexander nods', paragraph: 4, problemRu: 'Намеренный эффект', fixRu: 'Изменить действие' },
+      { severity: 'warning', category: 'camera', quote: 'Alexander nods', paragraph: 4, problemRu: 'Другой риск в той же цитате', fixRu: 'Изменить камеру' },
+    ],
+  });
+
+  it('критик: скрывается только выбранное замечание, исходный отчёт и вердикт сохраняются', () => {
+    const { project, shot } = make(CLEAN);
+    const prompt = buildShot(project, shot, pack).prompt;
+    const critique = critiqueFor(prompt);
+    const accepted = dismiss({ ...shot, critique }, critiqueFingerprint(critique, critique.findings[0]!));
+    const saved = ProjectSchema.parse(JSON.parse(JSON.stringify({ ...project, shots: [accepted] }))).shots[0]!;
+    expect(activeCritiqueFindings(saved, prompt)).toEqual([critique.findings[1]]);
+    expect(saved.critique).toEqual(critique);
+    expect(activeCritiqueFindings({ ...saved, suppressed: [] }, prompt)).toEqual(critique.findings);
+    expect(activeCritiqueFindings(dismiss(saved, critiqueFingerprint(critique, critique.findings[1]!)), prompt)).toEqual([]);
+  });
+
+  it('новый отчёт, другой текст замечания и изменённый промпт не наследуют исключение критика', () => {
+    const { shot } = make(CLEAN);
+    const critique = critiqueFor('Prompt');
+    const accepted = dismiss({ ...shot, critique }, critiqueFingerprint(critique, critique.findings[0]!));
+    const rerun = { ...critique, createdAt: '2026-10-18T13:00:00Z' };
+    expect(activeCritiqueFindings({ ...accepted, critique: rerun }, 'Prompt')).toHaveLength(2);
+    const changed = { ...critique, findings: critique.findings.map((f) => ({ ...f, problemRu: 'Новая причина' })) };
+    expect(activeCritiqueFindings({ ...accepted, critique: changed }, 'Prompt')).toHaveLength(2);
+    expect(activeCritiqueFindings(accepted, 'Changed prompt')).toEqual([]);
+    expect(activeCritiqueFindings({ ...accepted, critique: { ...critique, prompt: 'Changed prompt' } }, 'Changed prompt')).toHaveLength(2);
   });
 });

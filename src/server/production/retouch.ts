@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RetouchAuditSchema, effectiveRetouchAudit, auditPassed, repairable, quoteRetouch, retouchPrice, retouchPrompt, validateRetouchAudit, MAX_RETOUCH_ATTEMPTS, RETOUCH_MODEL, RETOUCH_PARAMS, type RetouchStart, type RetouchItem } from '../../core/production/retouch.ts';
+import { RetouchAuditSchema, auditPassed, repairable, quoteRetouch, retouchPrice, retouchPrompt, validateRetouchAudit, MAX_RETOUCH_ATTEMPTS, RETOUCH_MODEL, RETOUCH_PARAMS, type RetouchStart, type RetouchItem } from '../../core/production/retouch.ts';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
 import { ProductionError, record } from '../../core/production/engine.ts';
 import { appearanceReady } from '../../core/production/appearance.ts';
@@ -104,12 +104,11 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
           if (state.appearanceRequestId !== (current.character ? current.appearance?.requestId : null)) throw new Error('Внешность изменилась');
           target.audit = result; target.history.push({ artifactId: item.currentId, audit: result });
           const shot = current.shots.find(s => s.id === item.shotId)!;
-          const effective = effectiveRetouchAudit(current, result);
-          if (auditPassed(effective)) {
+          if (auditPassed(result)) {
             target.status = 'complete'; target.error = null; shot.photoId = target.currentId; shot.acceptedPhotoId = target.currentId; shot.step = 'ready'; shot.error = null;
-            const a = currentArtifact(current, target.currentId)!; a.qc = JSON.stringify(effective.result.checks) === JSON.stringify(result.result.checks) ? 'pass' : 'review'; a.qcNote = a.qc === 'pass' ? 'Выбран владельцем по замыслу; детали и сохранность композиции проверены после milestone.' : 'Детали проверены после milestone с учётом снятых владельцем замечаний.';
-          } else if (repairable(effective) && target.attempts.length < MAX_RETOUCH_ATTEMPTS) target.status = 'planned';
-          else { target.status = 'blocked'; target.error = result.preserved !== 'pass' ? 'Правка изменила удачный кадр. Исходник сохранён.' : target.attempts.length >= MAX_RETOUCH_ATTEMPTS ? 'Три попытки исчерпаны. Кадр требует решения.' : effective.result.reason; shot.error = target.error; }
+            const a = currentArtifact(current, target.currentId)!; a.qc = 'pass'; a.qcNote = 'Выбран владельцем по замыслу; детали и сохранность композиции проверены после milestone.';
+          } else if (repairable(result) && target.attempts.length < MAX_RETOUCH_ATTEMPTS) target.status = 'planned';
+          else { target.status = 'blocked'; target.error = result.preserved !== 'pass' ? 'Правка изменила удачный кадр. Исходник сохранён.' : target.attempts.length >= MAX_RETOUCH_ATTEMPTS ? 'Три попытки исчерпаны. Кадр требует решения.' : result.result.reason; shot.error = target.error; }
           finish(current); record(current, now(), target.status === 'complete' ? `${shot.title}: детали проверены, кадр готов.` : `${shot.title}: ${target.error ?? 'найдены локальные дефекты, готовим правку.'}`);
         });
       } catch {
@@ -145,7 +144,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
         const source = currentArtifact(run, attempt.sourceId)!;
         const sourceMedia = await gen().library.get(source.mediaId!);
         if (!sourceMedia || !item.audit?.fixes.length) { item.status = 'blocked'; item.error = 'Исходник или области правки недоступны.'; changed = true; continue; }
-        try { media = await retainOutsideRegions(gen(), sourceMedia, media, effectiveRetouchAudit(run, item.audit).fixes.map(f => f.box)); }
+        try { media = await retainOutsideRegions(gen(), sourceMedia, media, item.audit.fixes.map(f => f.box)); }
         catch { attempt.status = 'processing_failed'; item.status = 'blocked'; item.error = 'Не удалось сохранить области правки. Исходник сохранён.'; changed = true; continue; }
         const artifactId = `${item.shotId}-retouch-${media.id}`;
         run.artifacts.push({ ...source, id: artifactId, sourceId: source.id, version: source.version + 1, url: `/api/library/${media.id}/file`, poster: `/api/library/${media.id}/file`, mediaId: media.id, generationJobId: job.id, model: 'Seedream 5 Pro · KIE', providerModel: job.providerModel, taskId: job.taskId ?? job.id, prompt: job.prompt, createdAt: media.savedAt, cost: job.estimateUsd, qc: 'review', qcNote: 'Локальная правка ожидает повторной проверки.', note: item.audit?.result.reason ?? '' });
@@ -169,13 +168,13 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
     try {
       const intent = await store.update(id, current => {
         const state = current.retouch!; const target = state.items.find(i => i.shotId === item.shotId)!;
-        if (current.paused || state.status !== 'running' || target.status !== 'planned' || !target.audit || !repairable(effectiveRetouchAudit(current, target.audit))) return;
+        if (current.paused || state.status !== 'running' || target.status !== 'planned' || !target.audit || !repairable(target.audit)) return;
         const price = retouchPrice(1 + state.uploadIds.length);
         if (state.perEditUsd !== price.usd || state.remainingUsd < price.usd || target.attempts.length >= MAX_RETOUCH_ATTEMPTS) {
           target.status = 'blocked'; target.error = 'Лимит правок или стоимость изменились. Нужна новая оценка.'; finish(current); record(current, now(), target.error); return;
         }
         tag = `retouch:${id}:${item.shotId}:${target.attempts.length + 1}`;
-        target.attempts.push({ tag, sourceId: target.currentId, jobId: null, artifactId: null, prompt: retouchPrompt(effectiveRetouchAudit(current, target.audit)), status: 'submitting' });
+        target.attempts.push({ tag, sourceId: target.currentId, jobId: null, artifactId: null, prompt: retouchPrompt(target.audit), status: 'submitting' });
         state.remainingUsd = Number((state.remainingUsd - price.usd).toFixed(6)); target.status = 'generating';
         record(current, now(), `${current.shots.find(s => s.id === item.shotId)!.title}: локальная правка ${target.attempts.length} из ${MAX_RETOUCH_ATTEMPTS}.`);
       });

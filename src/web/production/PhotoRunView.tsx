@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
 import { masterAttempts, masterRejected, photoPrice } from '../../core/production/photos.ts';
-import { DETAIL_CRITERIA, dismissedChecks, originalPhotoReview, masterApproved, reviewedPhoto } from '../../core/production/review.ts';
+import { DETAIL_CRITERIA, masterApproved, reviewedPhoto } from '../../core/production/review.ts';
 import { boundPrompts } from '../../core/production/appearance.ts';
 import { hasStoryEvents, sceneForShot } from '../../core/production/plan.ts';
 import { Button, Dialog, Tag, Text } from '../ui/components/index.ts';
 import { CharacterField } from './CharacterField.tsx';
 import { Preparation } from './Preparation.tsx';
 import { useProduction } from './store.ts';
-import { PhotoReview, PhotoReviewDecisions, PhotoVerdict } from './PhotoReview.tsx';
+import { PhotoReview, PhotoVerdict } from './PhotoReview.tsx';
 import { PhotoStart } from './PhotoStart.tsx';
 import { RetouchStart } from './RetouchStart.tsx';
 import styles from './Production.module.css';
@@ -55,7 +55,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const [selected, setSelected] = useState<string[] | null>(null);
   const artifact = currentArtifact(run, inspect);
   const master = currentArtifact(run, run.photos?.masterArtifactId ?? null);
-  const eligible = run.retouch?.status === 'running' ? [] : run.shots.filter(s => ['photoReview', 'ready'].includes(s.step) && s.photoId && !(s.acceptedPhotoId === s.photoId && dismissedChecks(run, s.photoId).length > 0) && (reviewedPhoto(run, s.photoId) || run.retouch?.items.some(i => i.shotId === s.id)) && !run.retouch?.items.some(i => i.shotId === s.id && i.status === 'complete')).map(s => s.photoId!);
+  const eligible = run.retouch?.status === 'running' ? [] : run.shots.filter(s => ['photoReview', 'ready'].includes(s.step) && s.photoId && (reviewedPhoto(run, s.photoId) || run.retouch?.items.some(i => i.shotId === s.id)) && !run.retouch?.items.some(i => i.shotId === s.id && i.status === 'complete')).map(s => s.photoId!);
   const recommended = eligible.filter(id => reviewedPhoto(run, id)?.verdict === 'keep');
   const selection = (selected ?? eligible).filter(id => eligible.includes(id));
   const withIssues = selection.filter(id => reviewedPhoto(run, id)?.verdict !== 'keep').length;
@@ -63,7 +63,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const step = progress(run);
   const [title, note] = nextStep(run);
   const failures = run.photos?.items.filter(i => ['failed', 'unknown', 'download_failed'].includes(i.status)) ?? [];
-  const inspectReview = artifact && (originalPhotoReview(run, artifact.id) ?? run.photos?.masterHistory?.find(h => h.artifactId === artifact.id)?.review.report?.results.find(r => r.artifactId === artifact.id));
+  const inspectReview = artifact && (reviewedPhoto(run, artifact.id) ?? run.photos?.masterHistory?.find(h => h.artifactId === artifact.id)?.review.report?.results.find(r => r.artifactId === artifact.id));
   const replan = () => { setDraft({ contentMode: run.contentMode, brollCount: run.brollCount, title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); };
   return <>
     <header className={styles.header}><div><Text variant="caption" tone="secondary">{run.contentMode === 'broll' ? 'Креативные B-roll · фото' : 'Серия фотографий'}{run.character && ` · ${run.character.name}`}</Text><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Снять паузу' : 'Пауза'}</Button>}</div></header>
@@ -90,7 +90,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       {master && <div className={styles.masterStrip}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорный кадр"><img src={master.url} alt="Опорный кадр" /></button><div><Text variant="label" medium>Опорный кадр · {masterAttempts(run)} / 3</Text><Text variant="caption" tone="secondary">{masterApproved(run) ? hasStoryEvents(run.scenePlan) ? 'Образ проверен · у кадров своя композиция' : 'Задаёт образ и сцену для серии' : masterRejected(run) ? 'Требует внимания' : 'Проверяется'}</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Рассмотреть</Button></div></div>}
       {run.shots.some(s => s.photoId) ? <div className={styles.grid}>{run.shots.map(shot => {
         const photo = currentArtifact(run, shot.photoId); if (!photo) return null;
-        return <article className={styles.asset} key={photo.id}><button type="button" className={`${styles.thumbnail} ${styles.photoThumbnail}`} onClick={() => setInspect(photo.id)} aria-label={`Открыть ${shot.title}`}><img src={photo.url} alt={shot.title} /></button><div className={styles.assetBody}><div className={styles.assetTitle}><Text variant="label" medium>{shot.title}</Text>{eligible.includes(photo.id) && <input type="checkbox" aria-label={`Принять ${shot.title}`} checked={selection.includes(photo.id)} disabled={busy || run.paused} onChange={() => setSelected(selection.includes(photo.id) ? selection.filter(id => id !== photo.id) : [...selection, photo.id])} />}</div>{run.retouch?.items.find(i => i.shotId === shot.id)?.error && <Text variant="caption">{dismissedChecks(run, photo.id).length ? reviewedPhoto(run, photo.id)?.reason : run.retouch.items.find(i => i.shotId === shot.id)!.error}</Text>}{shot.acceptedPhotoId ? <><Tag tone="success">{dismissedChecks(run, photo.id).length ? 'Принято с твоими решениями' : run.retouch?.items.some(i => i.shotId === shot.id && i.status === 'complete') ? 'Детали проверены' : 'Принято ранее'}</Tag><a className={styles.download} href={photo.url} download>Скачать фото</a></> : <PhotoVerdict compact result={reviewedPhoto(run, photo.id)} ownerDecision={dismissedChecks(run, photo.id).length > 0} />}<Button variant="ghost" onClick={() => setInspect(photo.id)}>Фото и замечания</Button></div></article>;
+        return <article className={styles.asset} key={photo.id}><button type="button" className={`${styles.thumbnail} ${styles.photoThumbnail}`} onClick={() => setInspect(photo.id)} aria-label={`Открыть ${shot.title}`}><img src={photo.url} alt={shot.title} /></button><div className={styles.assetBody}><div className={styles.assetTitle}><Text variant="label" medium>{shot.title}</Text>{eligible.includes(photo.id) && <input type="checkbox" aria-label={`Принять ${shot.title}`} checked={selection.includes(photo.id)} disabled={busy || run.paused} onChange={() => setSelected(selection.includes(photo.id) ? selection.filter(id => id !== photo.id) : [...selection, photo.id])} />}</div>{run.retouch?.items.find(i => i.shotId === shot.id)?.error && <Text variant="caption">{run.retouch.items.find(i => i.shotId === shot.id)!.error}</Text>}{shot.acceptedPhotoId ? <><Tag tone="success">{run.retouch?.items.some(i => i.shotId === shot.id && i.status === 'complete') ? 'Детали проверены' : 'Принято ранее'}</Tag><a className={styles.download} href={photo.url} download>Скачать фото</a></> : <PhotoVerdict compact result={reviewedPhoto(run, photo.id)} />}</div></article>;
       })}</div> : <div className={styles.resultEmpty}><Text variant="label" tone="secondary">Здесь появятся кадры серии после проверки опорного изображения.</Text></div>}
     </section>
     <details className={styles.productionDetails}><summary>Детали производства</summary><div className={styles.detailsBody}>
@@ -104,7 +104,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       {failures.some(i => i.status === 'failed' || i.status === 'unknown') && <ReusePlan run={run} />}
     </div></details>
     <Dialog open={!!artifact} onOpenChange={open => { if (!open) setInspect(null); }} size="l" title={artifact?.shotId === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === artifact?.shotId)?.title ?? 'Фотография'} description="Фото и результат проверки">
-      {artifact && <div className={styles.inspect}><img className={styles.preview} src={artifact.url} alt={artifact.shotId === 'scene' ? 'Опорный кадр' : 'Фотография серии'} /><div className={styles.inspectData}><PhotoVerdict result={reviewedPhoto(run, artifact.id) ?? inspectReview ?? undefined} originalResult={inspectReview || undefined} ownerDecision={dismissedChecks(run, artifact.id).length > 0} /><PhotoReviewDecisions run={run} artifactId={artifact.id} /><a className={styles.download} href={artifact.url} download>Скачать эту версию</a>{artifact.sourceId && currentArtifact(run, artifact.sourceId) && <Button variant="border" onClick={() => setInspect(artifact.sourceId)}>Посмотреть до правки</Button>}<details className={styles.detail}><summary>Prompt и данные задачи</summary><Text variant="caption">{artifact.model} · {artifact.taskId} · оценка {photoPrice(artifact.cost)}</Text><Text variant="caption">{artifact.qcNote}</Text><pre>{artifact.prompt}</pre></details></div></div>}
+      {artifact && <div className={styles.inspect}><img className={styles.preview} src={artifact.url} alt={artifact.shotId === 'scene' ? 'Опорный кадр' : 'Фотография серии'} /><div className={styles.inspectData}><PhotoVerdict result={inspectReview || undefined} /><a className={styles.download} href={artifact.url} download>Скачать эту версию</a>{artifact.sourceId && currentArtifact(run, artifact.sourceId) && <Button variant="border" onClick={() => setInspect(artifact.sourceId)}>Посмотреть до правки</Button>}<details className={styles.detail}><summary>Prompt и данные задачи</summary><Text variant="caption">{artifact.model} · {artifact.taskId} · оценка {photoPrice(artifact.cost)}</Text><Text variant="caption">{artifact.qcNote}</Text><pre>{artifact.prompt}</pre></details></div></div>}
     </Dialog>
   </>;
 }
