@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ProductionRun } from '../../core/production/model.ts';
+import { photoOutput } from '../../core/production/output.ts';
 import { canRegenerateMaster, masterAttempts, masterRejected, photoPrice, type PhotoQuote } from '../../core/production/photos.ts';
 import { Button, Text } from '../ui/components/index.ts';
 import { useProduction } from './store.ts';
@@ -13,7 +14,7 @@ export function PhotoStart({ run }: { run: ProductionRun }) {
   const [error, setError] = useState<string | null>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const rejected = masterRejected(run);
-  useEffect(() => { setQuote(null); setConsent(false); }, [run.characterId, run.paused, rejected]);
+  useEffect(() => { setQuote(null); setConsent(false); }, [run.characterId, run.paused, run.resolution, run.aspectRatio, rejected]);
   const blocked = run.photos?.items.some(i => ['failed', 'unknown', 'download_failed', 'submitting', 'queued', 'running', 'downloading'].includes(i.status));
   const remaining = run.photos ? run.photos.items.filter(i => i.status === 'pending').length : run.shots.length + 1;
   if (!run.planned || run.photos?.status === 'running' || blocked || !remaining || [run.appearance, run.masterReview, run.review].some(s => s?.status === 'running')) return null;
@@ -32,7 +33,7 @@ export function PhotoStart({ run }: { run: ProductionRun }) {
     {error && <Text role="alert">{error}</Text>}
     {quote && <>
       <Text variant="title-s">До {photoPrice(quote.usd)} за оставшуюся работу</Text>
-      <Text variant="caption" tone="secondary">Кадры: {quote.shotCount} · новых master: {quote.sceneCount} · запасных попыток: {quote.reserveCount}. Без запаса — {photoPrice(quote.baseUsd)}. Неиспользованные попытки не запускаются. Это оценка каталога; списание определяет Higgsfield.</Text>
+      <Text variant="caption" tone="secondary">{photoOutput(run).resolution} · {photoOutput(run).aspectRatio}. Кадры: {quote.shotCount} · новых master: {quote.sceneCount} · запасных попыток: {quote.reserveCount}. Без запаса — {photoPrice(quote.baseUsd)}. Неиспользованные попытки не запускаются. Это оценка каталога; списание определяет Higgsfield.</Text>
       <label className={styles.check}><input type="checkbox" checked={consent} disabled={busy || run.paused} onChange={e => setConsent(e.target.checked)} />Подтверждаю сумму, автоматический подбор master (до трёх попыток всего) и передачу фото в Higgsfield и Codex.</label>
       <Text variant="caption" tone="secondary">Codex / OpenAI получит до шести фото Soul ID и результаты с четырьмя крупными фрагментами каждого фото для проверки деталей. Фрагменты увеличивают расход квоты. До пяти вызовов из квоты ChatGPT: внешность, до трёх проверок master, отбор серии. Видео и upscale не запускаются.</Text>
     </>}

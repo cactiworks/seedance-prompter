@@ -5,6 +5,7 @@ import { CHARACTER_ID, type CharacterSelection } from './character.ts';
 import type { PhotoState } from './photos.ts';
 import { masterApproved, type ReviewState } from './review.ts';
 import type { AppearanceState } from './appearance.ts';
+import { PhotoAspectSchema, PhotoResolutionSchema } from './output.ts';
 
 export const STEP_ORDER = ['photos', 'photoQc', 'photoReview', 'videos', 'videoQc', 'videoReview', 'upscale', 'finalQc', 'ready'] as const;
 export type ShotStep = (typeof STEP_ORDER)[number];
@@ -19,6 +20,8 @@ export const RunBriefSchema = z.object({
   script: z.string().trim().max(12_000).default(''),
   direction: z.string().trim().min(1).max(3000),
   style: z.enum(['phone', 'cinema']).default('phone'),
+  resolution: PhotoResolutionSchema.optional(),
+  aspectRatio: PhotoAspectSchema.optional(),
   scenario: z.enum(['normal', 'repair']).default('repair'),
 }).strict();
 export const CreateRunSchema = RunBriefSchema.superRefine((input, ctx) => {

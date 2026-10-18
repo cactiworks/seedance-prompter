@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GeneratedRetouchAuditSchema, auditPassed, repairable, quoteRetouch, retouchPrice, retouchPrompt, validateRetouchAudit, MAX_RETOUCH_ATTEMPTS, RETOUCH_MODEL, RETOUCH_PARAMS, type RetouchStart, type RetouchItem } from '../../core/production/retouch.ts';
+import { GeneratedRetouchAuditSchema, auditPassed, repairable, quoteRetouch, retouchPrice, retouchPrompt, validateRetouchAudit, MAX_RETOUCH_ATTEMPTS, RETOUCH_MODEL, retouchParams, type RetouchStart, type RetouchItem } from '../../core/production/retouch.ts';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
 import { ProductionError, record } from '../../core/production/engine.ts';
 import { appearanceReady } from '../../core/production/appearance.ts';
@@ -171,7 +171,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
       const intent = await store.update(id, current => {
         const state = current.retouch!; const target = state.items.find(i => i.shotId === item.shotId)!;
         if (current.paused || state.status !== 'running' || target.status !== 'planned' || !target.audit || !repairable(target.audit)) return;
-        const price = retouchPrice(1 + state.uploadIds.length);
+        const price = retouchPrice(1 + state.uploadIds.length, current);
         if (state.perEditUsd !== price.usd || state.remainingUsd < price.usd || target.attempts.length >= MAX_RETOUCH_ATTEMPTS) {
           target.status = 'blocked'; target.error = 'Лимит правок или стоимость изменились. Нужна новая оценка.'; finish(current); record(current, now(), target.error); return;
         }
@@ -186,7 +186,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
       if (stopped || current.paused || current.retouch?.status !== 'running') {
         await store.update(id, r => { const a = r.retouch!.items.find(i => i.shotId === item.shotId)!.attempts.at(-1)!; a.status = 'cancelled'; r.retouch!.remainingUsd += r.retouch!.perEditUsd; record(r, now(), 'Отправка правки отменена до вызова провайдера.'); }); return;
       }
-      const result = await gen().submit({ modelId: RETOUCH_MODEL, params: RETOUCH_PARAMS, prompt: attempt.prompt, count: 1, refsConsent: true, confirmCredits: retouchPrice(1 + current.retouch.uploadIds.length).credits, tag,
+      const result = await gen().submit({ modelId: RETOUCH_MODEL, params: retouchParams(current), prompt: attempt.prompt, count: 1, refsConsent: true, confirmCredits: retouchPrice(1 + current.retouch.uploadIds.length, current).credits, tag,
         refs: [{ source: { type: 'media', mediaId: currentArtifact(current, attempt.sourceId)!.mediaId! }, role: 'ref', label: 'Редактируемый кадр' }, ...current.retouch.uploadIds.map(uploadId => ({ source: { type: 'upload' as const, uploadId }, role: 'ref' as const, label: 'Только внешность главного героя' }))] });
       await store.update(id, run => { run.retouch!.items.find(i => i.shotId === item.shotId)!.attempts.at(-1)!.jobId = result.jobs[0]!.id; record(run, now(), 'Задача Seedream сохранена.'); });
     } catch (error) {

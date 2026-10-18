@@ -3,9 +3,10 @@ import { estimate, findModel, paramsFor } from '../gen/models.ts';
 import { JOB_STATUSES } from '../model/media.ts';
 import type { ProductionRun } from './model.ts';
 import { masterApproved, pendingReview, ReviewStateSchema } from './review.ts';
+import { photoOutput, type PhotoOutput } from './output.ts';
 
 export const PHOTO_MODEL = 'higgsfield/soul-2';
-export const PHOTO_PARAMS = { resolution: '1080p', aspectRatio: '9:16', enhancePrompt: false };
+export const photoParams = (run: Partial<PhotoOutput>) => ({ ...photoOutput(run), enhancePrompt: false });
 export const MAX_MASTER_ATTEMPTS = 3;
 export const PhotoStartSchema = z.object({
   rev: z.number().int().nonnegative(), requestId: z.uuid(), confirmUsd: z.number().nonnegative(), refsConsent: z.literal(true), reviewConsent: z.literal(true), masterGateConsent: z.literal(true),
@@ -52,7 +53,7 @@ export function quotePhotos(run: ProductionRun, options: { retries?: boolean; re
   const reserveCount = options.retries && !masterApproved(run) && (!run.photos || run.photos.items.every(i => i.key === 'scene' || i.status === 'pending'))
     ? Math.max(0, MAX_MASTER_ATTEMPTS - masterAttempts(run) - sceneCount) : 0;
   const model = findModel(PHOTO_MODEL)!;
-  const perImageUsd = estimate(model, paramsFor(model, PHOTO_PARAMS), 1, 0).usd;
+  const perImageUsd = estimate(model, paramsFor(model, photoParams(run)), 1, 0).usd;
   const count = sceneCount + shotCount + reserveCount;
   return { rev: run.rev, count, sceneCount, reserveCount, shotCount, perImageUsd,
     usd: Number((count * perImageUsd).toFixed(6)), baseUsd: Number(((sceneCount + shotCount) * perImageUsd).toFixed(6)), characterName: run.character?.name ?? null };

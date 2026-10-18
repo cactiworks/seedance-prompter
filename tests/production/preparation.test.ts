@@ -48,7 +48,7 @@ describe('Production agent contracts', () => {
     const scene = await directScene(hostile, { run: r.run, model: 'test-model', signal: new AbortController().signal, onCall: async c => { calls.push(c); } });
     expect(r.requests[0]!.system).toBe(DIRECTOR_SYSTEM);
     expect(r.requests[0]!.system).not.toContain(hostile.direction);
-    expect(JSON.parse(r.requests[0]!.user)).toEqual({ script: SCRIPT, direction: hostile.direction, style: input.style });
+    expect(JSON.parse(r.requests[0]!.user)).toEqual({ script: SCRIPT, direction: hostile.direction, style: input.style, imageFormat: { resolution: '1080p', aspectRatio: '9:16' } });
     expect(r.requests[0]!.images).toBeUndefined();
     expect(scene.shots.map(s => s.id)).toEqual(['shot-1', 'shot-2', 'shot-3']);
     expect(calls[0]).toMatchObject({ status: 'accepted', inputTokens: 100, outputTokens: 200 });
@@ -56,8 +56,10 @@ describe('Production agent contracts', () => {
   it.each(['phone', 'cinema'] as const)('preserves the chosen %s mode from direction through image prompts', async style => {
     const r = runner([sceneDraft(), promptPlan()]);
     const options = { run: r.run, model: 'test-model', signal: new AbortController().signal, onCall: async () => {} };
-    const scene = await directScene({ ...input, style }, options);
-    await writePrompts(scene, style, options);
+    const imageFormat = { resolution: '720p', aspectRatio: '16:9' } as const;
+    const scene = await directScene({ ...input, style, ...imageFormat }, options);
+    await writePrompts(scene, style, options, imageFormat);
+    expect(r.requests.map(request => JSON.parse(request.user).imageFormat)).toEqual([imageFormat, imageFormat]);
     expect(r.requests.map(request => JSON.parse(request.user).style)).toEqual([style, style]);
     expect(JSON.parse(r.requests[1]!.user).scenePlan).toEqual(scene);
   });

@@ -3,9 +3,11 @@ import { estimate, findModel, paramsFor } from '../gen/models.ts';
 import { buildRegionPrompt } from '../gen/regionEdit.ts';
 import type { ProductionRun } from './model.ts';
 import { GeneratedReviewResultSchema, LogicReviewResultSchema, logicReviewPassed, validateLogicResult, validateReview } from './review.ts';
+import { photoOutput, type PhotoOutput } from './output.ts';
 
 export const RETOUCH_MODEL = 'kie/seedream-5-pro';
-export const RETOUCH_PARAMS = { resolution: '2K', aspectRatio: '9:16' };
+// The compositor returns the source pixel dimensions; 2K is only the edit working size.
+export const retouchParams = (run: Partial<PhotoOutput>) => ({ resolution: '2K', aspectRatio: photoOutput(run).aspectRatio });
 export const MAX_RETOUCH_ATTEMPTS = 3;
 const box = z.object({ x1: z.number().int().min(0).max(999), y1: z.number().int().min(0).max(999), x2: z.number().int().min(0).max(999), y2: z.number().int().min(0).max(999) }).strict();
 export const RetouchAuditSchema = z.object({
@@ -38,12 +40,12 @@ export const RetouchStartSchema = z.object({
   confirmUsd: z.number().nonnegative(), consent: z.literal(true),
 }).strict();
 export type RetouchStart = z.infer<typeof RetouchStartSchema>;
-export const retouchPrice = (refs: number) => { const model = findModel(RETOUCH_MODEL)!; return estimate(model, paramsFor(model, RETOUCH_PARAMS), 1, refs); };
+export const retouchPrice = (refs: number, run: Partial<PhotoOutput>) => { const model = findModel(RETOUCH_MODEL)!; return estimate(model, paramsFor(model, retouchParams(run)), 1, refs); };
 export function quoteRetouch(run: ProductionRun, ids: string[]) {
   const uploads = run.retouch?.uploadIds ?? (run.character ? run.appearance?.uploadIds.slice(0, 2) ?? [] : []);
   const attempts = ids.map(id => run.retouch?.items.find(i => i.currentId === id || i.originalId === id)?.attempts.length ?? 0);
   const count = attempts.reduce((sum, n) => sum + MAX_RETOUCH_ATTEMPTS - n, 0);
-  const price = retouchPrice(1 + uploads.length);
+  const price = retouchPrice(1 + uploads.length, run);
   return { rev: run.rev, usd: Number((count * price.usd).toFixed(6)), perEditUsd: price.usd, count, checks: ids.length + count, referenceCount: uploads.length };
 }
 export function validateRetouchAudit(data: RetouchAudit, id: string, identities: number, identityRequired: boolean): RetouchAudit {

@@ -172,11 +172,13 @@ subjectVisibility и visualAnchor каждого кадра. Первый пас
 `contentMode` отделяет `story` (в том числе старые записи без поля) от `broll`. B-roll допускает
 только `planningMode: codex` + `mode: photos`: сценарий не нужен, перед сохранением и отправкой
 сервер убирает его; brollCount — ровно 1–8 идей, default 4. Отдельный BROLL_DIRECTOR_SYSTEM получает
-только direction/style/count/characterSelected. GeneratedBrollDraftSchema требует concept и
+только direction/style/imageFormat/count/characterSelected. GeneratedBrollDraftSchema требует concept и
 intentionalEffect, запрещает scriptExcerpt/beat; shots сохраняют sceneId/action/startFrame/visibility.
 Количество, буквальные дубли идей/visualAnchor и кадров проверяются до prompter. Prompter и critic
 видят contentMode; необычное явление допускается только в границах intentionalEffect, не в анатомии.
-Режим, count и идеи сохраняются при reload/retry/fork и в manifest. Медиа используют тот же events-v1
+Режим, count, resolution/aspectRatio и идеи сохраняются при reload/retry/fork и в manifest.
+Нормализованный imageFormat получает и prompter; старая серия без полей использует 1080p/9:16.
+Повтор requestId с другим форматом отклоняется как конфликт. Медиа используют тот же events-v1
 маршрут с master gate и независимыми T2I, затем останавливаются на ручном photo milestone.
 
 `retryPreparation` проверяет rev и отсутствие активной попытки, сохраняет scenePlan и повторяет

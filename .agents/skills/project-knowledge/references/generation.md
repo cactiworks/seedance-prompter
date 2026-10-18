@@ -136,8 +136,9 @@ Soul 2 standard по событиям и сценам плана events-v1. `ima
 копируется; `custom_reference_id` — выбранный ready/v2 Soul ID только для person/master. Detail
 получает описание видимой части тела без портрета, none не получает привязку внешности.
 Legacy без events-v1 использует общий master как image_url и Soul ID для каждого I2I.
-1080p/9:16, batch_size=1; T2I enhance_prompt=false, legacy I2I требует enhance_prompt=true. Price gate из общего каталога:
-$0.006 × (до 3 master + 1–8 кадров) для нового consent; рядом показывается сумма без запаса.
+Формат выбирается в brief: 720p/1080p и 9:16, 16:9, 1:1, 3:4, 4:3, 2:3, 3:2. Старые серии без
+параметров сохраняют 1080p/9:16. Master и shots используют один формат, batch_size=1; T2I enhance_prompt=false, legacy I2I требует enhance_prompt=true. Price gate из общего каталога:
+$0.004 (720p) / $0.006 (1080p) × (до 3 master + 1–8 кадров) для нового consent; рядом показывается сумма без запаса.
 Это оценка каталога, не подтверждение списания; неиспользованный резерв не отправляется. Оба стиля — Soul 2.
 Поддержка одного ref и signed upload также доступны общему Soul 2 adapter. Signed PUT получает
 только upload_headers, без API authorization, без redirects/retry. Soul ID использует тот же helper.
@@ -168,7 +169,7 @@ Production master gate (15.10.2026): перед первым новым master �
 переходы/лимиты, не реальную точность vision или качество новых фото.
 
 
-Автоправки Production: KIE `kie/seedream-5-pro`, 2K 9:16, image 1 — текущая версия, затем до двух
+Автоправки Production: KIE `kie/seedream-5-pro`, рабочий размер 2K и пропорции выбранной серии, image 1 — текущая версия, затем до двух
 локальных refs внешности главного героя. Seedream получает bbox-инструкции как ручной редактор;
 отдельного mask-параметра в маршруте нет. Локальный compositor сохраняет пиксели вне областей,
 размер результата равен исходнику (это не upscale).

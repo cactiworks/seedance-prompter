@@ -55,7 +55,7 @@ describe('independent creative B-roll', () => {
     const scene = await directScene({ ...input, brollCount: count, script: 'HIDDEN SCRIPT', direction, characterId: 'ch-test-12345' }, { run: r.run, model: 'fixture', signal: new AbortController().signal, onCall: async () => {} });
     expect(scene.shots).toHaveLength(count); expect(scene.contentMode).toBe('broll');
     expect(r.calls[0]!.system).toBe(BROLL_DIRECTOR_SYSTEM); expect(r.calls[0]!.system).not.toContain(direction);
-    expect(JSON.parse(r.calls[0]!.user)).toEqual({ direction, style: 'phone', count, characterSelected: true });
+    expect(JSON.parse(r.calls[0]!.user)).toEqual({ direction, style: 'phone', imageFormat: { resolution: '1080p', aspectRatio: '9:16' }, count, characterSelected: true });
     expect(r.calls[0]!.images).toBeUndefined(); expect(r.calls[0]!.user).not.toContain('HIDDEN SCRIPT');
     for (const shot of scene.shots) { expect(shot.scriptExcerpt).toBeUndefined(); expect(shot.beat).toBeUndefined(); }
     expect(validateScene(scene, '', count)).toEqual([]);
@@ -93,24 +93,29 @@ describe('independent creative B-roll', () => {
   it('persists mode/count without stale script, deduplicates requests and keeps photo dispatch behind its cost gate', async () => {
     const external = vi.fn(() => { throw new Error('No external calls'); }); vi.stubGlobal('fetch', external);
     const r = runner([brollDraft(), promptPlan(4)]); const { rt, dir } = runtime(r.run);
-    const brief = { ...input, brollCount: undefined, requestId: 'broll-create-123', script: 'STALE STORY' };
+    const brief = { ...input, brollCount: undefined, resolution: '720p' as const, aspectRatio: '16:9' as const, requestId: 'broll-create-123', script: 'STALE STORY' };
     const created = await rt.create(brief); await rt.waitForPreparation(created.id);
     let run = await rt.get(created.id);
     expect(run).toMatchObject({ contentMode: 'broll', brollCount: 4, script: '', planned: true, mode: 'photos' });
     expect(JSON.parse(r.calls[1]!.user).scenePlan.contentMode).toBe('broll');
+    expect(r.calls.map(c => JSON.parse(c.user).imageFormat)).toEqual(Array(2).fill({ resolution: '720p', aspectRatio: '16:9' }));
     expect((await rt.create({ ...brief, script: 'different hidden script' })).id).toBe(created.id);
     await expect(rt.create({ ...brief, contentMode: 'story', script: SCRIPT })).rejects.toMatchObject({ code: 'CONFLICT' });
     await expect(rt.create({ ...brief, brollCount: 3 })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(rt.create({ ...brief, resolution: '1080p' })).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(rt.create({ ...brief, aspectRatio: '1:1' })).rejects.toMatchObject({ code: 'CONFLICT' });
     for (let i = 0; i < 4; i++) await rt.tick();
     expect((await rt.get(created.id)).artifacts).toEqual([]); expect(r.calls).toHaveLength(2);
     const restored = runtime(r.run, dir).rt; await restored.start(); run = await restored.get(run.id);
     expect(run.scenePlan?.contentMode).toBe('broll'); expect(run.brollCount).toBe(4);
+    expect(run).toMatchObject({ resolution: '720p', aspectRatio: '16:9' });
     const copy = await restored.forkPhotos(run.id, run.rev, 'broll-fork-123');
     expect(copy).toMatchObject({ contentMode: 'broll', brollCount: 4, script: '', planned: true, mode: 'photos' });
+    expect(copy).toMatchObject({ resolution: '720p', aspectRatio: '16:9' });
     expect(copy.scenePlan).toEqual(run.scenePlan); expect(copy.artifacts).toEqual([]); expect(r.calls).toHaveLength(2);
     const app = productionRoutes(restored, createCharacters({ dataDir: dir }));
     const manifest = await (await app.request(`/${run.id}/manifest`)).json();
-    expect(manifest).toMatchObject({ contentMode: 'broll', brollCount: 4 });
+    expect(manifest).toMatchObject({ contentMode: 'broll', brollCount: 4, resolution: '720p', aspectRatio: '16:9' });
     const invalid = await app.request('/', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sp-client': '1' }, body: JSON.stringify({ ...input, mode: 'mock' }) });
     expect(invalid.status).toBe(422); expect(external).not.toHaveBeenCalled();
   });

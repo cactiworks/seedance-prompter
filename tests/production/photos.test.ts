@@ -6,6 +6,7 @@ import { createProductionRuntime, type ProductionRuntime } from '../../src/serve
 import { createGenRuntime, type GenRuntime } from '../../src/server/gen/runtime.ts';
 import { GenError, type GenProvider } from '../../src/server/gen/provider.ts';
 import type { Runner } from '../../src/server/llm/tasks/write.ts';
+import type { PhotoOutput } from '../../src/core/production/output.ts';
 import { DEMO_INPUT } from '../../src/core/production/model.ts';
 import { quoteRetouch } from '../../src/core/production/retouch.ts';
 import { PhotoStartSchema, quotePhotos } from '../../src/core/production/photos.ts';
@@ -20,7 +21,7 @@ import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 const png = readFileSync(new URL('../../src/web/public/production-mock/shot-1.png', import.meta.url));
 const resources: { dir: string; rt: ProductionRuntime; gen: GenRuntime }[] = [];
 const identity: CharacterSelection = { id: 'ch-identity-123', name: 'Тестовый персонаж', referenceId: '11111111-1111-4111-8111-111111111111', modelVersion: 'v2', selectedAt: new Date(0).toISOString() };
-async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner, contentMode: 'story' | 'broll' = 'story') {
+async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner, contentMode: 'story' | 'broll' = 'story', output: Partial<PhotoOutput> = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'production-photos-'));
   if (character) {
     mkdirSync(path.join(dir, 'characters'), { recursive: true }); mkdirSync(path.join(dir, 'uploads'), { recursive: true });
@@ -54,7 +55,7 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
   };
   const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, now: () => clock, delayMs: 1 });
   resources.push({ dir, rt, gen });
-  const created = await rt.create({ ...DEMO_INPUT, contentMode, brollCount: contentMode === 'broll' ? count : undefined, script: contentMode === 'broll' ? '' : SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
+  const created = await rt.create({ ...DEMO_INPUT, ...output, contentMode, brollCount: contentMode === 'broll' ? count : undefined, script: contentMode === 'broll' ? '' : SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
   await rt.waitForPreparation(created.id);
   const get = () => rt.get(created.id);
   const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const, reviewConsent: true as const, masterGateConsent: true as const }; };
@@ -66,6 +67,18 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it.each(['720p', '1080p'] as const)('prices and submits the selected %s landscape format for master and every photo', async resolution => {
+    const s = await setup(1, {}, identity, undefined, undefined, undefined, 'story', { resolution, aspectRatio: '16:9' });
+    const planned = await s.get();
+    const quote = quotePhotos(planned);
+    expect(quote.usd).toBe(resolution === '720p' ? 0.008 : 0.012);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(2);
+    for (const [, body] of s.submit.mock.calls) expect(body).toMatchObject({ resolution, aspect_ratio: '16:9' });
+    expect((await s.get()).review?.status).toBe('complete');
+  });
+
   it('takes independent B-roll through master QC and photos to the milestone, then waits without video or editing', async () => {
     const external = vi.fn(() => { throw new Error('Unexpected network'); }); vi.stubGlobal('fetch', external);
     const s = await setup(4, {}, identity, undefined, undefined, undefined, 'broll');

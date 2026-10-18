@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
+import { photoOutput } from '../../core/production/output.ts';
 import { masterAttempts, masterRejected, photoPrice } from '../../core/production/photos.ts';
 import { LOGIC_CRITERIA, logicReviewPassed, masterApproved, reviewedPhoto } from '../../core/production/review.ts';
 import { boundPrompts } from '../../core/production/appearance.ts';
@@ -47,7 +48,7 @@ function nextStep(run: ProductionRun): [string, string] {
   if (run.review?.status === 'running' || (run.review?.status === 'pending' && run.photos?.status === 'review')) return ['Отбираем фотографии', 'Проверяем внешность, одежду, логику сцены и цельность серии.'];
   if (run.review?.status === 'complete') return ['Выбери фото для монтажа', 'Выбери подходящие по замыслу. Детали система проверит и исправит после milestone.'];
   if (run.photos?.status === 'review') return ['Отбор требует внимания', 'Фото сохранены. Повтори проверку, чтобы перейти к приёмке.'];
-  return [run.photos ? 'Продолжить эту серию' : 'План готов — можно создавать фото', run.photos ? 'Сохранённые этапы повторяться не будут.' : `Кадров: ${run.shots.length} · Soul 2 · 1080p · 9:16`];
+  return [run.photos ? 'Продолжить эту серию' : 'План готов — можно создавать фото', run.photos ? 'Сохранённые этапы повторяться не будут.' : `Кадров: ${run.shots.length} · Soul 2 · ${photoOutput(run).resolution} · ${photoOutput(run).aspectRatio}`];
 }
 export function PhotoRunView({ run }: { run: ProductionRun }) {
   const { act, photoCommand, busy, setCharacter, setDraft, newForm } = useProduction();
@@ -64,9 +65,9 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const [title, note] = nextStep(run);
   const failures = run.photos?.items.filter(i => ['failed', 'unknown', 'download_failed'].includes(i.status)) ?? [];
   const inspectReview = artifact && (reviewedPhoto(run, artifact.id) ?? run.photos?.masterHistory?.find(h => h.artifactId === artifact.id)?.review.report?.results.find(r => r.artifactId === artifact.id));
-  const replan = () => { setDraft({ contentMode: run.contentMode, brollCount: run.brollCount, title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); };
+  const replan = () => { setDraft({ contentMode: run.contentMode, brollCount: run.brollCount, title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, ...photoOutput(run), planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); };
   return <>
-    <header className={styles.header}><div><Text variant="caption" tone="secondary">{run.contentMode === 'broll' ? 'Креативные B-roll · фото' : 'Серия фотографий'} · {run.style === 'cinema' ? 'Cinematic' : 'Phone / UGC'}{run.character && ` · ${run.character.name}`}</Text><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Снять паузу' : 'Пауза'}</Button>}</div></header>
+    <header className={styles.header}><div><Text variant="caption" tone="secondary">{run.contentMode === 'broll' ? 'Креативные B-roll · фото' : 'Серия фотографий'} · {run.style === 'cinema' ? 'Cinematic' : 'Phone / UGC'} · {photoOutput(run).resolution} · {photoOutput(run).aspectRatio}{run.character && ` · ${run.character.name}`}</Text><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? 'Снять паузу' : 'Пауза'}</Button>}</div></header>
     <ol className={styles.productionPath} aria-label="Путь серии">{['План', 'Опорный кадр', 'Фотографии', 'Твоя приёмка', 'Правки деталей', 'Готово'].map((label, i) => <li key={label} aria-current={step === i ? 'step' : undefined} data-complete={step > i}><span>{String(i + 1).padStart(2, '0')}</span>{label}</li>)}</ol>
     <section className={`${styles.productionFocus} ${eligible.length ? styles.milestoneFocus : ''}`} aria-label="Следующий шаг">
       <div role="status"><Text as="h2" variant="title-s">{title}</Text><Text variant="label" tone="secondary">{note}</Text></div>

@@ -74,6 +74,16 @@ describe('post-milestone automatic regional repair', () => {
     expect((await s.get()).shots[0]!.acceptedPhotoId).toBeNull();
     expect(s.submit).not.toHaveBeenCalled();
   });
+  it('retains the selected aspect ratio in the actual local repair job', async () => {
+    const s = await setup((id, n) => n === 1 ? defects(id) : clean(id));
+    const run = await s.get(); run.aspectRatio = '16:9'; run.resolution = '720p';
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    await s.rt.retouch.start(s.id, await s.input());
+    for (let i = 0; i < 8; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(1);
+    expect((await s.gen.jobs.all())[0]!.params).toMatchObject({ aspectRatio: '16:9', resolution: '2K' });
+    expect((await s.get()).photos!.status).toBe('complete');
+  });
   it('edits beard, hand, secondary face and lettering in separate boxes then rechecks before delivery', async () => {
     const s = await setup((id, n) => n === 1 ? defects(id) : clean(id)); const original = (await s.get()).artifacts[0]!;
     await s.rt.retouch.start(s.id, await s.input()); await s.cycle();

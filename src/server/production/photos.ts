@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { canRegenerateMaster, masterAttempts, masterRejected, replaceRejectedMaster, PHOTO_MODEL, PHOTO_PARAMS, quotePhotos, type PhotoStart, type PhotoState } from '../../core/production/photos.ts';
+import { canRegenerateMaster, masterAttempts, masterRejected, replaceRejectedMaster, PHOTO_MODEL, photoParams, quotePhotos, type PhotoStart, type PhotoState } from '../../core/production/photos.ts';
 import { ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun, Artifact } from '../../core/production/model.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
@@ -154,7 +154,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         }
         const unitPrice = quotePhotos(current).perImageUsd;
         const result = await gen.submit({ modelId: PHOTO_MODEL, prompt: sent.prompt,
-          params: { ...PHOTO_PARAMS, soulId: sent.identityId ?? '' }, count: 1, confirmCredits: unitPrice, refsConsent: true, tag: sent.tag,
+          params: { ...photoParams(current), soulId: sent.identityId ?? '' }, count: 1, confirmCredits: unitPrice, refsConsent: true, tag: sent.tag,
           refs: sent.key === 'scene' || !sent.masterMediaId ? [] : [{ source: { type: 'media', mediaId: sent.masterMediaId }, role: 'ref', label: 'Общая сцена серии' }],
         });
         await store.update(id, (run) => {

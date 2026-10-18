@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { currentArtifact, DEMO_INPUT, isAutomatic, runLabel, stageProgress, STAGES, type Artifact, type ProductionRun, type ProductionShot, type StageId } from '../../core/production/model.ts';
-import { Button, Dialog, Icon, Tag, Text, TextField } from '../ui/components/index.ts';
+import { Button, Dialog, Icon, Select, Tag, Text, TextField } from '../ui/components/index.ts';
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 import { Preparation } from './Preparation.tsx';
 import { PhotoRunView, ReusePlan } from './PhotoRunView.tsx';
+import { PHOTO_ASPECTS, PHOTO_RESOLUTIONS, photoOutput, type PhotoOutput } from '../../core/production/output.ts';
 import { CharacterField } from './CharacterField.tsx';
 
 function eventLabel(message: string): string {
@@ -28,6 +29,7 @@ export function ProductionList() {
 function NewRun() {
   const { draft: input, setDraft: setInput, create, busy } = useProduction();
   const broll = input.contentMode === 'broll';
+  const output = photoOutput(input);
   return <div className={styles.start} data-guide="production-start">
     <Tag tone="outline">Production</Tag>
     <Text as="h1" variant="title-l">{broll ? 'Креативные B-roll для твоего монтажа' : 'От сценария к подборке кадров'}</Text>
@@ -41,8 +43,13 @@ function NewRun() {
       <CharacterField value={input.characterId ?? null} disabled={busy} onChange={(characterId) => setInput({ ...input, characterId })} />
       <fieldset className={styles.choices}><legend>Как снято</legend>{([['phone', 'Phone / UGC'], ['cinema', 'Cinematic']] as const).map(([style, label]) => <label key={style}><input type="radio" name="production-style" checked={input.style === style} onChange={() => setInput({ ...input, style })} />{label}</label>)}</fieldset>
       {!broll && <fieldset className={styles.choices}><legend>Подготовка серии</legend>{([['codex', 'Codex → реальные фото'], ['mock', 'Демо без генераций']] as const).map(([planningMode, label]) => <label key={planningMode}><input type="radio" name="production-planning" checked={input.planningMode === planningMode} onChange={() => setInput({ ...input, planningMode, mode: planningMode === 'codex' ? 'photos' : 'mock' })} />{label}</label>)}</fieldset>}
+      {input.planningMode === 'codex' && <>
+        <Select label="Размер картинки" value={output.resolution} disabled={busy} options={PHOTO_RESOLUTIONS.map(value => ({ value, label: value }))} onChange={value => setInput({ ...input, resolution: value as PhotoOutput['resolution'] })} />
+        <Select label="Пропорции кадра" value={output.aspectRatio} disabled={busy} options={PHOTO_ASPECTS.map(value => ({ value, label: value }))} onChange={value => setInput({ ...input, aspectRatio: value as PhotoOutput['aspectRatio'] })} />
+        <Text variant="caption" tone="secondary">Формат общий для всей серии. Локальные правки сохраняют размеры исходного фото.</Text>
+      </>}
       {input.planningMode !== 'codex' && <label className={styles.check}><input type="checkbox" checked={input.scenario === 'repair'} onChange={(e) => setInput({ ...input, scenario: e.target.checked ? 'repair' : 'normal' })} />Показать локальную правку одного кадра</label>}
-      <div className={styles.notice}><Text variant="label" medium>{input.planningMode === 'codex' ? 'Codex расходует квоту ChatGPT · фото запускаются отдельно' : 'Демонстрация процесса · без вызовов моделей'}</Text><Text variant="caption" tone="secondary">{input.planningMode === 'codex' ? `${broll ? 'Отправятся вектор, манера съёмки, количество кадров и признак выбора персонажа. Сценарий не нужен.' : 'Отправятся сценарий, вектор и манера съёмки. Агент выберет 1–8 кадров.'} Два вызова Codex, до четырёх при исправлении ответов. Затем появятся стоимость и отдельная кнопка запуска фото.` : 'Тексты сохранятся без анализа. Сцена, три кадра и prompts фиксированы; внешние сервисы не вызываются.'}</Text></div>
+      <div className={styles.notice}><Text variant="label" medium>{input.planningMode === 'codex' ? 'Codex расходует квоту ChatGPT · фото запускаются отдельно' : 'Демонстрация процесса · без вызовов моделей'}</Text><Text variant="caption" tone="secondary">{input.planningMode === 'codex' ? `${broll ? 'Отправятся вектор, манера съёмки, формат изображения, количество кадров и признак выбора персонажа. Сценарий не нужен.' : 'Отправятся сценарий, вектор, манера съёмки и формат изображения. Агент выберет 1–8 кадров.'} Два вызова Codex, до четырёх при исправлении ответов. Затем появятся стоимость и отдельная кнопка запуска фото.` : 'Тексты сохранятся без анализа. Сцена, три кадра и prompts фиксированы; внешние сервисы не вызываются.'}</Text></div>
       <Button type="submit" variant="primary" size="m" loading={busy} disabled={!input.title.trim() || (!broll && !input.script.trim()) || !input.direction.trim() || (broll && (!Number.isInteger(input.brollCount ?? 4) || (input.brollCount ?? 4) < 1 || (input.brollCount ?? 4) > 8))}>{input.planningMode === 'codex' ? 'Подготовить с Codex' : 'Запустить mock-серию'}</Button>
     </form>
   </div>;
