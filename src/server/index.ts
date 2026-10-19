@@ -8,6 +8,7 @@ import { createApp, HOST, PORT } from './app.ts';
 import { createGenRuntime } from './gen/runtime.ts';
 import { createProductionRuntime } from './production/runtime.ts';
 import { acquireDataLock } from './storage/dataLock.ts';
+import { createAccounts } from './accounts/service.ts';
 import { APP_NAME } from '../core/meta.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -39,14 +40,17 @@ async function main(): Promise<void> {
 
   const dataDir = process.env.SP_DATA_DIR ?? path.join(ROOT, 'data');
   const releaseDataLock = await acquireDataLock(dataDir);
+  const productionMode = process.env.SP_SERVE_STATIC === '1';
+  const accountsDir = process.env.SP_ACCOUNTS_DIR?.trim() || (productionMode ? path.join(path.dirname(path.resolve(dataDir)), 'accounts') : undefined);
+  if (accountsDir && [path.resolve(dataDir), path.join(ROOT, 'dist')].some(publicDir => path.resolve(accountsDir) === publicDir || path.resolve(accountsDir).startsWith(`${publicDir}${path.sep}`))) throw new Error('Account credentials must live outside shared data and static files');
+  const accounts = accountsDir ? createAccounts({ dir: accountsDir, secureCookie: productionMode }) : undefined;
   // Фоновый опрос задач генерации: продолжает незаконченные после перезапуска и скачивает результаты.
   const gen = createGenRuntime({ dataDir });
   await gen.start();
-  const production = createProductionRuntime({ dataDir, gen });
+  const production = createProductionRuntime({ dataDir, gen, runLlmForAccount: accounts?.runnerFor });
   await production.start();
-  const app = createApp({ rootDir: ROOT, dataDir, gen, production });
+  const app = createApp({ rootDir: ROOT, dataDir, gen, production, accounts });
   const httpServer = createHttpServer();
-  const productionMode = process.env.SP_SERVE_STATIC === '1';
   const vite = productionMode ? null : await (await import('vite')).createServer({
     configFile: path.join(ROOT, 'vite.config.ts'),
     server: { middlewareMode: true, hmr: { server: httpServer } },
@@ -71,6 +75,7 @@ async function main(): Promise<void> {
   const shutdown = (): void => {
     gen.stop();
     production.stop();
+    void accounts?.close();
     void (vite?.close() ?? Promise.resolve()).finally(() => {
       httpServer.close(() => { void releaseDataLock().finally(() => process.exit(0)); });
       setTimeout(() => process.exit(0), 1500).unref();

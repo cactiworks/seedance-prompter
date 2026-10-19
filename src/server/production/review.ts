@@ -48,11 +48,11 @@ interface Store {
 }
 const jobsActive = (run: ProductionRun) => run.photos?.items.some((i) => ['submitting', 'queued', 'running', 'downloading'].includes(i.status));
 
-export function createPhotoReview(store: Store, options: { dataDir: string; gen?: GenRuntime; runLlm?: Runner; now: () => number; model?: string }) {
+export function createPhotoReview(store: Store, options: { dataDir: string; gen?: GenRuntime; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; now: () => number; model?: string }) {
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   let stopped = false;
   const model = options.model ?? process.env.SP_PRODUCTION_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
-  async function start(id: string, input: z.infer<typeof ReviewStartSchema>) {
+  async function start(id: string, input: z.infer<typeof ReviewStartSchema>, codexAccountId?: string) {
     const key = input.scope === 'master' ? 'masterReview' : 'review';
     const run = await store.update(id, (run) => {
       if (run[key]?.requestId === input.requestId) return;
@@ -60,7 +60,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
       if (run.retouch?.status === 'running') throw new ProductionError('INVALID', 'Дождись автоправок или поставь серию на паузу.');
       if (input.consent !== true || run.mode !== 'photos' || run.paused || !reviewArtifacts(run).length || jobsActive(run) || run.photos?.status === 'running' || pending.has(id) || ['running', 'pending'].includes(run[key]?.status ?? '')) throw new ProductionError('INVALID', 'Проверка доступна после остановки генерации и согласия на передачу изображений Codex.');
       if (key === 'masterReview' && (!run.photos?.masterArtifactId || !appearanceReady(run))) throw new ProductionError('INVALID', 'Сначала нужны закреплённая внешность и сохранённый master.');
-      run[key] = { ...pendingReview(input.requestId, options.now()), referenceLimit: input.referenceLimit ?? 2 };
+      run[key] = { ...pendingReview(input.requestId, options.now()), codexAccountId, referenceLimit: input.referenceLimit ?? 2 };
       record(run, options.now(), 'Разрешена проверка фото, общей сцены и до шести локальных фото Soul ID через Codex. Расходуется квота ChatGPT.');
     });
     await tick(id); return run;
@@ -131,7 +131,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
           current[key]!.identityCount = identityCount;
           record(current, options.now(), `Для критика подготовлено ${artifacts.length} изображений серии${detailed ? ' с четырьмя фрагментами каждого' : ''} и ${identityCount} фото-референсов внешности.`);
         });
-        const response = await (options.runLlm ?? runCodex)<unknown>({ system: PHOTO_CRITIC_SYSTEM,
+        const response = await (options.runLlmForAccount?.(run[key]?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: PHOTO_CRITIC_SYSTEM,
           user: JSON.stringify({ inspectionMode: logic ? LOGIC_CRITERIA : detailed ? DETAIL_CRITERIA : 'overview', scope: key === 'masterReview' ? 'master' : 'series', appearance: run.appearance?.output?.profile ?? null, identityRequired: !!run.character, scenePlan: run.scenePlan, masterPrompt: boundPrompts(run)?.masterPrompt ?? null, scenario: run.script, direction: run.direction, style: run.style, imageMap,
             masterRole: hasStoryEvents(run.scenePlan) ? 'character quality gate; not a composition reference' : 'shared scene reference',
             candidates: artifacts.map((a) => { const shot = run.scenePlan?.shots.find(s => s.id === a.shotId); return { artifactId: a.id, shotId: a.shotId, shot: shot ?? null, scene: shot && run.scenePlan ? sceneForShot(run.scenePlan, shot) : run.scenePlan?.scene }; }), identityAvailable: identityCount > 0 }),

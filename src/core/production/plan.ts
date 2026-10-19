@@ -61,6 +61,7 @@ export interface PreparationCall {
   message: string | null;
 }
 export interface PreparationState {
+  codexAccountId?: string;
   status: 'running' | 'failed' | 'interrupted' | 'complete'; stage: PreparationStage;
   attempt: number; startedAt: string; error: string | null; calls: PreparationCall[];
 }

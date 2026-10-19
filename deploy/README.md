@@ -8,11 +8,14 @@ Netlify проксирует HTTPS к Caddy. Caddy передаёт Host `127.0.
 ## Установка
 
 1. Linux, Node >=24 (проверено 26.12.0), npm, ffmpeg/ffprobe, zip, Caddy, rsync.
-   Codex CLI 0.162.1, `codex login status` от имени сервисного пользователя.
+   Codex CLI 0.162.1. Каждый пользователь подключает ChatGPT в интерфейсе студии.
 2. Отдельный пользователь `seedance`, home `/var/lib/seedance`; данные в
-   `/var/lib/seedance/data`, Codex auth в `/var/lib/seedance/.codex` (права 0700/0600).
-   Использовать отдельный вход `codex login --device-auth` либо документированный перенос
-   auth.json по SSH. Не переносить личные config, AGENTS, skills, историю или память.
+   `/var/lib/seedance/data`, приватные browser sessions и Codex homes в `SP_ACCOUNTS_DIR`
+   (по умолчанию соседний `accounts/`, права каталогов 0700, файлов 0600). Каталог должен быть вне
+   data и dist. В server mode подключения обязательны: глобальный CODEX_HOME не используется.
+   Каждый браузер нажимает «Подключить ChatGPT» → открывает официальную страницу OpenAI →
+   входит в свой аккаунт и вводит одноразовый код. При необходимости разрешить device code login
+   в настройках безопасности ChatGPT. Не копировать общий auth.json между пользователями.
 3. Код/release в `/opt/seedance/releases/<revision>`, symlink `/opt/seedance/current`.
    Собрать `npm run check` на машине разработки, передать src/server, src/core, packs, dist,
    package.json и package-lock.json. На сервере `npm ci --omit=dev`.
@@ -37,7 +40,7 @@ Netlify проксирует HTTPS к Caddy. Caddy передаёт Host `127.0.
   получает 410, автоматического повторного POST нет. Стоимость и согласия проверяет исходный route.
   Результаты транспорта временные (30 минут); генерации и Production сохраняют собственное состояние.
 - Бесплатный `npm run doctor`/прямой `node src/server/doctor.ts` проверяет CLI и login, но не inference.
-  Платные проверки выполняет владелец. Сам факт переноса не доказывает качество генераций.
+  Это локальный CLI, а не подключения пользователей студии. Свой статус — `/api/chatgpt`; чужие аккаунты через API не перечисляются. Платные проверки выполняет владелец. Наличие подключения не доказывает доступность модели или остаток квоты.
 - Большие binary uploads и downloads проходят обычным HTTP; лимит времени proxy Netlify 26 секунд
   остаётся для них. Для медленного/крупного переноса использовать прямой HTTPS-адрес origin.
 - История Prompter и незавершённые формы в localStorage — браузерные черновики, они не являются
@@ -57,3 +60,16 @@ symlink → restart → smoke с действующим режимом вход�
 `{"url":"https://project.netlify.app"}`. Обычный launcher открывает общую студию;
 `npm run start:offline`/`npm run dev` и отдельный SP_DATA_DIR сохраняют локальную разработку.
 Адреса конкретного VPS и инструкции доступа хранятся в приватном operational runbook вне Git.
+
+## Подключения ChatGPT
+
+Sessions сохраняются между рестартами. Cookie __Host-, HttpOnly, Secure, SameSite=Strict, 180 дней,
+host-only; прямой origin и Netlify — разные sessions. Закрытие диалога не отменяет вход,
+«Отменить вход» отменяет. Код живёт до 15 минут. Выход удаляет собственные credentials;
+текущий вызов сначала нужно завершить/отменить. Reconnect создаёт новый profile: старый этап
+не переключится на другой аккаунт без явного retry. Дубликат requestId не меняет binding.
+Старые серии читаются как прежде. Вызовы одного profile последовательны, без гонки refresh.
+
+Бэкап accounts хранить отдельно с доступом 0600, как пароль; не в library, экспорте или Git.
+Потеря accounts требует повторного входа, общая data остаётся. Откат на release без этой функции
+требует остановки новых LLM: старый код использовал глобальный home, без отдельных подключений.

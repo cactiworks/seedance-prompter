@@ -3,7 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { AccountError, type Accounts } from './accounts/service.ts';
+import { accountRoutes } from './accounts/routes.ts';
 import { asyncRequests } from './asyncRequests.ts';
 import { archiveDirectory, downloadRoutes } from './downloads.ts';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
@@ -73,6 +75,7 @@ export interface AppOptions {
   publicOrigins?: string[];
   /** Подменяется в тестах: живой вызов тратит квоту подписки. */
   runLlm?: Runner;
+  accounts?: Accounts;
   writerModel?: string;
   production?: ProductionRuntime;
   characters?: Characters;
@@ -149,11 +152,14 @@ export function createApp(options: AppOptions) {
     c.header('Cache-Control', 'private, no-store');
     await next();
   });
+  app.route('/api/chatgpt', accountRoutes(options.accounts));
+  const runFor = async (c: Context): Promise<Runner> => options.accounts ? options.accounts.runner(c) : options.runLlm ?? runCodex;
   // Registered after Host/Origin/CSRF validation; detached requests pass those checks again.
   asyncRequests(app);
   downloadRoutes(app, options.dataDir);
 
   app.onError((error, c) => {
+    if (error instanceof AccountError) return c.json({ error: 'ACCOUNT_REQUIRED', messageRu: error.message }, error.status);
     if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
     if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
     if (error instanceof SubmitError) return c.json({ error: error.code, messageRu: error.messageRu, ...error.details }, error.status);
@@ -164,7 +170,7 @@ export function createApp(options: AppOptions) {
 
   const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
   app.route('/api/characters', characterRoutes(characters));
-  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, gen }), characters));
+  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor, gen }), characters, options.accounts));
 
   const routes = app
     .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION, revision: process.env.SP_RELEASE ?? null }))
@@ -210,7 +216,7 @@ export function createApp(options: AppOptions) {
           pack: loadPack(options.rootDir, project.packId),
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
-          run: options.runLlm ?? runCodex,
+          run: await runFor(c),
           model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
           signal: c.req.raw.signal,
         });
@@ -231,7 +237,7 @@ export function createApp(options: AppOptions) {
       const asked = items.filter((item) => item.ru !== '');
       if (asked.length === 0) return c.json({ items, output: null, problems: [], meta: null });
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/fields.system.md'), 'utf8');
-      const run = options.runLlm ?? runCodex;
+      const run = await runFor(c);
       const request = { system, jsonSchema: FIELDS_SCHEMA, model: options.writerModel ?? process.env.SP_FIELDS_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
       try {
         const user = buildFieldsUser(project, items);
@@ -264,7 +270,7 @@ export function createApp(options: AppOptions) {
       const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries, shooting: agentShooting(shot, pack) });
       try {
         // Критик читает большой контекст и пишет длинный JSON; сохраняем отдельный лимит времени.
-        const result = await (options.runLlm ?? runCodex)<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
+        const result = await (await runFor(c))<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
         const verified = verifyCritique(result.data, build.resolvedParagraphs);
         return c.json({ critique: { ...verified.critique, prompt: build.prompt, createdAt: new Date().toISOString(), model: result.meta.model, droppedRu: verified.droppedRu }, meta: result.meta });
       } catch (error) {
@@ -303,7 +309,7 @@ export function createApp(options: AppOptions) {
           pack: loadPack(options.rootDir, project.packId),
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
-          run: options.runLlm ?? runCodex,
+          run: await runFor(c),
           model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
           signal: c.req.raw.signal,
           fix: { symptoms, workedRu: attempt.workedRu, failedRu: attempt.failedRu },
@@ -329,7 +335,7 @@ export function createApp(options: AppOptions) {
         return c.json({ error: 'NO_VISION_COPY', messageRu: 'Нет уменьшенной копии для анализа — загрузи картинку референса заново.' }, 422);
       }
       try {
-        const result = await (options.runLlm ?? runCodex)<VisionOutput>({
+        const result = await (await runFor(c))<VisionOutput>({
           system: VISION_SYSTEM,
           user: buildVisionUser(ref),
           images: [{ mediaType: 'image/jpeg', base64: Buffer.from(bytes).toString('base64') }],
@@ -359,7 +365,7 @@ export function createApp(options: AppOptions) {
       if (text.trim() === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши кадр по-русски — хотя бы парой предложений.' }, 422);
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/planner.system.md'), 'utf8');
-      const run = options.runLlm ?? runCodex;
+      const run = await runFor(c);
       const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
         const user = buildPlannerUser(project, text, lineIds, durationSec, shooting);
@@ -386,7 +392,7 @@ export function createApp(options: AppOptions) {
       const problems = valid ? regionProblems(boxes, instructionRu) : ['Рамки выделения не прочитаны.'];
       if (problems.length > 0) return c.json({ error: 'BAD_REGION', messageRu: problems.join(' ') }, 422);
       if (!needsTranslation(instructionRu)) return c.json({ prompt: buildRegionPrompt(boxes, instructionRu), instructionEn: instructionRu, meta: null });
-      const run = options.runLlm ?? runCodex;
+      const run = await runFor(c);
       const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: process.env.SP_EDIT_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
       try {
         const user = buildEditInstructionUser(instructionRu, boxes.length);
@@ -487,7 +493,7 @@ export function createApp(options: AppOptions) {
       );
       // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
       const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
-      const run = options.runLlm ?? runCodex;
+      const run = await runFor(c);
       const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
       try {
         const user = buildPrompterUser(request, candidates, styles, camera, template);

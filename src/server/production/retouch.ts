@@ -25,7 +25,7 @@ fixes исправляют только fail для character/face/likeness/hand
 
 interface Store { get(id: string): Promise<ProductionRun>; update(id: string, fn: (run: ProductionRun) => Promise<void> | void): Promise<ProductionRun> }
 const inFlight = (status: string) => ['submitting', 'queued', 'running', 'downloading'].includes(status);
-export function createRetouch(store: Store, options: { dataDir: string; gen?: GenRuntime; runLlm?: Runner; now: () => number }) {
+export function createRetouch(store: Store, options: { dataDir: string; gen?: GenRuntime; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; now: () => number }) {
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   const sending = new Set<string>();
   const ticking = new Set<string>();
@@ -44,7 +44,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
       if (item?.attempts.some(a => !a.artifactId && a.status !== 'cancelled' && !(a.status === 'failed' && a.errorCode !== 'POLL_TIMEOUT'))) throw new ProductionError('INVALID', 'Сначала разбери незавершённую задачу. Неизвестная отправка не повторяется.');
     }
   }
-  async function start(id: string, input: RetouchStart) {
+  async function start(id: string, input: RetouchStart, codexAccountId?: string) {
     gen();
     return store.update(id, run => {
       if (run.retouch?.requests.includes(input.requestId)) return;
@@ -65,6 +65,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
         shot.acceptedPhotoId = null; shot.step = 'photoReview'; shot.error = null;
         run.approvals.push({ kind: 'photo', artifactId, at: new Date(now()).toISOString() });
       }
+      state.codexAccountId = codexAccountId;
       state.status = 'running'; state.requestId = input.requestId; state.requests.push(input.requestId); state.remainingUsd = quote.usd; state.perEditUsd = quote.perEditUsd;
       run.photos!.status = 'review';
       record(run, now(), `Milestone: выбрано ${input.ids.length} кадров. Автоправки Seedream — до ${quote.count}, бюджет до $${quote.usd.toFixed(3)}. До ${quote.checks} проверок Codex; выдача только после проверки деталей.`);
@@ -98,7 +99,7 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
           imageMap.push({ imageIndex: images.length, artifactId, role: artifactId === item.currentId ? 'current' : artifactId === item.originalId ? 'original' : 'context', original: artifactId === item.originalId });
         }
         const shot = run.scenePlan!.shots.find(s => s.id === item.shotId)!;
-        const reply = await (options.runLlm ?? runCodex)<unknown>({ system: RETOUCH_SYSTEM, user: JSON.stringify({ inspectionMode: 'logic-audit-v5', scope: 'series', style: run.style, contentMode: run.contentMode ?? 'story', scenePlan: { contentMode: run.scenePlan?.contentMode ?? 'story' }, candidate: { artifactId: item.currentId, shot }, originalId: item.originalId, imageMap, identityRequired: !!run.character, appearance: run.appearance?.output?.profile ?? null, scene: sceneForShot(run.scenePlan!, shot), scenario: run.script, direction: run.direction, previousFixes: item.history.flatMap(h => h.audit.fixes), identityAvailable: refs.images.length > 0 }), images, jsonSchema: z.toJSONSchema(GeneratedRetouchAuditSchema), model: process.env.SP_PRODUCTION_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 240_000, signal: controller.signal, taskRu: 'Автоправки деталей Production' });
+        const reply = await (options.runLlmForAccount?.(run.retouch?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: RETOUCH_SYSTEM, user: JSON.stringify({ inspectionMode: 'logic-audit-v5', scope: 'series', style: run.style, contentMode: run.contentMode ?? 'story', scenePlan: { contentMode: run.scenePlan?.contentMode ?? 'story' }, candidate: { artifactId: item.currentId, shot }, originalId: item.originalId, imageMap, identityRequired: !!run.character, appearance: run.appearance?.output?.profile ?? null, scene: sceneForShot(run.scenePlan!, shot), scenario: run.script, direction: run.direction, previousFixes: item.history.flatMap(h => h.audit.fixes), identityAvailable: refs.images.length > 0 }), images, jsonSchema: z.toJSONSchema(GeneratedRetouchAuditSchema), model: process.env.SP_PRODUCTION_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 240_000, signal: controller.signal, taskRu: 'Автоправки деталей Production' });
         const result = validateRetouchAudit(GeneratedRetouchAuditSchema.parse(reply.data), item.currentId, refs.images.length, !!run.character);
         await store.update(id, current => {
           const state = current.retouch!; const target = state.items.find(i => i.shotId === item.shotId)!;

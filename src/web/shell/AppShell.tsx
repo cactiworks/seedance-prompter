@@ -10,6 +10,7 @@ import { Button, Icon, Text } from '../ui/components/index.ts';
 import styles from './AppShell.module.css';
 import { PRIMARY_ROUTES, ROUTE_HINT, ROUTE_RU, TOOL_ROUTES, type Route } from './route.ts';
 import { CreatorGuide } from './CreatorGuide.tsx';
+import { ChatgptConnection } from './ChatgptConnection.tsx';
 
 const SIDEBAR_KEY = 'sp-sidebar';
 
@@ -265,7 +266,7 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
               </button>)}
             </nav>
           </details>
-          <div className={styles.help}><CreatorGuide route={route} onRoute={onRoute} /></div>
+          <div className={styles.help}><ChatgptConnection /><CreatorGuide route={route} onRoute={onRoute} /></div>
         </header>
         <GenerationStatus onOpen={() => useGen.getState().openTasks()} />
         <div className={styles.content}>{children}</div>

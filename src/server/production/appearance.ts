@@ -36,7 +36,7 @@ export async function identityImages(dataDir: string, run: ProductionRun, exactI
   return { ids, images };
 }
 
-export function createAppearancePreparation(store: Store, options: { dataDir: string; runLlm?: Runner; model?: string; now: () => number }) {
+export function createAppearancePreparation(store: Store, options: { dataDir: string; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; model?: string; now: () => number }) {
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   let stopped = false;
   const model = options.model ?? process.env.SP_PRODUCTION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
@@ -56,7 +56,7 @@ export function createAppearancePreparation(store: Store, options: { dataDir: st
         if (run.paused || run.appearance?.status !== 'running' || controller.signal.aborted) return;
         const { ids, images } = await identityImages(options.dataDir, run);
         if (controller.signal.aborted) return;
-        const response = await (options.runLlm ?? runCodex)<unknown>({ system: APPEARANCE_SYSTEM,
+        const response = await (options.runLlmForAccount?.(run.appearance?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: APPEARANCE_SYSTEM,
           user: JSON.stringify({ scenePlan: run.scenePlan, promptPlan: run.promptPlan, imageMap: ids.map((_, i) => ({ imageIndex: i + 1, role: 'identity' })) }),
           images, jsonSchema: z.toJSONSchema(AppearanceOutputSchema), model, effort: 'medium', timeoutMs: 240_000,
           signal: controller.signal, taskRu: 'Внешность персонажа Production' });

@@ -17,7 +17,7 @@ import { agentError, directScene, writePrompts, type AgentOptions } from './agen
 
 const ID = /^pr-[a-z0-9-]{6,70}$/;
 /** Durable series with explicit, cost-confirmed photo dispatch. Legacy demo runs stay mock. */
-export function createProductionRuntime(options: { dataDir: string; now?: () => number; delayMs?: number; runLlm?: Runner; model?: string; gen?: GenRuntime }) {
+export function createProductionRuntime(options: { dataDir: string; now?: () => number; delayMs?: number; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; model?: string; gen?: GenRuntime }) {
   const dir = path.join(options.dataDir, 'production-mock');
   const now = options.now ?? Date.now;
   const delay = options.delayMs ?? 1300;
@@ -65,7 +65,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
   }) };
   const photos = createPhotoProduction(photoStore, options.gen, now);
   const appearance = createAppearancePreparation(photoStore, { ...options, now });
-  const review = createPhotoReview(photoStore, { dataDir: options.dataDir, gen: options.gen, runLlm: options.runLlm, now });
+  const review = createPhotoReview(photoStore, { dataDir: options.dataDir, gen: options.gen, runLlm: options.runLlm, runLlmForAccount: options.runLlmForAccount, now });
   const retouch = createRetouch(photoStore, { ...options, now });
   async function tick(): Promise<void> {
     await exclusive(async () => {
@@ -89,8 +89,9 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     const job = { controller, done: Promise.resolve() };
     pending.set(id, job);
     job.done = (async () => {
+      const accountId = (await read(id)).preparation?.codexAccountId;
       const agentOptions: AgentOptions = {
-        run: options.runLlm ?? runCodex,
+        run: options.runLlmForAccount?.(accountId) ?? options.runLlm ?? runCodex,
         model: options.model ?? process.env.SP_PRODUCTION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
         signal: controller.signal,
         onCall: (call) => updatePreparation(id, attempt, (run) => {
@@ -144,7 +145,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
     }),
     issues: () => [...damaged].map(([file, message]) => `${file}: ${message}`),
     waitForPreparation: async (id: string): Promise<void> => { await pending.get(id)?.done; },
-    create: async (input: RunInput, character: CharacterSelection | null = null): Promise<ProductionRun> => {
+    create: async (input: RunInput, character: CharacterSelection | null = null, codexAccountId?: string): Promise<ProductionRun> => {
       const parsed = CreateRunSchema.safeParse(input);
       if (!parsed.success) throw new ProductionError('INVALID', 'Нужны название и визуальный вектор; для серии по сценарию — текст, для B-roll — режим Codex → фото.');
       input = { ...parsed.data, ...photoOutput(parsed.data), contentMode: parsed.data.contentMode ?? 'story', script: parsed.data.contentMode === 'broll' ? '' : parsed.data.script, brollCount: parsed.data.contentMode === 'broll' ? parsed.data.brollCount ?? 4 : undefined };
@@ -160,7 +161,9 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
             return existing;
           }
         }
-        const saved = await write({ ...newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay), character });
+        const fresh = { ...newRun(`pr-${now().toString(36)}-${randomBytes(4).toString('hex')}`, input, now(), delay), character };
+        if (fresh.preparation) fresh.preparation.codexAccountId = codexAccountId;
+        const saved = await write(fresh);
         created = true;
         return saved;
       });
@@ -175,13 +178,13 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
       record(run, now(), run.mode === 'photos' ? (character ? `Выбран персонаж «${character.name}» для генерации фото.` : 'Серия будет без Soul ID.') : character ? `Выбран персонаж «${character.name}». Mock-кадры не меняются; сходство лица не проверялось.` : 'Персонаж отвязан от серии. Mock-кадры не меняются.');
       return write(run);
     }),
-    act: async (id: string, action: RunAction): Promise<ProductionRun> => {
+    act: async (id: string, action: RunAction, codexAccountId?: string): Promise<ProductionRun> => {
       const run = await exclusive(async () => {
         const source = await read(id);
         if (action.type === 'retryPreparation') {
           if (source.rev !== action.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Обнови данные перед повтором.');
           if (!source.preparation || source.planned || source.paused || source.preparation.status === 'running' || pending.has(id)) throw new ProductionError('INVALID', 'Повтор подготовки сейчас недоступен.');
-          source.preparation = { ...source.preparation, status: 'running', attempt: source.preparation.attempt + 1, error: null, startedAt: new Date(now()).toISOString() };
+          source.preparation = { ...source.preparation, codexAccountId, status: 'running', attempt: source.preparation.attempt + 1, error: null, startedAt: new Date(now()).toISOString() };
           record(source, now(), 'Подготовка Codex повторена по запросу владельца.');
           return write(source);
         }

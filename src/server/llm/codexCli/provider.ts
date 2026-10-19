@@ -65,9 +65,10 @@ function safeDiagnostic(text: string): string {
 }
 
 /** One restricted, ephemeral Codex invocation. Authentication stays in the user's CODEX_HOME. */
-export async function runCodex<T>(request: LlmRequest): Promise<LlmResult<T>> {
+export async function runCodex<T>(request: LlmRequest, options: { codexHome?: string } = {}): Promise<LlmResult<T>> {
   if (request.signal?.aborted === true) throw new LlmError('CANCELLED', 'Отменено.');
   const started = Date.now();
+  const parentEnv = options.codexHome ? { ...process.env, CODEX_HOME: options.codexHome } : process.env;
   const cwd = mkdtempSync(path.join(tmpdir(), 'seedance-prompter-codex-'));
   const cleanup = (): void => rmSync(cwd, { recursive: true, force: true });
   let args: string[];
@@ -80,7 +81,8 @@ export async function runCodex<T>(request: LlmRequest): Promise<LlmResult<T>> {
       writeFileSync(file, Buffer.from(image.base64, 'base64'), { mode: 0o600 });
       return file;
     });
-    args = buildCliArgs({ system: request.system, schemaFile, model: request.model, effort: request.effort, imageFiles, disabledSkillPaths: skillPathsToDisable(process.env) });
+    args = buildCliArgs({ system: request.system, schemaFile, model: request.model, effort: request.effort, imageFiles, disabledSkillPaths: skillPathsToDisable(parentEnv) });
+    if (options.codexHome) args.splice(args.length - 1, 0, '-c', 'cli_auth_credentials_store="file"');
   } catch (error) {
     cleanup();
     throw new LlmError('PROCESS_CRASH', 'Не удалось подготовить вызов Codex.', String(error));
@@ -90,7 +92,7 @@ export async function runCodex<T>(request: LlmRequest): Promise<LlmResult<T>> {
     const task = request.taskRu ?? 'Агент';
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn('codex', args, { cwd, env: buildChildEnv(process.env), shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+      child = spawn('codex', args, { cwd, env: buildChildEnv(parentEnv), shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (error) {
       cleanup();
       reject(new LlmError('PROCESS_CRASH', 'Не удалось запустить Codex.', String(error)));

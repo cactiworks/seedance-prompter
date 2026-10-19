@@ -30,6 +30,7 @@ export const StoredRunSchema = CreateRunSchema.safeExtend({
   scenePlan: SceneDraftSchema.extend({ shots: z.array(SceneDraftSchema.shape.shots.element.extend({ id: z.string() })).min(1) }).optional(),
   promptPlan: PromptPlanSchema.optional(),
   preparation: z.object({
+    codexAccountId: z.uuid().optional(),
     status: z.enum(['running', 'failed', 'interrupted', 'complete']), stage: z.enum(['scene', 'prompts']),
     attempt: z.number().int(), startedAt: z.string(), error: nullableText,
     calls: z.array(z.object({ stage: z.enum(['scene', 'prompts']), at: z.string(), status: z.enum(['accepted', 'rejected', 'failed']), model: nullableText, durationMs: z.number(), inputTokens: z.number().nullable(), outputTokens: z.number().nullable(), message: nullableText })),

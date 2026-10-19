@@ -24,7 +24,7 @@
 ## Что нужно на машине
 
 - Node 26 (стоит на Mac владельца; `engines` в `package.json` пускает ≥24), npm.
-- Актуальный `codex` с входом в ChatGPT (`codex login status`; разлогинило — `codex login`). При
+- Для локального single-user режима — актуальный `codex` с входом в ChatGPT (`codex login status`; разлогинило — `codex login`). При
   исчерпанном лимите работает всё, кроме агентов.
 - ffmpeg и ffprobe из Homebrew (`brew install ffmpeg`) — кадр из видео, обрезка, размер, замер секунд.
 - Ключи KIE и Higgsfield в Keychain — см. [patterns.md](patterns.md).
@@ -71,3 +71,10 @@ latency и самоотчёт модели о доступном контекс�
 На Mac игнорируемый `.seedance-remote.json` направляет обычный launcher в общую студию;
 start:offline, dev и явные SP_PORT/SP_DATA_DIR остаются локальными. Старую data нельзя
 синхронизировать поверх серверной после cutover.
+
+
+С 20.10.2026 в server mode каждый браузер подключает собственный ChatGPT кнопкой в header
+и официальным device login. `SP_ACCOUNTS_DIR` хранит sessions/profiles вне общей data;
+по умолчанию это соседний с data каталог `accounts`. Глобальный CODEX_HOME не используется.
+На localhost без SP_ACCOUNTS_DIR прежний CLI-вход сохранён. Вход, backup и откат описаны в
+`deploy/README.md`. `doctor` проверяет локальный CLI; `/api/chatgpt` — собственный browser profile.

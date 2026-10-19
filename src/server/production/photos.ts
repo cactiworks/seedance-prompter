@@ -27,7 +27,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
     if (!gen) throw new ProductionError('INVALID', 'Генератор фото не подключён. Перезапусти сервер новой версии.');
     return gen;
   };
-  async function continueSelection(id: string, input: ContinuePhotos): Promise<ProductionRun> {
+  async function continueSelection(id: string, input: ContinuePhotos, codexAccountId?: string): Promise<ProductionRun> {
     return store.update(id, run => {
       if (run.photos?.requests.some(r => r.id === input.requestId)) return;
       if (run.rev !== input.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Обнови выбор и стоимость.');
@@ -54,13 +54,13 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       state.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       state.budget = { remainingUsd: quote.usd, perImageUsd: quote.perImageUsd, masterLimit: 1 };
       state.status = quote.count ? 'running' : 'complete';
-      if (quote.count) run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
+      if (quote.count) run.review = { ...pendingReview(input.requestId, now()), codexAccountId, referenceLimit: 6 };
       record(run, now(), quote.count
         ? `Принято ${input.ids.length} фото. Пересоздаём только ${quote.count} невыбранных позиций за $${quote.usd.toFixed(3)}. Принятые кадры и прежние версии сохранены.`
         : `Все ${run.shots.length} позиции приняты владельцем. Фото готовы к скачиванию; правки в Canvas — по желанию.`);
     });
   }
-  async function start(id: string, input: PhotoStart): Promise<ProductionRun> {
+  async function start(id: string, input: PhotoStart, codexAccountId?: string): Promise<ProductionRun> {
     requireGen();
     return store.update(id, (run) => {
       if (run.photos?.requests.some((r) => r.id === input.requestId)) return;
@@ -79,11 +79,11 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
       if (masterRejected(run) && !input.retryMaster) throw new ProductionError('INVALID', 'Master не принят. Повтори проверку без генерации или пересоздай опорный кадр в этой серии.');
       if (input.retryMaster) replaceRejectedMaster(run, input.requestId, now());
       run.photos.budget = { remainingUsd: quote.usd, perImageUsd: quote.perImageUsd, masterLimit: input.masterRetryConsent ? 3 : 1 };
-      if (run.character && !appearanceReady(run)) run.appearance = pendingAppearance(run, input.requestId, now());
-      if (!masterApproved(run)) run.masterReview = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
+      if (run.character && !appearanceReady(run)) run.appearance = { ...pendingAppearance(run, input.requestId, now()), codexAccountId };
+      if (!masterApproved(run)) run.masterReview = { ...pendingReview(input.requestId, now()), codexAccountId, referenceLimit: 6 };
       run.photos.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
       run.photos.status = 'running';
-      run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
+      run.review = { ...pendingReview(input.requestId, now()), codexAccountId, referenceLimit: 6 };
       record(run, now(), `Подтверждено до ${quote.count} изображений, включая ${quote.reserveCount} запасных попыток master: оценка до $${quote.usd.toFixed(3)}. ${hasStoryEvents(run.scenePlan) ? 'Кадры создаются независимо; Soul ID применяется к кадрам с персонажем.' : 'Reference сцены и Soul ID передаются Higgsfield.'} Видео и upscale отключены.`);
     });
   }

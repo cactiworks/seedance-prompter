@@ -42,7 +42,7 @@ export function replaceRejectedMaster(run: ProductionRun, requestId: string, now
   state.items[index] = { key: 'scene', tag: `production:${run.id}:${requestId}:scene`, jobId: null, taskId: null, status: 'pending', mediaId: null, error: null, errorCode: null };
   state.masterArtifactId = null;
   // Automatic retries inherit the accepted inspection scope; a new explicit start upgrades it.
-  run.masterReview = { ...pendingReview(requestId, now), criteriaVersion: run.masterReview!.criteriaVersion, referenceLimit: run.masterReview!.referenceLimit };
+  run.masterReview = { ...pendingReview(requestId, now), codexAccountId: run.masterReview!.codexAccountId, criteriaVersion: run.masterReview!.criteriaVersion, referenceLimit: run.masterReview!.referenceLimit };
 }
 export interface PhotoQuote { rev: number; count: number; sceneCount: number; reserveCount: number; shotCount: number; usd: number; baseUsd: number; perImageUsd: number; characterName: string | null }
 /** Upper estimate for the remaining work plus optional master attempts; unused reserve is not submitted. */

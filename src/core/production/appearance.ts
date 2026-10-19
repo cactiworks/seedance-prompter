@@ -14,6 +14,7 @@ export const AppearanceProfileSchema = z.object({
 }).strict();
 export const AppearanceOutputSchema = z.object({ profile: AppearanceProfileSchema, prompts: GeneratedPromptPlanSchema }).strict();
 export const AppearanceStateSchema = z.object({
+  codexAccountId: z.uuid().optional(),
   status: z.enum(['pending', 'running', 'complete', 'failed', 'interrupted']), requestId: z.uuid(), consentedAt: z.string(),
   characterId: z.string(), referenceId: z.string(), uploadIds: z.array(z.string()).max(MAX_IDENTITY_REFS),
   output: AppearanceOutputSchema.nullable(), error: z.string().nullable(),

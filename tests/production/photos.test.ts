@@ -21,7 +21,7 @@ import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 const png = readFileSync(new URL('../../src/web/public/production-mock/shot-1.png', import.meta.url));
 const resources: { dir: string; rt: ProductionRuntime; gen: GenRuntime }[] = [];
 const identity: CharacterSelection = { id: 'ch-identity-123', name: 'Тестовый персонаж', referenceId: '11111111-1111-4111-8111-111111111111', modelVersion: 'v2', selectedAt: new Date(0).toISOString() };
-async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner, contentMode: 'story' | 'broll' = 'story', output: Partial<PhotoOutput> = {}) {
+async function setup(count = 2, patch: Partial<GenProvider> = {}, character: CharacterSelection | null = identity, reviewRunner?: Runner, masterRunner?: Runner, appearanceRunner?: Runner, contentMode: 'story' | 'broll' = 'story', output: Partial<PhotoOutput> = {}, accountCalls?: { id?: string; task?: string }[]) {
   const dir = mkdtempSync(path.join(tmpdir(), 'production-photos-'));
   if (character) {
     mkdirSync(path.join(dir, 'characters'), { recursive: true }); mkdirSync(path.join(dir, 'uploads'), { recursive: true });
@@ -53,9 +53,9 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
     return { data: (retouch ? { result: reviewReport([JSON.parse(request.user).candidate.artifactId]).results[0], preserved: 'pass', fixes: [] } : critic ? reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) : appearance ? appearanceOutput(count) : request.taskRu === 'Режиссёр Production' ? contentMode === 'broll' ? brollDraft(count) : sceneDraft(count) : promptPlan(count)) as T,
       meta: { model: 'fixture', durationMs: 1, inputTokens: 10, outputTokens: 10, turns: 1 } };
   };
-  const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, now: () => clock, delayMs: 1 });
+  const rt = createProductionRuntime({ dataDir: dir, gen, runLlm, runLlmForAccount: accountCalls ? id => async request => { accountCalls.push({ id, task: request.taskRu }); return runLlm(request); } : undefined, now: () => clock, delayMs: 1 });
   resources.push({ dir, rt, gen });
-  const created = await rt.create({ ...DEMO_INPUT, ...output, contentMode, brollCount: contentMode === 'broll' ? count : undefined, script: contentMode === 'broll' ? '' : SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character);
+  const created = await rt.create({ ...DEMO_INPUT, ...output, contentMode, brollCount: contentMode === 'broll' ? count : undefined, script: contentMode === 'broll' ? '' : SCRIPT, planningMode: 'codex', mode: 'photos', characterId: character?.id ?? null }, character, accountCalls ? '11111111-1111-4111-8111-111111111111' : undefined);
   await rt.waitForPreparation(created.id);
   const get = () => rt.get(created.id);
   const input = async () => { const run = await get(); return { rev: run.rev, requestId: crypto.randomUUID(), confirmUsd: quotePhotos(run).usd, refsConsent: true as const, reviewConsent: true as const, masterGateConsent: true as const }; };
@@ -67,6 +67,32 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it('keeps all background photo roles on the consenting account and rebinds only explicit regeneration', async () => {
+    const accountCalls: { id?: string; task?: string }[] = [];
+    const planner = '11111111-1111-4111-8111-111111111111';
+    const creator = '22222222-2222-4222-8222-222222222222';
+    const s = await setup(2, {}, identity, undefined, undefined, undefined, 'story', {}, accountCalls);
+    expect(accountCalls.map(c => c.id)).toEqual([planner, planner]);
+    await s.rt.photos.start(s.id, await s.input(), creator);
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get();
+    expect(run.appearance?.codexAccountId).toBe(creator);
+    expect(run.masterReview?.codexAccountId).toBe(creator);
+    expect(run.review?.codexAccountId).toBe(creator);
+    expect(accountCalls.slice(2).map(c => c.id)).toEqual([creator, creator, creator]);
+    expect(run.review?.status).toBe('complete');
+    const selected = [run.shots[0]!.photoId!];
+    const quote = await s.rt.photos.selectionQuote(run.id, selected);
+    const request = { rev: run.rev, requestId: crypto.randomUUID(), ids: selected, confirmUsd: quote.usd, consent: true as const };
+    await s.rt.photos.continueSelection(run.id, request, planner);
+    // A duplicate request from another browser cannot hijack the saved intent.
+    await s.rt.photos.continueSelection(run.id, request, creator);
+    for (let i = 0; i < 8; i++) await s.cycle();
+    expect((await s.get()).review?.codexAccountId).toBe(planner);
+    expect(accountCalls.at(-1)?.id).toBe(planner);
+    expect((await s.get()).shots[0]!.acceptedPhotoId).toBe(selected[0]);
+  });
+
   it('closes twelve planned positions directly after creator selection, without mandatory retouch', async () => {
     const s = await setup(12, {}, null);
     await s.rt.photos.start(s.id, await s.input());

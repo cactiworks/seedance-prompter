@@ -111,6 +111,23 @@ Codex получает только подготовленный input зада�
 небольших преобразований, medium для планирования, письма и критики; настройки этого чата
 в продуктовые вызовы автоматически не переносятся.
 
+## Раздельные подключения ChatGPT
+
+`server/accounts` выдаёт opaque HttpOnly cookie, на диске только SHA-256 session token.
+Sessions/CODEX_HOME находятся вне общей data. Официальный `codex login --device-auth`
+возвращает браузеру только URL OpenAI, одноразовый код и безопасный статус своего аккаунта.
+Пароли/токены не проходят через UI/API/logs. `/api/chatgpt` GET, `/login` и `/logout` POST
+идут после Host/Origin/client gates и перед async transport. Login ограничен временем и
+числом процессов; отменённый/запоздалый вход не привязывается.
+
+В server mode все `/api/llm/*` используют Runner browser profile. Production хранит
+не секретный `codexAccountId` на каждой разрешённой фазе: preparation, appearance,
+masterReview, review, retouch. Start/retry берёт profile из cookie, не из JSON пользователя.
+Автоповтор master сохраняет account исходного согласия; дубликат requestId не меняет его.
+Нет fallback на глобальную авторизацию. Reconnect создаёт новый profile, старые запуски
+требуют явного retry. Библиотека, Canvas, flows и серии остаются общими. Local dev и fixtures
+сохраняют прежний single-user Runner либо injected Runner.
+
 ## LLM-мост
 
 Локальный subprocess `codex exec` за интерфейсом `LlmRequest` / `LlmResult`, вход через ChatGPT.

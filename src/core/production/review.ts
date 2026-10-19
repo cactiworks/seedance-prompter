@@ -33,6 +33,7 @@ export const LogicReviewReportSchema = ReviewReportSchema.extend({ results: z.ar
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;
 export const ReviewStateSchema = z.object({
+  codexAccountId: z.uuid().optional(),
   status: z.enum(['pending', 'running', 'complete', 'failed', 'interrupted']), requestId: z.uuid(),
   consentedAt: z.string(), artifactIds: z.array(z.string()), identityCount: z.number().int().min(0).max(MAX_IDENTITY_REFS),
   referenceLimit: z.number().int().min(1).max(MAX_IDENTITY_REFS).optional(),

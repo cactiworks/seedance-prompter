@@ -1,4 +1,5 @@
 import { photoOutput } from '../../core/production/output.ts';
+import { AccountError, type Accounts } from '../accounts/service.ts';
 import { Hono } from 'hono';
 import { RetouchStartSchema } from '../../core/production/retouch.ts';
 import { z } from 'zod';
@@ -13,9 +14,10 @@ import { SubmitError } from '../gen/runtime.ts';
 import { ActionSchema, CreateRunSchema } from '../../core/production/model.ts';
 import type { ProductionRuntime } from './runtime.ts';
 
-export function productionRoutes(runtime: ProductionRuntime, characters: Characters) {
+export function productionRoutes(runtime: ProductionRuntime, characters: Characters, accounts?: Accounts) {
   return new Hono()
     .onError((error, c) => {
+      if (error instanceof AccountError) return c.json({ error: 'ACCOUNT_REQUIRED', messageRu: error.message }, error.status);
       if (error instanceof SubmitError) return c.json({ messageRu: error.messageRu }, error.status);
       if (error instanceof SoulIdError) return c.json({ messageRu: error.message }, error.status);
       if (error instanceof ProductionError) return c.json({ messageRu: error.message }, error.code === 'CONFLICT' ? 409 : error.code === 'NOT_FOUND' ? 404 : 422);
@@ -27,14 +29,14 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       const input = CreateRunSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Нужны название и визуальный вектор. Для серии по сценарию добавь текст; B-roll готовит Codex в режиме фото.' }, 422);
       const character = input.data.characterId ? await characters.select(input.data.characterId) : null;
-      return c.json(await runtime.create(input.data, character), 201);
+      return c.json(await runtime.create(input.data, character, input.data.planningMode === 'codex' ? await accounts?.requireAccount(c) : undefined), 201);
     })
     .get('/issues', (c) => c.json(runtime.issues()))
     .get('/:id', async (c) => c.json(await runtime.get(c.req.param('id'))))
     .post('/:id/review', async (c) => {
       const input = ReviewStartSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Подтверди передачу изображений и расход квоты Codex.' }, 422);
-      return c.json(await runtime.review.start(c.req.param('id'), input.data));
+      return c.json(await runtime.review.start(c.req.param('id'), input.data, await accounts?.requireAccount(c)));
     })
     .post('/:id/retouch/quote', async (c) => {
       const input = z.object({ ids: z.array(z.string()).min(1) }).strict().safeParse(await c.req.json().catch(() => null));
@@ -44,7 +46,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
     .post('/:id/retouch/start', async (c) => {
       const input = RetouchStartSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Подтверди бюджет автоправок и передачу изображений.' }, 422);
-      return c.json(await runtime.retouch.start(c.req.param('id'), input.data));
+      return c.json(await runtime.retouch.start(c.req.param('id'), input.data, await accounts?.requireAccount(c)));
     })
     .post('/:id/retouch/retry', async (c) => {
       const input = z.object({ jobId: z.string().min(1).max(100) }).strict().safeParse(await c.req.json().catch(() => null));
@@ -66,7 +68,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
         const current = await characters.select(run.characterId);
         if (current.referenceId !== run.character?.referenceId) return c.json({ messageRu: 'Soul ID изменился. Выбери персонажа заново.' }, 409);
       }
-      return c.json(await runtime.photos.continueSelection(run.id, input.data));
+      return c.json(await runtime.photos.continueSelection(run.id, input.data, !run.photos?.requests.some(r => r.id === input.data.requestId) && run.shots.some(s => !s.acceptedPhotoId && !input.data.ids.includes(s.photoId ?? '')) ? await accounts?.requireAccount(c) : undefined));
     })
     .post('/:id/photos/start', async (c) => {
       const input = PhotoStartSchema.safeParse(await c.req.json().catch(() => null));
@@ -76,7 +78,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
         const current = await characters.select(run.characterId);
         if (current.referenceId !== run.character?.referenceId) return c.json({ messageRu: 'Soul ID изменился. Выбери персонажа заново.' }, 409);
       }
-      return c.json(await runtime.photos.start(run.id, input.data));
+      return c.json(await runtime.photos.start(run.id, input.data, await accounts?.requireAccount(c)));
     })
     .post('/:id/photos/retry', async (c) => {
       const input = z.object({ jobId: z.string().min(1).max(100) }).strict().safeParse(await c.req.json().catch(() => null));
@@ -97,7 +99,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
     .post('/:id/actions', async (c) => {
       const action = ActionSchema.safeParse(await c.req.json().catch(() => null));
       if (!action.success) return c.json({ messageRu: 'Действие или версия серии некорректны.' }, 422);
-      return c.json(await runtime.act(c.req.param('id'), action.data));
+      return c.json(await runtime.act(c.req.param('id'), action.data, action.data.type === 'retryPreparation' ? await accounts?.requireAccount(c) : undefined));
     })
     .get('/:id/manifest', async (c) => {
       const run = await runtime.get(c.req.param('id'));

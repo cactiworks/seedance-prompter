@@ -52,6 +52,16 @@ afterEach(() => {
 });
 
 describe('Codex CLI request boundary', () => {
+  it('uses only the explicit account home and file store, without modifying the process environment', async () => {
+    const original = process.env.CODEX_HOME;
+    const promise = runCodex(request, { codexHome: '/private/accounts/example' });
+    const [, args, options] = mocked.spawn.mock.calls[0] as [string, string[], { env: Record<string, string> }];
+    expect(options.env.CODEX_HOME).toBe('/private/accounts/example');
+    expect(args).toContain('cli_auth_credentials_store="file"');
+    expect(args.at(-1)).toBe('-');
+    expect(process.env.CODEX_HOME).toBe(original);
+    child.succeed(); await promise;
+  });
   it('preserves saved auth location but strips API billing keys and inherited sessions', () => {
     const parent = { HOME: '/x', CODEX_HOME: '/auth', PATH: '/bin', OPENAI_API_KEY: 'never', CODEX_API_KEY: 'never', CODEX_THREAD_ID: 'never', ANTHROPIC_API_KEY: 'never', CLAUDECODE: 'never' };
     expect(buildChildEnv(parent)).toEqual({ HOME: '/x', CODEX_HOME: '/auth', PATH: '/bin', NO_COLOR: '1' });

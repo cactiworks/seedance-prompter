@@ -29,6 +29,7 @@ export const RetouchItemSchema = z.object({
 });
 export type RetouchItem = z.infer<typeof RetouchItemSchema>;
 export const RetouchStateSchema = z.object({
+  codexAccountId: z.uuid().optional(),
   status: z.enum(['running', 'stopped', 'complete']), requestId: z.uuid(), requests: z.array(z.uuid()),
   selected: z.array(z.string()).min(1), items: z.array(RetouchItemSchema),
   uploadIds: z.array(z.string()).max(2), appearanceRequestId: z.string().nullable(),

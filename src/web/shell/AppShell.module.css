@@ -267,6 +267,7 @@
 
 .help {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--lab-space-3);
   margin-left: auto;
@@ -330,7 +331,7 @@
   background: var(--lab-fill-4);
 }
 
-@media (width <= 68rem) {
+@media (width <= 80rem) {
   .shell:not(.collapsed) {
     grid-template-columns: 13rem minmax(0, 1fr);
   }
