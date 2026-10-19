@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
 import { modelsOf, paramsFor, type MediaKind } from '../../core/gen/models.ts';
 import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, inputsOf, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';

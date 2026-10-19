@@ -1,3 +1,4 @@
+import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
 import { retryable, STATUS_RU } from '../studio/JobTile.tsx';
@@ -52,7 +53,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
                 </Text>
                 {mediaId !== undefined && (
                   <Button variant="ghost" size="xs" onClick={() => void reveal(mediaId)}>
-                    В Finder
+                    {remoteStudio ? 'Скачать' : 'В Finder'}
                   </Button>
                 )}
               </figcaption>

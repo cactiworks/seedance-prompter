@@ -16,7 +16,7 @@ export interface HiggsfieldOptions {
 
 function errorFor(status: number, detail: string): GenError {
   const tail = detail !== '' ? ` (${detail})` : '';
-  if (status === 401) return new GenError('AUTH', `Higgsfield отклонил ключ${tail}. Проверь запись «${KEYCHAIN.higgsfield}» в Keychain (формат KEY_ID:KEY_SECRET).`);
+  if (status === 401) return new GenError('AUTH', `Higgsfield отклонил ключ${tail}. Проверь запись «${KEYCHAIN.higgsfield}» в хранилище ключей (формат KEY_ID:KEY_SECRET).`);
   if (status === 403) return new GenError('NO_CREDITS', `На балансе Higgsfield API не хватает денег${tail}.`);
   if (status === 404) return new GenError('NOT_FOUND', `Higgsfield не нашёл задачу${tail}.`);
   if (status === 422) return new GenError('INVALID', `Higgsfield отклонил параметры${tail}.`);

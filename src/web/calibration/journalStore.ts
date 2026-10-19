@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
 import type { CalibrationPack, Learning, Verdict, VerdictEntry } from '../../core/gen/calibration.ts';
 

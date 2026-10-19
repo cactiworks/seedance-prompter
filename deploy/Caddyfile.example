@@ -1,0 +1,18 @@
+# Replace the hostname and hash privately on the server; never commit credentials.
+studio.example.com {
+  basic_auth {
+    owner REPLACE_WITH_CADDY_PASSWORD_HASH
+  }
+  header {
+    defer
+    Cache-Control "private, no-store"
+    X-Content-Type-Options nosniff
+    Referrer-Policy same-origin
+    X-Robots-Tag "noindex, nofollow, noarchive"
+  }
+  reverse_proxy 127.0.0.1:4317 {
+    header_up Host 127.0.0.1:4317
+    header_up -Authorization
+  }
+}
+# Caddy versions before 2.8 use basicauth instead of basic_auth.

@@ -1,3 +1,4 @@
+import { remoteStudio } from '../download.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { estimate, findModel, formatCost, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
@@ -318,7 +319,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
                 {favorite ? 'В избранном' : 'В избранное'}
               </Button>
               <Button variant="ghost" size="s" icon={<Icon name="folder" size={1} />} onClick={() => void reveal(item.id)}>
-                В Finder
+                {remoteStudio ? 'Скачать' : 'В Finder'}
               </Button>
               {/* Подтверждение — на месте кнопки: диалог встал бы под просмотр (он выше по слоям). */}
               {confirmDelete ? (

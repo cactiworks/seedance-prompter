@@ -84,7 +84,7 @@
 
 ## Секреты и данные владельца
 
-- Ключи только в macOS Keychain: `figma-pat-lab-ui`, `kie-api-key`, `higgsfield-api-key`. В файлах и
+- На Mac ключи только в macOS Keychain: `figma-pat-lab-ui`, `kie-api-key`, `higgsfield-api-key`. В файлах и
   контексте — только имя записи. В `process.env` ключи не кладутся: дочерний `codex exec` получает только разрешённые переменные окружения.
 - На референсах бывает лицо владельца: в LLM они уходят только по кнопке vision с подтверждением,
   провайдеру — только с согласием (гейт — [generation.md](generation.md)). Где лежат загрузки и как
@@ -122,3 +122,8 @@ Production logic-v5: отсутствие wardrobeDetail, wardrobe/sceneLogic и
 новый ответ. Fail/uncertain части одежды понижает wardrobe и общий keep; sceneLogic не может
 быть variation/not_visible. Старые отчёты сохраняются, но отсутствие новых проверок не считается
 актуальной рекомендацией. Тесты labelled reports доказывают gate, не точность распознавания.
+
+Linux deployment: `readSecret` принимает только allowlisted имена и читает приватные файлы
+из `CREDENTIALS_DIRECTORY` (чтение только root/сервисной группой, запрет group-write/other permissions). Значения
+не являются env; Codex child env по-прежнему allowlisted. Auth браузера обеспечивает Caddy на всех
+путях, Node наружу не слушает. Netlify не получает data/credentials в deploy bundle.

@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useMemo, useState } from 'react';
 import { calibrationTag, expandSuite, parseCalibrationTag, repeatedSymptoms, suiteCost, VERDICT_RU, VERDICT_SYMPTOMS, VERDICTS, type CalibrationSuite, type Repeat } from '../../core/gen/calibration.ts';
 import { findModel, GEN_MODELS } from '../../core/gen/models.ts';

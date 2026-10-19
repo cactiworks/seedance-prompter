@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
-import { createServer as createViteServer } from 'vite';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { createApp, HOST, PORT } from './app.ts';
 import { createGenRuntime } from './gen/runtime.ts';
 import { createProductionRuntime } from './production/runtime.ts';
@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const URL_BASE = `http://${HOST}:${PORT}`;
 
 function openBrowser(url: string): void {
-  if (process.env.SP_NO_OPEN === '1') return;
+  if (process.env.SP_NO_OPEN === '1' || process.platform !== 'darwin') return;
   spawn('open', [url], { stdio: 'ignore', detached: true }).unref();
 }
 
@@ -45,27 +45,33 @@ async function main(): Promise<void> {
   const production = createProductionRuntime({ dataDir, gen });
   await production.start();
   const app = createApp({ rootDir: ROOT, dataDir, gen, production });
-  const apiListener = getRequestListener(app.fetch);
-
   const httpServer = createHttpServer();
-  const vite = await createViteServer({
+  const productionMode = process.env.SP_SERVE_STATIC === '1';
+  const vite = productionMode ? null : await (await import('vite')).createServer({
     configFile: path.join(ROOT, 'vite.config.ts'),
     server: { middlewareMode: true, hmr: { server: httpServer } },
     appType: 'spa',
   });
+  if (productionMode) {
+    // Never expose source files, data or credentials through the static handler.
+    app.get('/api/*', (c) => c.json({ error: 'NOT_FOUND' }, 404));
+    app.use('*', serveStatic({ root: path.join(ROOT, 'dist') }));
+    app.get('*', serveStatic({ path: path.join(ROOT, 'dist/index.html') }));
+  }
+  const apiListener = getRequestListener(app.fetch);
 
   httpServer.on('request', (req, res) => {
-    if (req.url !== undefined && req.url.startsWith('/api/')) {
+    if (productionMode || (req.url !== undefined && req.url.startsWith('/api/'))) {
       void apiListener(req, res);
       return;
     }
-    vite.middlewares(req, res);
+    vite?.middlewares(req, res);
   });
 
   const shutdown = (): void => {
     gen.stop();
     production.stop();
-    void vite.close().finally(() => {
+    void (vite?.close() ?? Promise.resolve()).finally(() => {
       httpServer.close(() => { void releaseDataLock().finally(() => process.exit(0)); });
       setTimeout(() => process.exit(0), 1500).unref();
     });

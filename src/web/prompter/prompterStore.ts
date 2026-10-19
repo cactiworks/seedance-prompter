@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
 import type { MediaKind } from '../../core/gen/models.ts';
 import { EMPTY_SHOT, PROMPTER_MAX_REFS, type PrompterRefRole, type PrompterRequest, type PrompterResult, type PrompterShot, type PrompterTemplate } from '../../core/llm/buildPrompter.ts';

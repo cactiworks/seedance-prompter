@@ -1,3 +1,4 @@
+import { remoteStudio } from '../download.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { sourceTitleRu } from '../../core/gen/models.ts';
 import { awaitingFiles } from '../../core/gen/jobStatus.ts';
@@ -181,7 +182,7 @@ export function Library() {
               {title}
             </Text>
             <Text variant="label" tone="secondary">
-              показано {shown.length} из {library.length} · файлы сохранены на этом компьютере
+              показано {shown.length} из {library.length} · {remoteStudio ? 'файлы сохранены на общем сервере' : 'файлы сохранены на этом компьютере'}
             </Text>
             {importError !== null && (
               <Text variant="caption" tone="accent">
@@ -277,10 +278,10 @@ export function Library() {
               variant="border"
               size="xs"
               icon={<Icon name="download" size={0.875} />}
-              title="Копии с понятными именами — в папку для монтажа, откроется в Finder"
+              title={remoteStudio ? "Скачать ZIP с понятными именами для монтажа" : "Копии с понятными именами — в папку для монтажа, откроется в Finder"}
               onClick={() =>
                 void exportMedia(selected)
-                  .then((r) => setImportError(`Выгружено файлов: ${r.files.length} → ${r.dir}`))
+                  .then((r) => setImportError(r.downloadUrl ? `Архив готов: ${r.files.length} файлов` : `Выгружено файлов: ${r.files.length} → ${r.dir}`))
                   .catch((e: unknown) => setImportError(e instanceof Error ? e.message : 'Не выгрузилось.'))
               }
             >
@@ -390,7 +391,7 @@ export function Library() {
                             })}
                             <button type="button" role="menuitem" onClick={() => (void reveal(item.id), setMenu(null))}>
                               <Icon name="folder" size={0.875} />
-                              Показать в Finder
+                              {remoteStudio ? 'Скачать файл' : 'Показать в Finder'}
                             </button>
                           </div>
                         )}

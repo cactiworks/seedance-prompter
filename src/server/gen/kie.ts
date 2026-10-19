@@ -26,7 +26,7 @@ function errorFor(code: number, msg: string | undefined): GenError {
   const detail = msg !== undefined && msg !== '' ? ` (${msg})` : '';
   switch (code) {
     case 401:
-      return new GenError('AUTH', `KIE отклонил ключ${detail}. Проверь запись «${KEYCHAIN.kie}» в Keychain.`);
+      return new GenError('AUTH', `KIE отклонил ключ${detail}. Проверь запись «${KEYCHAIN.kie}» в хранилище ключей.`);
     case 402:
       return new GenError('NO_CREDITS', `На балансе KIE не хватает кредитов${detail}.`);
     case 404:

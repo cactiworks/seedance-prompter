@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { fixParams } from '../../core/gen/fixes.ts';
 import { estimate, findModel, formatCost } from '../../core/gen/models.ts';

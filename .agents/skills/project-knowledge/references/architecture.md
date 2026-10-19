@@ -2,8 +2,8 @@
 
 ## Процесс и стек
 
-Один процесс Node 26, без сборки для запуска: `src/server/index.ts` поднимает http-сервер, где
-`/api/*` — Hono, остальное — Vite в middleware mode. Нет `dist` и расхождения dev/prod. Порт 4317
+Один процесс Node 26. В локальном режиме: `src/server/index.ts` поднимает http-сервер, где
+`/api/*` — Hono, остальное — Vite в middleware mode. В серверном режиме `SP_SERVE_STATIC=1` вместо Vite отдаёт собранный `dist`; Vite не запускается. Порт 4317
 (`SP_PORT`), только `127.0.0.1`. TypeScript исполняется нативно; правила синтаксиса — в
 [patterns.md](patterns.md).
 
@@ -33,7 +33,7 @@
 | файловые хранилища | `src/server/storage/` |
 | `codex exec` и задачи агентов | `src/server/llm/` |
 | провайдеры генерации, фоновый опрос, ffmpeg, замер картинок | `src/server/gen/` |
-| ключи из Keychain | `src/server/secrets.ts` |
+| ключи из Keychain / приватного credential directory | `src/server/secrets.ts` |
 | проверки LLM-моста | `src/server/doctor.ts` |
 | экраны | `src/web/{shell,features,studio,gen,prompter,canvas,library,calibration}`, галерея UI-kit — `/ui` |
 | клиентское состояние и вызовы агентов | `src/web/store.ts` (ролики, «Собрать промпт»: агент полей → писатель через `/api/llm/*`), `src/web/gen/genStore.ts`, `src/web/canvas/canvasStore.ts` |
@@ -339,3 +339,14 @@ visualInterest в logic-v5/logic-audit-v5 требует observation с выбр
 изображении; смена cinema на UGC — fail. Retouch получает сохранённый run.style явно; глобальная
 смена съёмки не является локальной правкой. Phone/cinema используют Soul 2 с теми же параметрами
 и без автоматического style_id; это текстовая режиссура и visual QC, не отдельная cinema-модель.
+
+
+## Общая студия (19.10.2026)
+
+Netlify HTTPS proxy → Caddy с Basic Auth на всех путях → loopback Node/systemd. Данные и медиа
+живут только на VPS. `SP_PUBLIC_ORIGINS` разрешает точные HTTPS origins, Host/CSRF gate сохранён.
+`asyncRequests.ts` отделяет выполнение JSON POST от HTTP ожидания: 202 + короткий polling, cancel
+передаёт AbortSignal; рестарт/истечение возвращает 410 без повтора POST. Durable состояния
+генерации/Production остаются в их хранилищах. Результаты транспорта удаляются после чтения
+клиентом или через 30 минут. `downloads.ts` даёт ZIP экспорт для браузера; data не раздаётся как
+static root. Серверный launcher и эксплуатация — `deploy/README.md`.

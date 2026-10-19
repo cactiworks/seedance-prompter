@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { applySeedanceInputs, inputsToUpload, nextRefSync, seedanceInputs, seedanceSummary, type JobLookup, type SeedanceInput } from '../../core/canvas/seedance.ts';
 import { seedanceSlug, type CanvasNode } from '../../core/model/canvas.ts';

@@ -1,3 +1,5 @@
+import { remoteStudio, downloadFile } from '../download.ts';
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
 import { estimate, findModel, modelsOf, paramsFor, validateGen, type GenParams, type MediaKind, type ParamValue, type ProviderId, type RefRole } from '../../core/gen/models.ts';
 import type { Folder, GenJob, MediaItem, RefSource, StudioSession } from '../../core/model/media.ts';
@@ -196,7 +198,7 @@ interface GenState {
   /** Убрать задачу из ленты вместе с её файлами (неудачную — просто убрать). */
   deleteJob: (jobId: string) => Promise<void>;
   /** Копии в data/exports/<дата> с понятными именами + Finder; возвращает папку. */
-  exportMedia: (mediaIds: string[]) => Promise<{ dir: string; files: string[] }>;
+  exportMedia: (mediaIds: string[]) => Promise<{ dir: string; files: string[]; downloadUrl?: string }>;
   retry: (jobId: string) => Promise<void>;
 
   setModel: (kind: MediaKind, modelId: string) => void;
@@ -375,6 +377,7 @@ export const useGen = create<GenState>((set, get) => {
       await post(`/api/library/${id}/favorite`, { on });
     },
     reveal: async (mediaId) => {
+      if (remoteStudio) { downloadFile(mediaUrl(mediaId)); return; }
       await post(`/api/library/${mediaId}/reveal`, {});
     },
     deleteMedia: async (mediaIds) => {
@@ -392,7 +395,11 @@ export const useGen = create<GenState>((set, get) => {
       forgetInOpenFlow(removed);
       await Promise.all([get().loadLibrary(), get().loadJobs()]);
     },
-    exportMedia: (mediaIds) => post<{ dir: string; files: string[] }>('/api/library/export', { mediaIds }),
+    exportMedia: async (mediaIds) => {
+      const result = await post<{ dir: string; files: string[]; downloadUrl?: string }>('/api/library/export', { mediaIds });
+      if (result.downloadUrl) downloadFile(result.downloadUrl);
+      return result;
+    },
     retry: async (jobId) => {
       await post(`/api/gen/jobs/${jobId}/retry`, {});
       await get().loadJobs();

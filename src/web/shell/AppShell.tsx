@@ -163,7 +163,7 @@ function ProviderCards() {
     <div className={styles.providers}>
       {PROVIDERS.map((p) => {
         const s = status[p.id];
-        const line = s === undefined ? 'проверяю…' : !s.hasKey ? (s.keyProblem ?? 'нет ключа в Keychain') : s.balance !== undefined ? `${s.balance.toLocaleString('ru-RU')} кр` : (s.balanceError ?? (p.balanceable ? 'баланс — по клику' : 'ключ есть'));
+        const line = s === undefined ? 'проверяю…' : !s.hasKey ? (s.keyProblem ?? 'нет ключа в хранилище') : s.balance !== undefined ? `${s.balance.toLocaleString('ru-RU')} кр` : (s.balanceError ?? (p.balanceable ? 'баланс — по клику' : 'ключ есть'));
         return (
           <button key={p.id} type="button" className={styles.provider} onClick={() => p.balanceable && void loadStatus(true)} title={p.balanceable ? 'Обновить баланс' : undefined}>
             <span className={`${styles.dot} ${s?.hasKey === true ? styles.dotOn : ''}`} />

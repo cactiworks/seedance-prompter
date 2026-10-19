@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { MediaItem } from '../../core/model/media.ts';
 import { mediaUrl, useGen } from '../gen/genStore.ts';

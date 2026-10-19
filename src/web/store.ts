@@ -1,3 +1,5 @@
+import { downloadFile } from './download.ts';
+import { studioFetch as fetch } from './remoteFetch.ts';
 import { create } from 'zustand';
 import { applyFields, applyWrite, staleFields, staleSegments, type FieldItem, type FieldsOutput } from '../core/compose.ts';
 import { storyboardFrames, type Attempt, type Critique, type Project, type Shot } from '../core/model/project.ts';
@@ -95,6 +97,7 @@ interface State {
 }
 
 export interface ExportResult {
+  downloadUrl?: string;
   dir: string;
   files: { n: number; key: string; file: string | null }[];
   errorRu?: string;
@@ -404,7 +407,9 @@ export const useStore = create<State>((set, get) => {
       set({ exporting: true });
       try {
         const res = await fetch(`/api/projects/${project.slug}/shots/${shotId}/export`, { method: 'POST', headers: HEADERS });
-        set({ exportResult: await json<ExportResult>(res) });
+        const result = await json<ExportResult>(res);
+        if (result.downloadUrl) downloadFile(result.downloadUrl);
+        set({ exportResult: result });
       } catch (error) {
         set({ exportResult: { dir: '', files: [], errorRu: error instanceof Error ? error.message : 'Не удалось выгрузить панель.' } });
       } finally {

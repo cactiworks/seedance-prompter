@@ -8,6 +8,16 @@ const url = `http://127.0.0.1:${process.env.SP_PORT ?? '4317'}`;
 const localOnly = process.env.SP_SKIP_UPDATE === '1';
 
 async function main(): Promise<void> {
+  const remoteFile = path.join(ROOT, '.seedance-remote.json');
+  if (!localOnly && process.env.SP_PORT === undefined && process.env.SP_DATA_DIR === undefined && existsSync(remoteFile)) {
+    const remote = JSON.parse(readFileSync(remoteFile, 'utf8')) as { url?: string };
+    const destination = new URL(remote.url ?? '');
+    if (destination.protocol !== 'https:' || destination.username || destination.password) throw new Error('Нужен HTTPS-адрес общей студии без пароля в URL.');
+    console.log(`Общая студия: ${destination.origin}`);
+    if (process.platform === 'darwin' && process.env.SP_NO_OPEN !== '1') spawn('open', [destination.href], { stdio: 'ignore', detached: true }).unref();
+    return;
+  }
+
   let running = false;
   try {
     const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) });

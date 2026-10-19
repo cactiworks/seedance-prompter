@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState } from 'react';
 import { choiceParams, fillFix, fixParams, type FixPack, type FixRecipe } from '../../core/gen/fixes.ts';
 import { estimate, findModel, formatCost, modelsOf, paramsFor, type GenModel } from '../../core/gen/models.ts';

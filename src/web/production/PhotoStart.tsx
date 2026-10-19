@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useState } from 'react';
 import type { ProductionRun } from '../../core/production/model.ts';
 import { photoOutput } from '../../core/production/output.ts';

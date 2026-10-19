@@ -1,3 +1,4 @@
+import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { estimate, findModel, formatCost, paramsFor, UNIT } from '../../core/gen/models.ts';
 import type { GenJob } from '../../core/model/media.ts';
@@ -96,7 +97,7 @@ export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string
             <button type="button" title={favorites.includes(mediaId) ? 'Убрать из избранного' : 'В избранное'} onClick={() => void toggleFavorite(mediaId)}>
               <Icon name="star" size={1} />
             </button>
-            <button type="button" title="Показать файл в Finder" onClick={() => void reveal(mediaId)}>
+            <button type="button" title={remoteStudio ? "Скачать файл" : "Показать файл в Finder"} onClick={() => void reveal(mediaId)}>
               <Icon name="folder" size={1} />
             </button>
           </div>

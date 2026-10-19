@@ -1,3 +1,4 @@
+import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useId, useRef, useState } from 'react';
 import { CHARACTER_STATUS, characterPending, characterReady, type Character } from '../../core/production/character.ts';
 import { Button, Dialog, Icon, Tag, Text, TextField } from '../ui/components/index.ts';

@@ -1,3 +1,4 @@
+import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { activeCritiqueFindings } from '../../core/review.ts';
 import { estimate, findModel, formatCost, paramsFor, validateGen } from '../../core/gen/models.ts';
@@ -219,9 +220,9 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
           </div>
           <div className={styles.row}>
             <Button variant="secondary" size="s" icon={<Icon name="folder" />} loading={store.exporting} disabled={shot.panel.length === 0} onClick={() => void store.exportPanel()}>
-              Сложить в папку по номерам и открыть в Finder
+              {remoteStudio ? 'Скачать файлы по номерам в ZIP' : 'Сложить в папку по номерам и открыть в Finder'}
             </Button>
-            <Text variant="caption" tone="tertiary">Файлы получат имена 01-…, 02-… — в Finder они лежат в порядке панели, перетаскивай по одному сверху вниз.</Text>
+            <Text variant="caption" tone="tertiary">Файлы получат имена 01-…, 02-… в порядке панели, перетаскивай по одному сверху вниз.</Text>
           </div>
           {exported !== null && (
             <div className={`${styles.note} ${exported.errorRu !== undefined ? styles.noteBad : ''}`}>
@@ -229,7 +230,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
                 <Text variant="label">{exported.errorRu}</Text>
               ) : (
                 <>
-                  <Text variant="label" medium>Папка открыта: {exported.dir}</Text>
+                  <Text variant="label" medium>{exported.downloadUrl ? 'Архив подготовлен к скачиванию' : `Папка открыта: ${exported.dir}`}</Text>
                   <Text variant="caption" tone="secondary" mono>{exported.files.map((f) => f.file ?? `${String(f.n).padStart(2, '0')} — нет файла (${f.key})`).join(' · ')}</Text>
                 </>
               )}

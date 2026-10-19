@@ -4,6 +4,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono } from 'hono';
+import { asyncRequests } from './asyncRequests.ts';
+import { archiveDirectory, downloadRoutes } from './downloads.ts';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
 import { isActive, needsAttention } from '../core/gen/jobStatus.ts';
 import { staleFields, type FieldsOutput } from '../core/compose.ts';
@@ -67,6 +69,8 @@ export interface AppOptions {
   rootDir: string;
   /** Каталог пользовательских данных (в .gitignore). */
   dataDir: string;
+  /** Exact public HTTPS origins behind an authenticated reverse proxy. Host stays loopback. */
+  publicOrigins?: string[];
   /** Подменяется в тестах: живой вызов тратит квоту подписки. */
   runLlm?: Runner;
   writerModel?: string;
@@ -123,6 +127,11 @@ export function createApp(options: AppOptions) {
   const moodboards = createMoodboards(options.dataDir);
   const journal = createJournal(options.dataDir);
   const app = new Hono();
+  const allowedOrigins = new Set([...ALLOWED_ORIGINS, ...(options.publicOrigins ?? (process.env.SP_PUBLIC_ORIGINS ?? '').split(',').filter(Boolean))]);
+  for (const origin of allowedOrigins) {
+    const url = new URL(origin);
+    if (url.origin !== origin || (url.protocol !== 'https:' && !ALLOWED_ORIGINS.has(origin))) throw new Error('SP_PUBLIC_ORIGINS requires exact HTTPS origins');
+  }
 
   // Сервер локальный, но любая веб-страница в браузере владельца может стучаться в localhost.
   // Без этих проверок она смогла бы тратить квоту LLM и читать референсы.
@@ -131,14 +140,18 @@ export function createApp(options: AppOptions) {
     if (!ALLOWED_HOSTS.has(host)) return c.json({ error: 'FORBIDDEN_HOST' }, 403);
 
     const origin = c.req.header('origin');
-    if (origin !== undefined && !ALLOWED_ORIGINS.has(origin)) {
+    if (origin !== undefined && !allowedOrigins.has(origin)) {
       return c.json({ error: 'FORBIDDEN_ORIGIN' }, 403);
     }
     if (!SAFE_METHODS.has(c.req.method) && c.req.header(CLIENT_HEADER) === undefined) {
       return c.json({ error: 'MISSING_CLIENT_HEADER' }, 403);
     }
+    c.header('Cache-Control', 'private, no-store');
     await next();
   });
+  // Registered after Host/Origin/CSRF validation; detached requests pass those checks again.
+  asyncRequests(app);
+  downloadRoutes(app, options.dataDir);
 
   app.onError((error, c) => {
     if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
@@ -154,7 +167,7 @@ export function createApp(options: AppOptions) {
   app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, gen }), characters));
 
   const routes = app
-    .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION }))
+    .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION, revision: process.env.SP_RELEASE ?? null }))
     .get('/api/packs/:id', (c) => c.json(loadPack(options.rootDir, c.req.param('id'))))
     .get('/api/projects', async (c) => c.json(await store.list()))
     .post('/api/projects', async (c) => {
@@ -270,7 +283,8 @@ export function createApp(options: AppOptions) {
       });
       const result = await store.exportPanel(project.slug, shot.id, items);
       if (options.reveal !== false) (options.reveal ?? revealInFinder)(result.dir);
-      return c.json(result);
+      const downloadUrl = process.env.SP_SERVE_STATIC === '1' ? await archiveDirectory(options.dataDir, result.dir) : undefined;
+      return c.json({ ...result, downloadUrl });
     })
     // Починка после неудачной генерации: симптомы попытки → минимальные правки абзацев (как предложение).
     .post('/api/llm/fix', async (c) => {
@@ -834,7 +848,7 @@ export function createApp(options: AppOptions) {
       const items = (await Promise.all(ids.map((id) => gen.library.get(id)))).filter((m): m is NonNullable<typeof m> => m !== undefined);
       if (items.length === 0) return c.json({ error: 'EMPTY', messageRu: 'Выбери файлы для выгрузки.' }, 422);
       const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
-      const dir = path.join(options.dataDir, 'exports', stamp);
+      const dir = path.join(options.dataDir, 'exports', `${stamp}-${randomBytes(4).toString('hex')}`);
       await mkdir(dir, { recursive: true });
       const slug = (text: string): string =>
         text
@@ -852,7 +866,8 @@ export function createApp(options: AppOptions) {
         files.push(`${name}.${ext}`);
       }
       if (options.reveal !== false) (options.reveal ?? revealInFinder)(dir);
-      return c.json({ dir, files });
+      const downloadUrl = process.env.SP_SERVE_STATIC === '1' ? await archiveDirectory(options.dataDir, dir) : undefined;
+      return c.json({ dir, files, downloadUrl });
     })
     .post('/api/library/:id/reveal', async (c) => {
       const item = await gen.library.get(c.req.param('id'));

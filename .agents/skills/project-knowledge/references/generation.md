@@ -17,7 +17,7 @@ KIE и Higgsfield используются только для медиа. Те�
 Seedream и upscale. Расширение каталога и эти новые маршруты ещё не реализованы.
 
 
-Набор моделей задал владелец (решение 24); ключи — в Keychain, имена записей — [patterns.md](patterns.md).
+Набор моделей задал владелец (решение 24); ключи — в Keychain на Mac или приватных credential files на Linux, имена записей — [patterns.md](patterns.md).
 
 | провайдер | что |
 |---|---|
@@ -104,7 +104,7 @@ Canvas хранит выбор независимо в каждой ноде; St
 `model_version: v2`. Принимаются 1–100 локальных JPG/PNG/WebP, до 30 МБ (локальный лимит).
 Перед внешней отправкой backend проверяет все файлы. Загрузка: `/files/generate-upload-url` →
 PUT с выданными upload_headers без API-ключа → public_url для custom reference.
-Авторизация API — Key из Keychain; credentials не передаются storage/CDN и не кладутся в env.
+Авторизация API — Key из хранилища credentials; credentials не передаются storage/CDN и не кладутся в env.
 
 Цена создания Soul ID не опубликована: UI не обещает нулевую стоимость, сервер требует
 `consent: true` и `costConfirmed: unknown`. Это отдельное подтверждение неизвестной цены обучения;

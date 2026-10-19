@@ -1,0 +1,8 @@
+# The publish directory is empty: private data never goes into a Netlify deploy.
+[build]
+  publish = "gateway"
+[[redirects]]
+  from = "/*"
+  to = "https://studio.example.com/:splat"
+  status = 200
+  force = true

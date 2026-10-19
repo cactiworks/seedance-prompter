@@ -1,0 +1,33 @@
+[Unit]
+Description=Seedance creator studio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=seedance
+Group=seedance
+WorkingDirectory=/opt/seedance/current
+ExecStart=/usr/local/bin/node src/server/index.ts
+Environment=NODE_ENV=production
+Environment=SP_SERVE_STATIC=1
+Environment=SP_NO_OPEN=1
+Environment=SP_DATA_DIR=/var/lib/seedance/data
+Environment=CODEX_HOME=/var/lib/seedance/.codex
+Environment=HOME=/var/lib/seedance
+Environment=CREDENTIALS_DIRECTORY=/etc/seedance/credentials
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/seedance/studio.env
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/seedance
+
+[Install]
+WantedBy=multi-user.target

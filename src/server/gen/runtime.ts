@@ -191,7 +191,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const model = findModel(request.modelId);
     if (model === undefined) throw new SubmitError('UNKNOWN_MODEL', 422, `Модели «${request.modelId}» нет в каталоге.`);
     const provider = providerOf(model.provider);
-    if (!provider.hasKey()) throw new SubmitError('NO_KEY', 412, `Нет ключа ${model.provider === 'kie' ? 'KIE (Keychain «kie-api-key»)' : 'Higgsfield API (Keychain «higgsfield-api-key»)'} — см. docs/DECISIONS.md, решение 21.`);
+    if (!provider.hasKey()) throw new SubmitError('NO_KEY', 412, `Нет ключа ${model.provider === 'kie' ? 'KIE («kie-api-key»)' : 'Higgsfield API («higgsfield-api-key»)'} — см. docs/DECISIONS.md, решение 21.`);
 
     const count = request.count ?? 1;
     if (!Number.isInteger(count) || count < 1 || count > MAX_JOBS_PER_REQUEST) throw new SubmitError('BAD_COUNT', 422, `За один запуск — от 1 до ${MAX_JOBS_PER_REQUEST} генераций.`);
