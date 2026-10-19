@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newRun } from '../../src/core/production/engine.ts';
 import { DEMO_INPUT } from '../../src/core/production/model.ts';
-import { GeneratedSceneDraftSchema, validatePrompts, validateScene, withShotIds, sceneForShot } from '../../src/core/production/plan.ts';
+import { GeneratedSceneDraftSchema, GeneratedPromptPlanSchema, validatePrompts, validateScene, withShotIds, sceneForShot } from '../../src/core/production/plan.ts';
 import { validateAppearance, boundPrompts } from '../../src/core/production/appearance.ts';
 import { StoredRunSchema } from '../../src/core/production/persistence.ts';
 import { appearanceOutput, promptPlan, sceneDraft, SCRIPT } from './fixtures.ts';
@@ -29,6 +29,33 @@ function example() {
 }
 
 describe('event storyboard and identity composition boundary', () => {
+  it('keeps twelve explicitly requested scenes, quotes and prompt positions through persistence', () => {
+    const draft = sceneDraft(12);
+    const instructions = Array.from({ length: 12 }, (_, i) => `Сцена ${i + 1}: показать действие ${i + 1} с нужным предметом.`);
+    const script = instructions.join('\n');
+    draft.scenes = instructions.map((_, i) => ({ ...draft.scenes[0]!, id: `scene-${i + 1}` }));
+    draft.shots.forEach((shot, i) => Object.assign(shot, { scriptExcerpt: instructions[i], scriptInstruction: instructions[i], sceneId: `scene-${i + 1}` }));
+    const plan = withShotIds(GeneratedSceneDraftSchema.parse(draft));
+    const prompts = GeneratedPromptPlanSchema.parse(promptPlan(12));
+    expect(validateScene(draft, script)).toEqual([]);
+    expect(validatePrompts(prompts, plan)).toEqual([]);
+    const run = newRun('pr-twelve', { ...DEMO_INPUT, script }, 0, 1);
+    run.scenePlan = plan; run.promptPlan = prompts;
+    expect(StoredRunSchema.parse(run).scenePlan!.shots.map(s => s.scriptInstruction)).toEqual(instructions);
+    expect(StoredRunSchema.parse(run).promptPlan!.shots).toHaveLength(12);
+    draft.shots[0]!.scriptInstruction = 'Выдуманное указание';
+    expect(validateScene(draft, script).join(' ')).toContain('дословно');
+    prompts.shots.pop();
+    expect(validatePrompts(prompts, plan).join(' ')).toContain('каждого ID');
+  });
+  it('preserves two explicitly requested framings of one event in a shared script phrase', () => {
+    const script = 'Два кадра: говорю в микрофон — общий план, затем крупный план лица.';
+    const draft = sceneDraft(2);
+    draft.shots.forEach(shot => Object.assign(shot, { scriptExcerpt: script, scriptInstruction: script, action: 'Говорю в микрофон' }));
+    expect(validateScene(draft, script)).toEqual([]);
+    draft.shots.forEach(shot => { shot.scriptInstruction = ''; });
+    expect(validateScene(draft, script).join(' ')).toContain('повтор события');
+  });
   it('persists scene-scoped events and keeps a compatible first-scene alias', () => {
     const { draft, plan, prompts, run } = example();
     expect(validateScene(draft, SCRIPT)).toEqual([]);
@@ -40,6 +67,7 @@ describe('event storyboard and identity composition boundary', () => {
   it('rejects repeated events despite different shot sizes, missing scenes and reversed script order', () => {
     const { draft } = example();
     draft.shots[1]!.action = draft.shots[0]!.action;
+    draft.shots[1]!.scriptExcerpt = draft.shots[0]!.scriptExcerpt;
     expect(validateScene(draft, SCRIPT).join(' ')).toContain('повтор события');
     draft.shots[2]!.sceneId = 'invented';
     expect(validateScene(draft, SCRIPT).join(' ')).toContain('не связан');

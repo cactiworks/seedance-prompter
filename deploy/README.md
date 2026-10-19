@@ -1,7 +1,7 @@
 # Общая студия на Linux
 
-Netlify проксирует HTTPS к Caddy. Caddy проверяет пароль на **всех** путях, включая assets,
-API и медиа, и передаёт Host `127.0.0.1:4317`. Node слушает только loopback. В Netlify
+Netlify проксирует HTTPS к Caddy. Caddy передаёт Host `127.0.0.1:4317`; browser auth
+настраивается отдельно по решению владельца (19.10.2026 вход открыт без логина). Node слушает только loopback. В Netlify
 попадает пустой gateway с redirect rule; код, данные и ключи живут на сервере.
 Локальный режим Mac остаётся для разработки и отката.
 
@@ -21,16 +21,16 @@ API и медиа, и передаёт Host `127.0.0.1:4317`. Node слушае�
    и не передаются Codex. На Mac прежний Keychain остаётся источником.
 5. `/etc/seedance/studio.env`: `SP_PUBLIC_ORIGINS=https://studio.example.com,https://project.netlify.app`.
    Только точные HTTPS origins, без wildcard. Установить `seedance.service`, включить systemd.
-6. Настроить Caddy по примеру: публичное DNS-имя, HTTPS, пароль в виде hash. Netlify production
-   сделать доступным без Netlify SSO **только после проверки 401 на origin**. Студию всё равно
-   защищает Caddy. SSH по ключу, наружу только 22/80/443. Не включать access logs с Authorization.
+6. Настроить Caddy по примеру: публичное DNS-имя и HTTPS. Шаблон содержит optional password hash;
+   при открытом входе убрать весь `basic_auth`, при защищённом проверить 401 на всех путях origin.
+   Netlify production доступен без Netlify SSO. SSH по ключу, наружу только 22/80/443. Не включать access logs с Authorization.
 
 ## Перенос и проверка
 
 - Перед cutover проверить отсутствие активных jobs/Production. Остановить исходный процесс,
   сделать локальный архив, затем rsync всей data без `.server.lock`. Проверить SHA-256 каждого
   файла **до первого запуска** на сервере. Два scheduler с одной копией задач не запускать.
-- Проверить anonymous 401 и authenticated 200 на обоих адресах; CSP/Origin и mutation header;
+- Проверить anonymous 200 при открытом входе либо anonymous 401 / authenticated 200 при защищённом на обоих адресах; CSP/Origin и mutation header;
   список/файлы библиотеки, Canvas, проекты, Production, ZIP; restart сохраняет данные.
 - Длинные JSON POST используют `Prefer: respond-async`: запрос выполняется один раз, клиент
   опрашивает `/api/requests/:id`, отмена передаётся исходному signal. После рестарта polling
@@ -39,7 +39,7 @@ API и медиа, и передаёт Host `127.0.0.1:4317`. Node слушае�
 - Бесплатный `npm run doctor`/прямой `node src/server/doctor.ts` проверяет CLI и login, но не inference.
   Платные проверки выполняет владелец. Сам факт переноса не доказывает качество генераций.
 - Большие binary uploads и downloads проходят обычным HTTP; лимит времени proxy Netlify 26 секунд
-  остаётся для них. Для медленного/крупного переноса использовать защищённый прямой адрес origin.
+  остаётся для них. Для медленного/крупного переноса использовать прямой HTTPS-адрес origin.
 - История Prompter и незавершённые формы в localStorage — браузерные черновики, они не являются
   общим хранилищем. Перед cutover сохранить их отдельно; consent между origins не копировать.
 
@@ -49,7 +49,7 @@ API и медиа, и передаёт Host `127.0.0.1:4317`. Node слушае�
 `journalctl -u caddy --since '1 hour ago'`, `df -h`, `du -sh /var/lib/seedance/data`.
 Журнал содержит request ID/path/status, не body. Логи systemd ограничить по размеру.
 Перед обновлением: check → остановка после завершения задач → backup → новый release →
-symlink → restart → authenticated smoke. Откат: старый symlink и при необходимости согласованная
+symlink → restart → smoke с действующим режимом входа. Откат: старый symlink и при необходимости согласованная
 копия data. Не перезаписывать актуальные данные сервера старой локальной копией.
 Снимок на том же диске не защищает от потери VPS; нужен отдельный скачанный архив.
 

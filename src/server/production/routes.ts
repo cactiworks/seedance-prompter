@@ -7,6 +7,7 @@ import type { Characters } from './characters.ts';
 import { SoulIdError } from './soulId.ts';
 import { ProductionError } from '../../core/production/engine.ts';
 import { PhotoStartSchema } from '../../core/production/photos.ts';
+import { ContinuePhotosSchema, PhotoSelectionSchema } from '../../core/production/selection.ts';
 import { ReviewStartSchema } from '../../core/production/review.ts';
 import { SubmitError } from '../gen/runtime.ts';
 import { ActionSchema, CreateRunSchema } from '../../core/production/model.ts';
@@ -36,7 +37,7 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       return c.json(await runtime.review.start(c.req.param('id'), input.data));
     })
     .post('/:id/retouch/quote', async (c) => {
-      const input = z.object({ ids: z.array(z.string()).min(1).max(8) }).strict().safeParse(await c.req.json().catch(() => null));
+      const input = z.object({ ids: z.array(z.string()).min(1) }).strict().safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Выбери фотографии для проверки деталей.' }, 422);
       return c.json(await runtime.retouch.quote(c.req.param('id'), input.data.ids));
     })
@@ -51,6 +52,22 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       return c.json(await runtime.retouch.retry(c.req.param('id'), input.data.jobId));
     })
     .get('/:id/photos/quote', async (c) => c.json(await runtime.photos.quote(c.req.param('id'), c.req.query('retryMaster') === 'true')))
+    .post('/:id/photos/selection/quote', async c => {
+      const input = PhotoSelectionSchema.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Нужен список выбранных фотографий.' }, 422);
+      return c.json(await runtime.photos.selectionQuote(c.req.param('id'), input.data.ids));
+    })
+    .post('/:id/photos/continue', async c => {
+      const input = ContinuePhotosSchema.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Подтверди выбор и стоимость оставшихся фотографий.' }, 422);
+      const run = await runtime.get(c.req.param('id'));
+      if (!run.photos?.requests.some(r => r.id === input.data.requestId) && run.characterId
+        && run.shots.some(s => !s.acceptedPhotoId && !input.data.ids.includes(s.photoId ?? ''))) {
+        const current = await characters.select(run.characterId);
+        if (current.referenceId !== run.character?.referenceId) return c.json({ messageRu: 'Soul ID изменился. Выбери персонажа заново.' }, 409);
+      }
+      return c.json(await runtime.photos.continueSelection(run.id, input.data));
+    })
     .post('/:id/photos/start', async (c) => {
       const input = PhotoStartSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Подтверди стоимость и передачу references.' }, 422);

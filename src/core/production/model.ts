@@ -33,8 +33,8 @@ export const ActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('pause'), rev: z.number().int().nonnegative() }),
   z.object({ type: z.literal('resume'), rev: z.number().int().nonnegative() }),
   z.object({ type: z.literal('retryPreparation'), rev: z.number().int().nonnegative() }),
-  z.object({ type: z.literal('approvePhotos'), rev: z.number().int().nonnegative(), ids: z.array(z.string()).min(1).max(8) }),
-  z.object({ type: z.literal('approveVideos'), rev: z.number().int().nonnegative(), ids: z.array(z.string()).min(1).max(8) }),
+  z.object({ type: z.literal('approvePhotos'), rev: z.number().int().nonnegative(), ids: z.array(z.string()).min(1) }),
+  z.object({ type: z.literal('approveVideos'), rev: z.number().int().nonnegative(), ids: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('edit'), rev: z.number().int().nonnegative(), shotId: z.string(), sourceId: z.string(), note: z.string().trim().min(1).max(1500) }),
   z.object({ type: z.literal('retry'), rev: z.number().int().nonnegative(), shotId: z.string() }),
   z.object({ type: z.literal('simulateFailure'), rev: z.number().int().nonnegative(), shotId: z.string() }),
@@ -96,7 +96,7 @@ export function runLabel(run: ProductionRun): string {
   if (run.preparation?.status === 'failed' || run.preparation?.status === 'interrupted') return 'Подготовка остановлена';
   if (run.mode === 'photos' && run.planned) {
     if (run.retouch?.status === 'running') return 'Исправляем детали';
-    if (run.retouch?.status === 'stopped') return 'Правки требуют внимания';
+    if (run.photos?.status === 'complete') return 'Готово';
     if (run.appearance?.status === 'running') return 'Фиксируется внешность';
     if (run.appearance?.status === 'failed' || run.appearance?.status === 'interrupted') return 'Внешность не закреплена';
     if (run.masterReview?.status === 'complete' && !masterApproved(run)) return 'Master не принят';

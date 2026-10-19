@@ -6,7 +6,7 @@ export function sceneDraft(count = 3): GeneratedSceneDraft {
     artDirection: { concept: 'Момент выбора перед записью', visualHook: 'Тень оконной рамы делит открытую страницу', captureTexture: 'Телефонный кадр с сохранённой фактурой бумаги' },
     storyboardVersion: 'events-v1',
     scenes: [{ id: 'room', title: 'Утро у окна', location: 'Комната с деревянным столом у северного окна', subject: 'Владелец; внешность задаётся будущим identity reference', wardrobe: 'Однотонная белая футболка', timeOfDay: 'Утро', weather: 'Пасмурно', lighting: 'Мягкий боковой свет из окна', palette: 'Тёплое дерево, белый и серый', continuity: ['Тот же стол и блокнот', 'Окно слева от персонажа'] }],
-    shots: Array.from({ length: count }, (_, i) => ({ title: `Кадр ${i + 1}`, scriptExcerpt: SCRIPT.split('. ')[Math.min(2, Math.floor(i * 3 / count))]!, purpose: 'Показать действие для монтажа', framing: i % 2 ? 'Крупный план' : 'Средний план', action: `Владелец выполняет событие ${i + 1} с блокнотом`, sceneId: 'room', beat: `Смысловой момент ${i + 1}`, startFrame: `Видимое состояние ${i + 1} блокнота и рук`, subjectVisibility: 'person', camera: 'Телефон на уровне стола, небольшое естественное движение', visualAnchor: 'Рука пересекает полосу оконной тени на странице', durationSec: 6 })),
+    shots: Array.from({ length: count }, (_, i) => ({ title: `Кадр ${i + 1}`, scriptExcerpt: SCRIPT.split('. ')[Math.min(2, Math.floor(i * 3 / count))]!, scriptInstruction: '', purpose: 'Показать действие для монтажа', framing: i % 2 ? 'Крупный план' : 'Средний план', action: `Владелец выполняет событие ${i + 1} с блокнотом`, sceneId: 'room', beat: `Смысловой момент ${i + 1}`, startFrame: `Видимое состояние ${i + 1} блокнота и рук`, subjectVisibility: 'person', camera: 'Телефон на уровне стола, небольшое естественное движение', visualAnchor: 'Рука пересекает полосу оконной тени на странице', durationSec: 6 })),
     assumptions: ['Одежда и комната выбраны режиссёром'], warnings: ['Для узнаваемости нужен identity reference'],
   };
 }
@@ -19,7 +19,7 @@ export function brollDraft(count = 4): GeneratedBrollDraft {
   const base = sceneDraft(count);
   return { ...base, contentMode: 'broll',
     scenes: base.shots.map((_, i) => ({ ...base.scenes[0]!, id: `location-${i + 1}`, title: `Локация ${i + 1}`, wardrobe: `Авторский силуэт ${i + 1}` })),
-    shots: base.shots.map(({ scriptExcerpt: _quote, beat: _beat, ...shot }, i) => ({ ...shot,
+    shots: base.shots.map(({ scriptExcerpt: _quote, scriptInstruction: _instruction, beat: _beat, ...shot }, i) => ({ ...shot,
       sceneId: `location-${i + 1}`, concept: `Самостоятельная визуальная идея ${i + 1}`,
       intentionalEffect: i === 0 ? 'Ткань образует вихрь вокруг неподвижного человека; его анатомия естественна' : 'Естественная физика, эффект создаётся постановкой',
       visualAnchor: `Визуальный приём ${i + 1}`, purpose: 'Вставка для разговорного ролика без связи с репликой',

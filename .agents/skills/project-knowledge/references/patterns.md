@@ -125,5 +125,4 @@ Production logic-v5: отсутствие wardrobeDetail, wardrobe/sceneLogic и
 
 Linux deployment: `readSecret` принимает только allowlisted имена и читает приватные файлы
 из `CREDENTIALS_DIRECTORY` (чтение только root/сервисной группой, запрет group-write/other permissions). Значения
-не являются env; Codex child env по-прежнему allowlisted. Auth браузера обеспечивает Caddy на всех
-путях, Node наружу не слушает. Netlify не получает data/credentials в deploy bundle.
+не являются env; Codex child env по-прежнему allowlisted. Режим browser auth задаёт приватная конфигурация Caddy; по решению владельца 19.10.2026 вход без пароля. Node наружу не слушает. Netlify не получает data/credentials в deploy bundle.

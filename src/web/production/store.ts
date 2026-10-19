@@ -37,7 +37,7 @@ interface State {
   runs: ProductionRun[]; run: ProductionRun | null; activeId: string | null; initialized: boolean; busy: boolean; error: string | null;
   load: () => Promise<void>; refresh: () => Promise<void>; select: (id: string) => void; newForm: () => void;
   create: (input: RunInput) => Promise<void>; act: (action: Command) => Promise<boolean>;
-  photoCommand: (endpoint: 'retouch/start' | 'retouch/retry' | 'photos/start' | 'photos/retry' | 'fork-photos' | 'review', body: object) => Promise<boolean>;
+  photoCommand: (endpoint: 'retouch/start' | 'retouch/retry' | 'photos/start' | 'photos/continue' | 'photos/retry' | 'fork-photos' | 'review', body: object) => Promise<boolean>;
   setCharacter: (characterId: string | null) => Promise<boolean>;
 }
 export const useProduction = create<State>((set, get) => ({

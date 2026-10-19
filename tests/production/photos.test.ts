@@ -67,6 +67,121 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it('closes twelve planned positions directly after creator selection, without mandatory retouch', async () => {
+    const s = await setup(12, {}, null);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 32; i++) await s.cycle();
+    const run = await s.get();
+    expect(run.shots).toHaveLength(12);
+    expect(run.review?.status).toBe('complete');
+    const ids = run.shots.map(shot => shot.photoId!);
+    const app = productionRoutes(s.rt, createCharacters({ dataDir: s.dir }));
+    const quote = await (await app.request(`/${s.id}/photos/selection/quote`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }) })).json();
+    expect(quote).toMatchObject({ count: 0, usd: 0, total: 12 });
+    const calls = s.calls.length;
+    const response = await app.request(`/${s.id}/photos/continue`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rev: quote.rev, requestId: crypto.randomUUID(), ids, confirmUsd: 0, consent: true }) });
+    expect(response.status).toBe(200);
+    const result = await s.get();
+    for (let i = 0; i < 3; i++) await s.cycle();
+    expect(result.photos!.status).toBe('complete');
+    expect(result.shots.every(shot => shot.step === 'ready' && shot.acceptedPhotoId === shot.photoId)).toBe(true);
+    expect(result.retouch).toBeUndefined();
+    expect(s.calls).toHaveLength(calls);
+    expect(s.submit).toHaveBeenCalledTimes(13);
+    const manifest = await (await app.request(`/${s.id}/manifest`)).json();
+    expect(manifest.artifacts).toHaveLength(12);
+  }, 30_000);
+
+  it('preserves checked photos through multiple rounds and regenerates only unchecked positions', async () => {
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = ReviewReportSchema.parse(reviewReport(JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)));
+      report.results[1]!.checks.face = 'fail';
+      return { data: report as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 1, outputTokens: 1, turns: 1 } };
+    };
+    const s = await setup(3, {}, null, critic);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 14; i++) await s.cycle();
+    const original = await s.get();
+    const first = original.shots[0]!.photoId!;
+    expect(original.review!.report!.results.find(r => r.artifactId === first)!.verdict).toBe('reject');
+    const quote = await s.rt.photos.selectionQuote(s.id, [first]);
+    expect(quote).toMatchObject({ count: 2, usd: 0.012, regenerate: ['shot-2', 'shot-3'] });
+    const input = { rev: quote.rev, requestId: crypto.randomUUID(), ids: [first], confirmUsd: quote.usd, consent: true as const };
+    await expect(s.rt.photos.continueSelection(s.id, { ...input, confirmUsd: 0 })).rejects.toThrow('стоимость');
+    await Promise.all([s.rt.photos.continueSelection(s.id, input), s.rt.photos.continueSelection(s.id, input)]);
+    expect(s.submit).toHaveBeenCalledTimes(4);
+    for (let i = 0; i < 10; i++) await s.cycle();
+    let run = await s.get();
+    expect(s.submit).toHaveBeenCalledTimes(6);
+    expect(run.shots[0]).toMatchObject({ photoId: first, acceptedPhotoId: first, step: 'ready' });
+    expect(run.shots[1]!.photoId).not.toBe(original.shots[1]!.photoId);
+    expect(run.photos!.status).toBe('review');
+    expect(run.artifacts).toHaveLength(6);
+    expect(run.retouch).toBeUndefined();
+    expect(s.calls.filter(c => c.taskRu === 'Режиссёр Production')).toHaveLength(1);
+    await expect(s.rt.photos.selectionQuote(s.id, [original.shots[1]!.photoId!])).rejects.toThrow('изменились');
+    await expect(s.rt.photos.selectionQuote(s.id, [first])).rejects.toThrow('изменились');
+    const second = run.shots[1]!.photoId!;
+    const next = await s.rt.photos.selectionQuote(s.id, [second]);
+    expect(next).toMatchObject({ count: 1, accepted: 1, usd: 0.006 });
+    await s.rt.photos.continueSelection(s.id, { rev: next.rev, requestId: crypto.randomUUID(), ids: [second], confirmUsd: next.usd, consent: true });
+    for (let i = 0; i < 8; i++) await s.cycle();
+    run = await s.get();
+    expect(s.submit).toHaveBeenCalledTimes(7);
+    expect(run.shots.map(shot => shot.acceptedPhotoId)).toEqual([first, second, null]);
+    expect(run.photos!.status).not.toBe('complete');
+    const last = run.shots[2]!.photoId!;
+    const final = await s.rt.photos.continueSelection(s.id, { rev: run.rev, requestId: crypto.randomUUID(), ids: [last], confirmUsd: 0, consent: true });
+    expect(final.photos!.status).toBe('complete');
+    expect(final.shots.map(shot => shot.acceptedPhotoId)).toEqual([first, second, last]);
+    expect(final.artifacts.find(a => a.id === last)!.version).toBe(3);
+    expect(s.submit).toHaveBeenCalledTimes(7);
+  }, 30_000);
+
+  it('allows selecting none, rejects stale budgets and waits for explicit continuation after restart', async () => {
+    const s = await setup(2, {}, null);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const quote = await s.rt.photos.selectionQuote(s.id, []);
+    expect(quote.count).toBe(2);
+    await expect(s.rt.photos.continueSelection(s.id, { rev: quote.rev - 1, requestId: crypto.randomUUID(), ids: [], confirmUsd: quote.usd, consent: true })).rejects.toThrow('изменилась');
+    await s.rt.photos.continueSelection(s.id, { rev: quote.rev, requestId: crypto.randomUUID(), ids: [], confirmUsd: quote.usd, consent: true });
+    await s.rt.photos.recover(s.id);
+    for (let i = 0; i < 4; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(3);
+    expect((await s.get()).photos!.status).toBe('stopped');
+    expect((await s.get()).shots.every(shot => shot.acceptedPhotoId === null)).toBe(true);
+    await expect(s.rt.photos.selectionQuote(s.id, [])).rejects.toThrow();
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 10; i++) await s.cycle();
+    expect(s.submit).toHaveBeenCalledTimes(5);
+    expect((await s.get()).photos!.status).toBe('review');
+  });
+
+  it('rechecks Soul ID before another paid selection round but not for duplicate or accept-all requests', async () => {
+    const s = await setup(1);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 10; i++) await s.cycle();
+    const characters = createCharacters({ dataDir: s.dir });
+    const select = vi.spyOn(characters, 'select').mockRejectedValue(new SoulIdError('Soul ID недоступен.', 422));
+    const app = productionRoutes(s.rt, characters);
+    const post = (body: object) => app.request(`/${s.id}/photos/continue`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const quote = await s.rt.photos.selectionQuote(s.id, []);
+    const input = { rev: quote.rev, requestId: crypto.randomUUID(), ids: [], confirmUsd: quote.usd, consent: true };
+    expect((await post({ ...input, consent: false })).status).toBe(422); expect(select).not.toHaveBeenCalled();
+    expect((await post(input)).status).toBe(422);
+    select.mockResolvedValue({ ...identity, referenceId: '22222222-2222-4222-8222-222222222222' });
+    expect((await post(input)).status).toBe(409); expect(s.submit).toHaveBeenCalledTimes(2);
+    select.mockResolvedValue(identity); expect((await post(input)).status).toBe(200);
+    select.mockClear().mockRejectedValue(new SoulIdError('Soul ID недоступен.', 422));
+    expect((await post(input)).status).toBe(200); expect(select).not.toHaveBeenCalled();
+    for (let i = 0; i < 8; i++) await s.cycle();
+    const run = await s.get();
+    expect((await post({ rev: run.rev, requestId: crypto.randomUUID(), ids: [run.shots[0]!.photoId!], confirmUsd: 0, consent: true })).status).toBe(200);
+    expect(select).not.toHaveBeenCalled(); expect(s.submit).toHaveBeenCalledTimes(3);
+    expect((await s.get()).photos!.status).toBe('complete');
+  });
+
   it.each(['720p', '1080p'] as const)('prices and submits the selected %s landscape format for master and every photo', async resolution => {
     const s = await setup(1, {}, identity, undefined, undefined, undefined, 'story', { resolution, aspectRatio: '16:9' });
     const planned = await s.get();
@@ -157,7 +272,7 @@ describe('real photos with injected providers only', () => {
     expect(run.review?.report?.results.every(r => r.verdict === 'reject')).toBe(true);
     expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true);
     expect(await s.gen.library.get(run.artifacts[1]!.mediaId!)).toBeTruthy();
-    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids })).rejects.toThrow('автоправки');
+    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids })).rejects.toThrow('Продолжить');
     const accepted = await s.accept(ids);
     expect(accepted.shots[0]!.acceptedPhotoId).toBe(ids[0]);
     expect(accepted.artifacts).toHaveLength(2); expect(s.submit).toHaveBeenCalledTimes(2);

@@ -30,13 +30,13 @@ export const RetouchItemSchema = z.object({
 export type RetouchItem = z.infer<typeof RetouchItemSchema>;
 export const RetouchStateSchema = z.object({
   status: z.enum(['running', 'stopped', 'complete']), requestId: z.uuid(), requests: z.array(z.uuid()),
-  selected: z.array(z.string()).min(1).max(8), items: z.array(RetouchItemSchema).max(8),
+  selected: z.array(z.string()).min(1), items: z.array(RetouchItemSchema),
   uploadIds: z.array(z.string()).max(2), appearanceRequestId: z.string().nullable(),
   remainingUsd: z.number().nonnegative(), perEditUsd: z.number().nonnegative(),
 });
 export type RetouchState = z.infer<typeof RetouchStateSchema>;
 export const RetouchStartSchema = z.object({
-  rev: z.number().int().nonnegative(), requestId: z.uuid(), ids: z.array(z.string()).min(1).max(8),
+  rev: z.number().int().nonnegative(), requestId: z.uuid(), ids: z.array(z.string()).min(1),
   confirmUsd: z.number().nonnegative(), consent: z.literal(true),
 }).strict();
 export type RetouchStart = z.infer<typeof RetouchStartSchema>;

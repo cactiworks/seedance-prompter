@@ -27,7 +27,7 @@ export const StoredRunSchema = CreateRunSchema.safeExtend({
   })),
   approvals: z.array(z.object({ kind: z.enum(['photo', 'video']), artifactId: z.string(), at: z.string() })),
   events: z.array(z.object({ at: z.string(), message: z.string() })),
-  scenePlan: SceneDraftSchema.extend({ shots: z.array(SceneDraftSchema.shape.shots.element.extend({ id: z.string() })).min(1).max(8) }).optional(),
+  scenePlan: SceneDraftSchema.extend({ shots: z.array(SceneDraftSchema.shape.shots.element.extend({ id: z.string() })).min(1) }).optional(),
   promptPlan: PromptPlanSchema.optional(),
   preparation: z.object({
     status: z.enum(['running', 'failed', 'interrupted', 'complete']), stage: z.enum(['scene', 'prompts']),

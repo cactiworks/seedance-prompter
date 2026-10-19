@@ -13,14 +13,14 @@ export const SceneDraftSchema = z.object({
   artDirection: ArtDirectionSchema.optional(),
   scene: SceneSchema,
   storyboardVersion: z.literal('events-v1').optional(),
-  scenes: z.array(StorySceneSchema).min(1).max(8).optional(),
+  scenes: z.array(StorySceneSchema).min(1).optional(),
   shots: z.array(z.object({
-    title: text(100), scriptExcerpt: text(1500).optional(), concept: text(700).optional(), intentionalEffect: text(500).optional(), purpose: text(500),
+    title: text(100), scriptExcerpt: text(1500).optional(), scriptInstruction: z.string().trim().max(1500).optional(), concept: text(700).optional(), intentionalEffect: text(500).optional(), purpose: text(500),
     framing: text(250), action: text(700), camera: text(600), visualAnchor: text(500).optional(),
     sceneId: text(30).optional(), beat: text(500).optional(), startFrame: text(700).optional(),
     subjectVisibility: z.enum(['person', 'detail', 'none']).optional(),
     durationSec: z.number().int().min(4).max(12),
-  }).strict()).min(1).max(8),
+  }).strict()).min(1),
   assumptions: z.array(text(500)).max(8),
   warnings: z.array(text(500)).max(8),
 }).strict();
@@ -28,17 +28,17 @@ export const SceneDraftSchema = z.object({
 export const GeneratedSceneDraftSchema = SceneDraftSchema.omit({ scene: true }).extend({
   contentMode: z.literal('story').optional(),
   storyboardVersion: z.literal('events-v1'),
-  scenes: z.array(StorySceneSchema).min(1).max(8),
+  scenes: z.array(StorySceneSchema).min(1),
   artDirection: ArtDirectionSchema,
   shots: z.array(SceneDraftSchema.shape.shots.element.extend({
-    scriptExcerpt: text(1500), visualAnchor: text(500), sceneId: text(30), beat: text(500), startFrame: text(700),
+    scriptExcerpt: text(1500), scriptInstruction: z.string().trim().max(1500), visualAnchor: text(500), sceneId: text(30), beat: text(500), startFrame: text(700),
     subjectVisibility: z.enum(['person', 'detail', 'none']),
-  })).min(1).max(8),
+  })).min(1),
 });
 /** Independent concepts have no script quotes or story beats. The image route stays events-v1. */
 export const GeneratedBrollDraftSchema = GeneratedSceneDraftSchema.extend({
   contentMode: z.literal('broll'),
-  shots: z.array(GeneratedSceneDraftSchema.shape.shots.element.omit({ scriptExcerpt: true, beat: true }).extend({
+  shots: z.array(GeneratedSceneDraftSchema.shape.shots.element.omit({ scriptExcerpt: true, scriptInstruction: true, beat: true }).extend({
     concept: text(700), intentionalEffect: text(500),
   })).min(1).max(8),
 });
@@ -49,7 +49,7 @@ export type PlannedShot = SceneDraft['shots'][number] & { id: string };
 export type ScenePlan = Omit<SceneDraft, 'shots'> & { shots: PlannedShot[] };
 export const PromptPlanSchema = z.object({
   masterPrompt: text(2400).optional(),
-  shots: z.array(z.object({ shotId: text(30), imagePrompt: text(1800), motionPrompt: text(3000) }).strict()).min(1).max(8),
+  shots: z.array(z.object({ shotId: text(30), imagePrompt: text(1800), motionPrompt: text(3000) }).strict()).min(1),
   warnings: z.array(text(500)).max(8),
 }).strict();
 export const GeneratedPromptPlanSchema = PromptPlanSchema.extend({ masterPrompt: text(2400) });
@@ -79,10 +79,11 @@ export function validateScene(draft: SceneDraft | GeneratedSceneDraft | Generate
   const events = new Set<string>(); const frames = new Set<string>(); const concepts = new Set<string>(); const hooks = new Set<string>();
   let previous = 0;
   for (const [i, shot] of shots.entries()) {
+    if (shot.scriptInstruction && !script.includes(shot.scriptInstruction)) errors.push(`Кадр ${i + 1}: scriptInstruction должна дословно цитировать указание из сценария.`);
     if (!scenes.some(s => s.id === shot.sceneId)) errors.push(`Кадр ${i + 1}: sceneId не связан с паспортом сцены.`);
     if ((!broll && !shot.beat) || !shot.startFrame || !shot.subjectVisibility) errors.push(`Кадр ${i + 1}: нужны смысл, стартовое состояние и видимость персонажа.`);
     if (broll) {
-      if (shot.scriptExcerpt || shot.beat) errors.push(`Кадр ${i + 1}: B-roll не должен содержать цитату или смысловой beat сценария.`);
+      if (shot.scriptExcerpt || shot.scriptInstruction || shot.beat) errors.push(`Кадр ${i + 1}: B-roll не должен содержать цитату или смысловой beat сценария.`);
       if (!shot.concept || !shot.intentionalEffect) errors.push(`Кадр ${i + 1}: нужны самостоятельная идея и описание намеренного эффекта.`);
       const concept = normalized(shot.concept ?? ''); const hook = normalized(shot.visualAnchor ?? '');
       if (concepts.has(concept) || hooks.has(hook)) errors.push(`Кадр ${i + 1}: повтор идеи или визуального приёма. Нужен самостоятельный B-roll.`);
@@ -92,9 +93,9 @@ export function validateScene(draft: SceneDraft | GeneratedSceneDraft | Generate
       if (position < 0) errors.push(`Кадр ${i + 1}: цитаты должны следовать порядку сценария.`);
       else previous = position;
     }
-    const event = `${broll ? '' : shot.sceneId}:${normalized(shot.action)}`;
-    const frame = normalized(shot.startFrame ?? '');
-    if (events.has(event) || frames.has(frame)) errors.push(`Кадр ${i + 1}: повтор события или стартового изображения. Нужен ${broll ? 'самостоятельный B-roll' : 'следующий смысловой момент'}, а не другой ракурс дубля.`);
+    const event = `${broll ? '' : `${shot.sceneId}:${previous}`}:${normalized(shot.action)}`;
+    const frame = `${broll ? '' : previous}:${normalized(shot.startFrame ?? '')}`;
+    if ((broll || !shot.scriptInstruction) && (events.has(event) || frames.has(frame))) errors.push(`Кадр ${i + 1}: повтор события или стартового изображения. Нужен ${broll ? 'самостоятельный B-roll' : 'следующий смысловой момент'}, а не другой ракурс дубля.`);
     events.add(event); frames.add(frame);
   }
   if (scenes.some(s => !draft.shots.some(shot => shot.sceneId === s.id))) errors.push('Каждая сцена должна использоваться в плане кадров.');
@@ -109,7 +110,7 @@ export function validatePrompts(plan: PromptPlan, scene: ScenePlan, identityBoun
   const expected = scene.shots.map((s) => s.id);
   const ids = plan.shots.map((s) => s.shotId);
   const errors: string[] = [];
-  if (hasStoryEvents(scene) && new Set(plan.shots.map(s => normalized(s.imagePrompt))).size !== plan.shots.length) errors.push('Разные события получили одинаковые imagePrompt. Сохрани отдельное стартовое изображение каждого события.');
+  if (hasStoryEvents(scene) && plan.shots.some((shot, i) => plan.shots.slice(0, i).some(previous => normalized(previous.imagePrompt) === normalized(shot.imagePrompt) && (!scene.shots.find(s => s.id === shot.shotId)?.scriptInstruction || !scene.shots.find(s => s.id === previous.shotId)?.scriptInstruction)))) errors.push('Разные события получили одинаковые imagePrompt. Сохрани отдельное стартовое изображение каждого события.');
   if (ids.length !== expected.length || new Set(ids).size !== ids.length || expected.some((id) => !ids.includes(id))) errors.push('Нужен ровно один набор prompts для каждого ID из shot plan.');
   if (plan.masterPrompt) {
     const words = plan.masterPrompt.split(/\s+/).length;

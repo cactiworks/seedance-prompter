@@ -18,10 +18,10 @@ export const ReviewResultSchema = z.object({
   faceDetail: faceDetail.optional(), wardrobeDetail: wardrobeDetail.optional(),
   observations: z.array(observation).min(1).max(10),
 }).strict();
-export const ReviewReportSchema = z.object({ summary: text(1400), results: z.array(ReviewResultSchema).min(1).max(9) }).strict();
+export const ReviewReportSchema = z.object({ summary: text(1400), results: z.array(ReviewResultSchema).min(1) }).strict();
 export const GeneratedReviewResultSchema = ReviewResultSchema.extend({ checks: ReviewResultSchema.shape.checks.extend({ character: check, identityLeakage: check, text: check }) });
-export const GeneratedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema).min(1).max(9) });
-export const DetailedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema.extend({ faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(5).max(10) })).min(1).max(9) });
+export const GeneratedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema).min(1) });
+export const DetailedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema.extend({ faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(5).max(10) })).min(1) });
 /** New replies must explicitly inspect clothing coverage and the physical scene; old reports stay readable. */
 export const LogicReviewResultSchema = GeneratedReviewResultSchema.extend({
   checks: GeneratedReviewResultSchema.shape.checks.extend({ wardrobe: detailCheck, sceneLogic: z.enum(['pass', 'fail', 'uncertain']) }),
@@ -29,7 +29,7 @@ export const LogicReviewResultSchema = GeneratedReviewResultSchema.extend({
 });
 export const LogicReviewReportSchema = ReviewReportSchema.extend({ results: z.array(LogicReviewResultSchema.extend({
   faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(8).max(10),
-})).min(1).max(9) });
+})).min(1) });
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;
 export const ReviewStateSchema = z.object({

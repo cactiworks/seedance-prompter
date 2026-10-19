@@ -117,7 +117,7 @@ export function applyRunAction(source: ProductionRun, action: RunAction, now: nu
       const artifact = currentArtifact(run, id);
       if (run.mode === 'photos' && artifact && !reviewedPhoto(run, id)) throw new ProductionError('INVALID', 'Сначала дождись проверки этого кадра критиком перед milestone.');
       if (!shot || !artifact || (artifact.qc !== 'pass' && !(run.mode === 'photos' && artifact.qc === 'review' && artifact.mediaId)) || shot.step !== (photo ? 'photoReview' : 'videoReview')) throw new ProductionError('INVALID', 'Принимать можно только текущие проверенные результаты этого milestone.');
-      if (run.mode === 'photos') throw new ProductionError('INVALID', 'После milestone нужна проверка деталей и автоправки. Подтверди их стоимость.');
+      if (run.mode === 'photos') throw new ProductionError('INVALID', 'Используй «Продолжить» в отборе фото: выбранные будут приняты, остальные пересозданы после подтверждения стоимости.');
       if (photo) { shot.acceptedPhotoId = id; shot.step = 'videos'; }
       else { shot.acceptedVideoId = id; shot.step = 'upscale'; }
       shot.dueAt = now + delay;

@@ -7,6 +7,7 @@ import { SubmitError } from '../gen/runtime.ts';
 import { appearanceReady, boundPrompts, pendingAppearance } from '../../core/production/appearance.ts';
 import { masterApproved, pendingReview } from '../../core/production/review.ts';
 import { hasStoryEvents } from '../../core/production/plan.ts';
+import { quotePhotoSelection, type ContinuePhotos } from '../../core/production/selection.ts';
 
 interface Store {
   get(id: string): Promise<ProductionRun>;
@@ -26,6 +27,39 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
     if (!gen) throw new ProductionError('INVALID', 'Генератор фото не подключён. Перезапусти сервер новой версии.');
     return gen;
   };
+  async function continueSelection(id: string, input: ContinuePhotos): Promise<ProductionRun> {
+    return store.update(id, run => {
+      if (run.photos?.requests.some(r => r.id === input.requestId)) return;
+      if (run.rev !== input.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Обнови выбор и стоимость.');
+      const quote = quotePhotoSelection(run, input.ids);
+      if (input.consent !== true || quote.usd !== input.confirmUsd) throw new ProductionError('INVALID', 'Подтверди текущую стоимость перегенерации.');
+      if (quote.count) {
+        requireGen();
+        if (!masterApproved(run)) throw new ProductionError('INVALID', 'Перед новыми генерациями нужна пройденная проверка опорного кадра.');
+      }
+      const state = run.photos!;
+      for (const shot of run.shots) {
+        if (shot.acceptedPhotoId) continue;
+        if (input.ids.includes(shot.photoId!)) {
+          shot.acceptedPhotoId = shot.photoId;
+          shot.step = 'ready'; shot.error = null;
+          run.approvals.push({ kind: 'photo', artifactId: shot.photoId!, at: new Date(now()).toISOString() });
+        } else {
+          const index = state.items.findIndex(i => i.key === shot.id);
+          if (index < 0) throw new ProductionError('INVALID', 'Позиция отсутствует в задачах серии.');
+          state.items[index] = { key: shot.id, tag: `production:${run.id}:${input.requestId}:${shot.id}`, jobId: null, taskId: null, status: 'pending', mediaId: null, error: null, errorCode: null };
+          shot.photoId = null; shot.step = 'photos'; shot.error = null;
+        }
+      }
+      state.requests.push({ id: input.requestId, usd: quote.usd, at: new Date(now()).toISOString() });
+      state.budget = { remainingUsd: quote.usd, perImageUsd: quote.perImageUsd, masterLimit: 1 };
+      state.status = quote.count ? 'running' : 'complete';
+      if (quote.count) run.review = { ...pendingReview(input.requestId, now()), referenceLimit: 6 };
+      record(run, now(), quote.count
+        ? `Принято ${input.ids.length} фото. Пересоздаём только ${quote.count} невыбранных позиций за $${quote.usd.toFixed(3)}. Принятые кадры и прежние версии сохранены.`
+        : `Все ${run.shots.length} позиции приняты владельцем. Фото готовы к скачиванию; правки в Canvas — по желанию.`);
+    });
+  }
   async function start(id: string, input: PhotoStart): Promise<ProductionRun> {
     requireGen();
     return store.update(id, (run) => {
@@ -87,7 +121,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
         catch { item.status = 'failed'; item.error = 'Файл фотографии недоступен на диске.'; item.errorCode = 'MISSING_MEDIA'; run.photos.status = 'stopped'; changed = true; continue; }
         item.mediaId = media.id;
         const artifact: Artifact = {
-          id: `${item.key}-photo-${media.id}`, shotId: item.key, kind: 'photo', version: 1,
+          id: `${item.key}-photo-${media.id}`, shotId: item.key, kind: 'photo', version: 1 + Math.max(0, ...run.artifacts.filter(a => a.shotId === item.key && a.kind === 'photo').map(a => a.version)),
           sourceId: item.key === 'scene' || hasStoryEvents(run.scenePlan) ? null : run.photos.masterArtifactId,
           url: `/api/library/${media.id}/file`, poster: `/api/library/${media.id}/file`, prompt: job.prompt,
           model: 'Soul 2 · Higgsfield', providerModel: job.providerModel, taskId: job.taskId ?? job.id,
@@ -177,7 +211,8 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
     } finally { sending.delete(id); }
   }
   return {
-    start, tick,
+    start, tick, continueSelection,
+    selectionQuote: async (id: string, ids: string[]) => quotePhotoSelection(await store.get(id), ids),
     quote: async (id: string, retryMaster = false) => {
       const run = await store.get(id); readyForPhotos(run);
       if (retryMaster && !canRegenerateMaster(run)) throw new ProductionError('INVALID', 'Новый master недоступен: лимит три попытки, до запуска остальных кадров.');
