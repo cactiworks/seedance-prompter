@@ -152,5 +152,5 @@ export function seedanceSummary(parts: { shootingRu: string; kitRu: string; dura
 
 /** Копия ноды на холсте получает копию черновика при первом открытии, а не тот же ролик. */
 export function cloneSeedance(node: CanvasNode): Partial<CanvasNode> {
-  return node.type !== 'seedance' ? {} : { slug: '', shotId: '', copyFrom: node.slug !== '' ? node.slug : node.copyFrom, refSync: {} };
+  return node.type !== 'seedance' ? {} : { production: undefined, slug: '', shotId: '', copyFrom: node.slug !== '' ? node.slug : node.copyFrom, refSync: {} };
 }

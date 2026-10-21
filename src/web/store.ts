@@ -1,3 +1,4 @@
+import { invalidateSeriesCritique } from '../core/production/seriesForm.ts';
 import { downloadFile } from './download.ts';
 import { studioFetch as fetch } from './remoteFetch.ts';
 import { create } from 'zustand';
@@ -50,6 +51,7 @@ interface State {
   openInHost: (project: Project, shotId: string, host: ProjectHost, prepare?: (project: Project) => Project) => void;
   /** Закрыть ролик: сначала дописать незаписанное (автосейв ждёт 800 мс), потом выйти. */
   closeProject: () => Promise<void>;
+  flushProject: () => Promise<boolean>;
   selectShot: (shotId: string) => void;
   /** Новый кадр наследует комплект, правила и панель текущего: мир ролика общий. */
   addShot: () => void;
@@ -172,7 +174,13 @@ export function slugify(text: string): string {
 }
 
 export const useStore = create<State>((set, get) => {
+  let writing: Promise<void> | null = null;
   const flush = async (): Promise<void> => {
+    if (writing) return writing;
+    writing = performFlush();
+    try { await writing; } finally { writing = null; }
+  };
+  const performFlush = async (): Promise<void> => {
     const { project } = get();
     if (project === null) return;
     set({ save: 'saving' });
@@ -185,7 +193,7 @@ export const useStore = create<State>((set, get) => {
       const saved = await json<Project>(res);
       // Пока шёл запрос, пользователь мог печатать дальше: берём с сервера только rev.
       const current = get().project;
-      if (current !== null) set({ project: { ...current, rev: saved.rev }, save: get().save === 'dirty' ? 'dirty' : 'saved', error: null });
+      if (current !== null && current.slug === project.slug) set({ project: { ...current, rev: saved.rev }, save: get().save === 'dirty' ? 'dirty' : 'saved', error: null });
       if (get().save === 'dirty') schedule();
     } catch (cause) {
       set({ save: 'error', error: String(cause instanceof Error ? cause.message : cause) });
@@ -205,6 +213,13 @@ export const useStore = create<State>((set, get) => {
     save: 'saved',
     error: null,
 
+    flushProject: async () => {
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+      if (writing) await writing;
+      while (get().save === 'dirty') await flush();
+      if (timer !== null) { clearTimeout(timer); timer = null; }
+      return get().save === 'saved';
+    },
     loadPack: async () => set({ pack: await json<PackBundle>(await fetch('/api/packs/cinema-doc')) }),
     loadProjects: async () => set({ projects: await json<ProjectListItem[]>(await fetch('/api/projects')) }),
 
@@ -223,7 +238,7 @@ export const useStore = create<State>((set, get) => {
 
     openInHost: (project, shotId, host, prepare) => {
       set({ project, shotId: project.shots.some((s) => s.id === shotId) ? shotId : (project.shots[0]?.id ?? null), host, save: 'saved', error: null, writeReport: null, planReport: null, proposals: null, exportResult: null, visionReports: {} });
-      if (prepare !== undefined) get().update(prepare);
+      if (prepare !== undefined && JSON.stringify(prepare(project)) !== JSON.stringify(project)) get().update(prepare);
     },
 
     closeProject: async () => {
@@ -278,7 +293,7 @@ export const useStore = create<State>((set, get) => {
     update: (recipe) => {
       const { project, save } = get();
       if (project === null || save === 'conflict') return;
-      set({ project: recipe(project), save: 'dirty' });
+      set({ project: invalidateSeriesCritique(project, recipe(project)), save: 'dirty' });
       schedule();
     },
 

@@ -1,3 +1,4 @@
+import { mediaCostLabel } from '../../core/gen/models.ts';
 import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
@@ -49,7 +50,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
               )}
               <figcaption className={styles.caption}>
                 <Text variant="caption" tone="tertiary">
-                  {job.creditsConsumed !== null ? `${job.creditsConsumed} кр` : `≈ ${job.estimateCredits} кр`} · {Object.values(job.params).map(String).join(' / ')}
+                  {job.creditsConsumed !== null ? mediaCostLabel(job,job.creditsConsumed) : `≈ ${mediaCostLabel(job,job.estimateCredits)}`} · {Object.values(job.params).map(String).join(' / ')}
                 </Text>
                 {mediaId !== undefined && (
                   <Button variant="ghost" size="xs" onClick={() => void reveal(mediaId)}>

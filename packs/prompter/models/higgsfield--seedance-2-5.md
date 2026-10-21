@@ -1,6 +1,6 @@
-# Seedance 2.5 (ByteDance, via KIE) — card
+# Seedance 2.5 (ByteDance, via Higgsfield API) — card
 
-Status: parameters from the official KIE schema; reference syntax @ImageN from KIE / fal examples. The owner's
+Status: parameters from the official Higgsfield model schema; reference syntax @ImageN from Higgsfield examples. The owner's
 guide-based shot constructor (the «Кадры» tab) encodes a proven documentary-realism method for this model —
 for a serious shot, recommend it in `alternativesRu`.
 
@@ -10,7 +10,7 @@ for a serious shot, recommend it in `alternativesRu`.
 
 ## Where it fails
 - Frames (first / last) and references cannot be combined in one task [official].
-- Expensive at higher resolution: 480p 28, 720p 63, 1080p 158 credits per second [official price].
+- Expensive at higher resolution: account-specific cost; obtain /estimate for the exact request before submission.
 
 ## How to write the prompt
 - Paragraphs by time segments: what happens in each segment, where the camera is and how it moves.

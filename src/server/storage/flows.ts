@@ -36,13 +36,20 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
 
   return {
     get,
-    async list(): Promise<{ id: string; name: string; nodes: number; updatedAt: string }[]> {
+    async ensureProduction(id: string, name: string, update: (flow: Flow) => Flow | Promise<Flow>): Promise<Flow> {
+      return serialize(fileOf(id), async () => {
+        const base = await get(id) ?? { id, name, rev: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, createdAt: iso(), updatedAt: iso() };
+        const next = FlowSchema.parse(await update(base));
+        return write({ ...next, rev: (base.rev ?? 0) + 1, updatedAt: iso() });
+      });
+    },
+    async list(): Promise<{ id: string; name: string; nodes: number; updatedAt: string; production?: Flow['production'] }[]> {
       await mkdir(dir, { recursive: true });
       const out = [];
       for (const file of await readdir(dir)) {
         if (!file.endsWith('.json')) continue;
         const flow = await get(file.slice(0, -5));
-        if (flow !== undefined) out.push({ id: flow.id, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt });
+        if (flow !== undefined) out.push({ id: flow.id, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt, production: flow.production });
       }
       return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },

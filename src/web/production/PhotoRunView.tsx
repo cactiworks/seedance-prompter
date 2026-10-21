@@ -1,3 +1,5 @@
+import { useCanvas } from '../canvas/canvasStore.ts';
+import { seriesApi } from '../series/api.ts';
 import { useState } from 'react';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
 import { photoOutput } from '../../core/production/output.ts';
@@ -31,7 +33,7 @@ function progress(run: ProductionRun): number {
 function nextStep(run: ProductionRun): [string, string] {
   if (run.paused) return ['На паузе', 'Серия сохранена. Уже отправленные фото завершатся; новые ждут продолжения.'];
   if (!run.planned) return [run.preparation?.status === 'running' ? run.contentMode === 'broll' ? 'Придумываем B-roll' : 'Готовим сцену и план' : 'Подготовка остановлена', 'Твой brief сохранён.'];
-  if (run.photos?.status === 'complete') return ['Фото готовы к монтажу', 'Скачай принятые кадры ниже.'];
+  if (run.photos?.status === 'complete') return ['Фотографии приняты', 'Продолжи в Canvas: подготовь Prompter по серии и запускай видео по одному.'];
   if (run.retouch?.status === 'running') return ['Исправляем детали', `${run.retouch.items.filter(i => i.status === 'complete').length} из ${run.shots.length} проверено. Внешность, одежда, логика сцены и детали; затем — готовые фото.`];
   if (run.appearance?.status === 'running' || run.appearance?.status === 'pending') return ['Закрепляем внешность', 'Сравниваем референсы и готовим опорный кадр.'];
   if (run.appearance?.error && run.appearance.status !== 'complete') return ['Не удалось закрепить внешность', 'Продолжи серию, чтобы повторить этот этап. Фото ещё не отправлялись.'];
@@ -57,6 +59,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const [selecting, setSelecting] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [handoffBusy, setHandoffBusy] = useState(false);
   const artifact = currentArtifact(run, inspect);
   const master = currentArtifact(run, run.photos?.masterArtifactId ?? null);
   const eligible = photoSelectionProblem(run) ? [] : run.shots.filter(s => !s.acceptedPhotoId && s.photoId).map(s => s.photoId!);
@@ -84,7 +87,15 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       </div>)}
       {eligible.length > 0 && <PhotoSelection run={run} ids={selection} onDone={() => setSelected([])} onLoading={setSelecting} />}
       {run.shots.length > 0 && <Text variant="caption">Принято {accepted} из {run.shots.length}. {accepted < run.shots.length ? `Без принятого фото: ${run.shots.length - accepted}.` : 'Все запланированные позиции закрыты.'}</Text>}
-      {accepted > 0 && <div><Button variant="border" loading={downloading} onClick={() => {
+      {accepted > 0 && <div className={styles.headerActions}><Button variant="primary" loading={handoffBusy} onClick={() => {
+        setHandoffBusy(true); setDownloadError(null);
+        void (async () => {
+          if (!await useCanvas.getState().flush()) throw new Error('Сначала сохрани открытый Canvas.');
+          const flow = await seriesApi<{id:string}>(`/api/production/${run.id}/canvas`, {});
+          await useCanvas.getState().loadFlows(); await useCanvas.getState().openFlow(flow.id);
+          window.location.hash = '/canvas';
+        })().catch(e => setDownloadError(e instanceof Error ? e.message : 'Не удалось открыть Canvas.')).finally(() => setHandoffBusy(false));
+      }}>Продолжить в Canvas</Button><Button variant="border" loading={downloading} onClick={() => {
         const ids = run.shots.flatMap(s => { const mediaId = currentArtifact(run, s.acceptedPhotoId)?.mediaId; return mediaId ? [mediaId] : []; });
         setDownloading(true); setDownloadError(null);
         void useGen.getState().exportMedia(ids).catch(e => setDownloadError(String(e))).finally(() => setDownloading(false));

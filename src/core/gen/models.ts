@@ -2,8 +2,9 @@
  * Каталог моделей генерации — один источник для формы, оценки цены, проверки до отправки и тела запроса.
  * Форма студии и canvas строятся из `params` и `refs`, сервер сверяет по ним же — расхождения «в форме
  * можно, в API нельзя» быть не может. Набор моделей — выбор владельца 27.09.2026: GPT Image 2.5,
- * Seedream 5 Pro, Kling 3.0, Seedance 2.5 (KIE) и Soul 2 (официальный API Higgsfield).
- * Схемы и цены сверены 27.09.2026 — docs/research/kie-models.md. Цена здесь — оценка для гейта;
+ * Seedream 5 Pro, Kling 3.0, Seedance 2.5 (Higgsfield) и Soul 2 (официальный API Higgsfield).
+ * KIE: схемы и цены 27.09.2026 — docs/research/kie-models.md; Seedance Higgsfield: 21.10.2026.
+ * Статическая цена здесь — оценка для гейта; Seedance требует account estimate;
  * фактическое списание приходит от провайдера и пишется в задачу.
  */
 
@@ -82,6 +83,8 @@ export interface GenModel {
   input: (prompt: string, p: GenParams, refs: readonly SentRef[]) => Record<string, unknown>;
   /** Инструмент (апскейл), а не генератор: в выборе моделей студии, canvas и промптера его нет — только в «Правке». */
   tool?: boolean;
+  /** Цена подтверждается только серверной оценкой аккаунта. */
+  quoteRequired?: boolean;
   /** Промпт не нужен (апскейл работает по картинке). */
   promptless?: boolean;
   /** Свои ограничения модели сверх общих — сообщения по-русски. */
@@ -108,18 +111,6 @@ const priceOf = (table: Record<string, number>, key: string): number => {
 };
 const urls = (refs: readonly SentRef[], role: RefRole): string[] => refs.filter((r) => r.role === role).map((r) => r.url);
 const withRefs = (roles: readonly RefRole[]): boolean => roles.length > 0;
-
-/** Seedance: кадры (first/last) или референсы — взаимоисключающие режимы входа. */
-function seedanceMedia(refs: readonly SentRef[]): Record<string, unknown> {
-  const [start] = urls(refs, 'start');
-  const [end] = urls(refs, 'end');
-  const references = urls(refs, 'ref');
-  return {
-    ...(start !== undefined ? { first_frame_url: start } : {}),
-    ...(end !== undefined ? { last_frame_url: end } : {}),
-    ...(references.length > 0 ? { reference_image_urls: references } : {}),
-  };
-}
 
 const KLING_RATE: Record<string, [number, number]> = { std: [14, 20], pro: [18, 27], '4K': [67, 67] };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -232,20 +223,21 @@ const GENERATORS: readonly GenModel[] = [
     },
   },
   {
-    id: 'kie/seedance-2-5',
-    provider: 'kie',
+    id: 'higgsfield/seedance-2-5',
+    provider: 'higgsfield',
+    quoteRequired: true,
     kind: 'video',
     titleRu: 'Seedance 2.5',
     noteRu: 'ByteDance · до 30 с, звук · кадры или до 30 рефов',
     maxPromptChars: 30_000,
     // 480p по умолчанию: черновик Seedance делается в 480p (решение 38), финал выбирается явно.
-    params: [resolution(['480p', '720p', '1080p'], '480p'), aspect(['9:16', '3:4', '1:1', '4:3', '16:9', '21:9'], '9:16'), duration(4, 30, 5), audio(true)],
+    params: [resolution(['480p', '720p', '1080p'], '480p'), aspect(['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9', '21:9'], '9:16'), duration(4, 30, 5), audio(true)],
     refs: { max: 30, roles: ['ref', 'start', 'end'], framesExclusive: true },
     promptRefs: 'at-image',
-    // Кредиты в секунду без входного видео (видео-рефы пока не поддержаны); звук на цену не влияет.
-    credits: (p) => priceOf({ '480p': 28, '720p': 63, '1080p': 158 }, str(p, 'resolution')) * num(p, 'durationSec'),
-    target: () => 'bytedance/seedance-2-5',
-    input: (prompt, p, refs) => ({ prompt, resolution: str(p, 'resolution'), aspect_ratio: str(p, 'aspectRatio'), duration: num(p, 'durationSec'), generate_audio: p.audio === true, ...seedanceMedia(refs) }),
+    // Статической цены нет: quoteRequired требует account-specific /estimate перед запуском.
+    credits: () => 0, // Unknown until /estimate; never presented as free.
+    target: (_p, roles) => `bytedance/seedance-2.5/${roles.includes('start') ? 'image-to-video' : roles.length ? 'reference-to-video' : 'text-to-video'}`,
+    input: (prompt, p, refs) => ({ prompt, resolution: str(p, 'resolution'), duration: num(p, 'durationSec'), generate_audio: p.audio === true, output_format: 'mp4', ...(refs.some(r => r.role === 'start') ? { image_url: urls(refs, 'start')[0], ...(urls(refs, 'end')[0] ? { end_image_url: urls(refs, 'end')[0] } : {}) } : { aspect_ratio: str(p, 'aspectRatio'), ...(refs.length ? { image_urls: urls(refs, 'ref') } : {}) }) }),
   },
 ];
 
@@ -291,7 +283,7 @@ export const billedSeconds = (durationSec: number): number => Math.max(1, Math.c
 
 /**
  * Апскейл видео Topaz — решение 39: утверждённый черновик Seedance (480p, решение 38) доводится до финала тем же дублем;
- * перегенерация дала бы другой — seed у Seedance на KIE нет. Схема: docs.kie.ai/market/topaz/video-upscale (02.10.2026):
+ * перегенерация дала бы другой — Seedance здесь не предоставляет seed. Схема: docs.kie.ai/market/topaz/video-upscale (02.10.2026):
  * `video_url` (mp4 / mov / mkv, до 50 МБ), `upscale_factor` 1 / 2 / 4. Прайс KIE 02.10: 1× и 2× — 8 кр/с, 4× — 14 кр/с.
  */
 const TOPAZ_VIDEO: GenModel = {
@@ -320,7 +312,7 @@ export const upscaleModelOf = (kind: MediaKind): GenModel => (kind === 'video' ?
 /** Всё, что можно запустить: генераторы и инструменты. */
 export const GEN_MODELS: readonly GenModel[] = [...GENERATORS, TOPAZ, TOPAZ_VIDEO];
 
-export const findModel = (id: string): GenModel | undefined => GEN_MODELS.find((m) => m.id === id);
+export const findModel = (id: string): GenModel | undefined => GEN_MODELS.find((m) => m.id === currentModelId(id));
 
 /** Что сделало файл — для подписей в библиотеке и просмотре: модель или локальная операция (ffmpeg, импорт). */
 const LOCAL_RU: Record<string, string> = { 'local/import': 'Свой файл', 'local/frame': 'Кадр из видео', 'local/crop': 'Обрезка', 'local/trim': 'Обрезка видео', 'local/resize': 'Размер' };
@@ -344,7 +336,7 @@ export function paramsFor(model: GenModel, given: Partial<GenParams>): GenParams
   const out: GenParams = {};
   for (const def of model.params) {
     const value = given[def.key];
-    out[def.key] = fits(def, value) ? (value as ParamValue) : def.default;
+    out[def.key] = (fits(def, value) || (model.quoteRequired && value !== undefined)) ? (value as ParamValue) : def.default;
   }
   return out;
 }
@@ -353,7 +345,7 @@ export function paramsFor(model: GenModel, given: Partial<GenParams>): GenParams
 const ANY_REF_RE = /<<<image_(\d+)>>>|@image\s?_?(\d+)/gi;
 
 /**
- * Промпт в диалекте модели. Seedance через KIE → fal ждёт `@Image1` без пробела, порядок URL задаёт N
+ * Промпт в диалекте модели. Seedance использует `@Image1` без пробела, порядок URL задаёт N
  * (решение 23); остальные модели своего синтаксиса не имеют — им «image 1» словами.
  */
 export function forProvider(model: GenModel, prompt: string): { prompt: string; maxRef: number } {
@@ -392,7 +384,9 @@ export function validateGen(model: GenModel, prompt: string, params: GenParams, 
   if (count('start') > 1 || count('end') > 1) problems.push('Стартовый и финальный кадр — не больше одного каждый.');
   if (count('end') > 0 && count('start') === 0) problems.push('Финальный кадр без стартового модель не примет.');
   if (model.refs.framesExclusive === true && count('ref') > 0 && count('start') + count('end') > 0) problems.push('Кадры (старт / финал) и референсы нельзя смешивать в одной задаче — выбери что-то одно.');
-  if (model.promptRefs === 'at-image' && maxRef > count('ref')) problems.push(`В промпте есть ссылка на картинку ${maxRef}, а референсов прикреплено ${count('ref')}.`);
+  if (model.id === 'higgsfield/seedance-2-5' && !roles.includes('start') && ['2:3','3:2'].includes(String(params.aspectRatio))) problems.push('Этот формат поддержан только со стартовым фото. Выбери совместимый формат для text/reference-to-video.');
+  const numberedRefs = model.id === 'higgsfield/seedance-2-5' ? roles.length : count('ref');
+  if (model.promptRefs === 'at-image' && maxRef > numberedRefs) problems.push(`В промпте есть ссылка на картинку ${maxRef}, а референсов прикреплено ${numberedRefs}.`);
   return problems;
 }
 
@@ -414,11 +408,13 @@ export interface Estimate {
   credits: number;
   usd: number;
   unitRu: string;
+  requiresQuote?: boolean;
 }
 
 const round = (value: number, digits: number): number => Math.round(value * 10 ** digits) / 10 ** digits;
 
 export function estimate(model: GenModel, params: GenParams, count = 1, refCount = 0): Estimate {
+  if (model.quoteRequired) return { credits: 0, usd: 0, unitRu: 'кр Higgsfield', requiresQuote: true };
   const unit = UNIT[model.provider];
   const credits = round(model.credits(params, refCount) * count, 4);
   return { credits, usd: round(credits * unit.usd, 4), unitRu: unit.labelRu };
@@ -426,6 +422,15 @@ export function estimate(model: GenModel, params: GenParams, count = 1, refCount
 
 /** «8 кр ≈ $0.04» или «$0.0057» — одна запись цены на весь интерфейс. */
 export function formatCost(e: Estimate): string {
+  if (e.requiresQuote) return 'рассчитать цену Higgsfield';
   const usd = `$${e.usd < 0.1 ? String(e.usd) : e.usd.toFixed(2)}`;
   return e.unitRu === '$' ? usd : `${e.credits} ${e.unitRu} ≈ ${usd}`;
+}
+
+/** Legacy drafts use the new provider; stored jobs keep their provider and task ID. */
+export const currentModelId = (id: string): string => id === 'kie/seedance-2-5' ? 'higgsfield/seedance-2-5' : id;
+
+/** Stored history keeps its provider and price units, independent of the current model alias. */
+export function mediaCostLabel(item: {provider: string; modelId:string}, cost:number): string {
+  return item.provider === 'higgsfield' && item.modelId !== 'higgsfield/seedance-2-5' ? `$${cost}` : `${cost} кр${item.provider === 'higgsfield' ? ' Higgsfield' : ''}`;
 }

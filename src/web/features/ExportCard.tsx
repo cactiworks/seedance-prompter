@@ -1,7 +1,7 @@
 import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { activeCritiqueFindings } from '../../core/review.ts';
-import { estimate, findModel, formatCost, paramsFor, validateGen } from '../../core/gen/models.ts';
+import { estimate, findModel, paramsFor, validateGen } from '../../core/gen/models.ts';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import type { Project, Shot } from '../../core/model/project.ts';
 import type { ShotBuild } from '../../core/pipeline.ts';
@@ -68,11 +68,11 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const passed = items.every((item) => item.auto === true || ticks.includes(item.id));
   const tick = (id: string, on: boolean): void => setGate({ reviewKey, ticks: on ? [...ticks, id] : ticks.filter((x) => x !== id) });
 
-  // Генерация отсюда (решения 21–23): Seedance 2.5 через KIE. Формат и длительность — из кадра, картинки — панель по
+  // Генерация отсюда (решения 21–23): Seedance 2.5 через Higgsfield. Формат и длительность — из кадра, картинки — панель по
   // порядку (@ImageN). Настройки Higgsfield и порядок загрузки сервер выставляет сам — эти пункты чек-листа не нужны.
   const gen = useGen();
   const { loadStatus } = gen;
-  const seedance = findModel('kie/seedance-2-5');
+  const seedance = findModel('higgsfield/seedance-2-5');
   // Разрешение по умолчанию — из каталога (черновик 480p, решение 38).
   const [genRes, setGenRes] = useState(() => String(seedance?.params.find((p) => p.key === 'resolution')?.default ?? '480p'));
   const [genAudio, setGenAudio] = useState(true);
@@ -88,28 +88,27 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const apiPassed = items.filter((item) => item.id !== 'settings' && item.id !== 'panel').every((item) => item.auto === true || ticks.includes(item.id));
   const needConsent = panelFiles.length > 0 && !hasRefsConsent() && !consent;
   const genProblems = [
-    ...(gen.status.kie !== undefined && !gen.status.kie.hasKey ? [`KIE: ${gen.status.kie.keyProblem ?? 'нет ключа'}.`] : []),
+    ...(gen.status.higgsfield !== undefined && !gen.status.higgsfield.hasKey ? [`Higgsfield: ${gen.status.higgsfield.keyProblem ?? 'нет ключа'}.`] : []),
     ...panelFiles.filter((f) => f.file === null).map((f) => `У картинки ${f.n} панели нет файла.`),
-    ...(seedance === undefined ? [] : validateGen(seedance, build.prompt, genParams, panelFiles.map(() => 'ref' as const))),
+    ...(seedance === undefined ? [] : validateGen(seedance, build.prompt, genParams, panelFiles.map(() => project.production ? 'start' as const : 'ref' as const))),
   ];
   const generate = async (): Promise<void> => {
     if (seedance === undefined || genCost === null) return;
     setGenBusy(true);
     const n = savedN?.prompt === build.prompt ? savedN.n : nextAttempt;
-    if (savedN?.prompt !== build.prompt) {
-      store.saveAttempt(build.prompt);
-      setSavedN({ prompt: build.prompt, n });
-    }
     try {
       const jobs = await gen.run({
         modelId: seedance.id,
         prompt: build.prompt,
         params: genParams,
-        refs: panelFiles.map((f) => ({ label: f.label, source: { type: 'projectRef', slug: project.slug, file: f.file ?? '' }, role: 'ref' })),
+        refs: panelFiles.map((f) => ({ label: f.label, source: { type: 'projectRef', slug: project.slug, file: f.file ?? '' }, role: project.production ? 'start' : 'ref' })),
         count: 1,
         confirmCredits: genCost.credits,
         refsConsent: panelFiles.length > 0 ? true : undefined,
         origin: { projectSlug: project.slug, shotId: shot.id, attemptN: n },
+      }, () => {
+        if (useStore.getState().project?.slug !== project.slug) throw new Error('Открыт другой Prompter. Повтори запуск из нужного кадра.');
+        if (savedN?.prompt !== build.prompt) { store.saveAttempt(build.prompt); setSavedN({ prompt: build.prompt, n }); }
       });
       setGenState({ prompt: build.prompt, n, errorRu: submissionIssue(jobs) ?? undefined });
     } catch (error) {
@@ -145,10 +144,10 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={`Кадр ${shotIndex + 1} → генерация`} description="Сгенерировать здесь через KIE — или перенести в Higgsfield вручную по шагам ниже. Здесь ничего не редактируется." footer={footer}>
+    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={`${project.production ? shot.title : `Кадр ${shotIndex + 1}`} → генерация`} description="Запустить через Higgsfield API или перенести в Higgsfield вручную по шагам ниже. Здесь ничего не редактируется." footer={footer}>
       <div className={styles.steps}>
         <section className={styles.step}>
-          <StepHead n="▶" title="Сгенерировать здесь — Seedance 2.5 через KIE" />
+          <StepHead n="▶" title="Сгенерировать здесь — Seedance 2.5 через Higgsfield" />
           <div className={styles.row}>
             <SegmentedControl<string> aria-label="Разрешение" size="s" value={genRes} onChange={setGenRes} options={['480p', '720p', '1080p'].map((r) => ({ value: r, label: r }))} />
             <Switch checked={genAudio} onChange={setGenAudio} label="Звук" />
@@ -161,7 +160,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
           {panelFiles.length > 0 && !hasRefsConsent() && (
             <label className={styles.gateItem}>
               <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-              <Text variant="label">Картинки панели ({panelFiles.length}) уйдут в KIE, а оттуда — исполнителю модели (fal). Если на них лицо, оно тоже уйдёт.</Text>
+              <Text variant="label">Картинки панели ({panelFiles.length}) уйдут в Higgsfield API. Если на них лицо, оно тоже уйдёт.</Text>
             </label>
           )}
           {genProblems.length > 0 && (
@@ -176,7 +175,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
           )}
           <div className={styles.row}>
             <Button variant="dark" size="m" icon={<Icon name="sparkle" />} loading={genBusy} disabled={!apiPassed || needConsent || genProblems.length > 0 || genCost === null} onClick={() => void generate()}>
-              Сгенерировать{genCost === null ? '' : ` · ${formatCost(genCost)}`}
+              Рассчитать стоимость видео
             </Button>
             {launched !== null && (
               <Text variant="label" tone={launched.errorRu === undefined ? 'secondary' : 'accent'}>

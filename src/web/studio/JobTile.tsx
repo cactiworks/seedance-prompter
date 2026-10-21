@@ -1,6 +1,6 @@
 import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
-import { estimate, findModel, formatCost, paramsFor, UNIT } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, paramsFor, mediaCostLabel } from '../../core/gen/models.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { STATUS_RU, awaitingFiles, needsAttention } from '../../core/gen/jobStatus.ts';
 import { isActive, mediaUrl, useGen } from '../gen/genStore.ts';
@@ -45,7 +45,7 @@ export function JobTile({ job, onOpen }: { job: GenJob; onOpen: (mediaId: string
   const mediaId = job.mediaIds.find((id): id is string => id !== null);
   const waitingFiles = awaitingFiles(job, library);
   const cost = job.creditsConsumed ?? job.estimateCredits;
-  const costLabel = UNIT[job.provider].labelRu === '$' ? `$${cost}` : `${cost} кр`;
+  const costLabel = mediaCostLabel(job,cost);
 
   return (
     <article className={styles.tile} data-job-id={job.id} aria-label={`${model?.titleRu ?? job.modelId} · ${STATUS_RU[job.status]}`}>

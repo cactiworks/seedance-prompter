@@ -786,3 +786,12 @@
 .flowDelete:focus-visible, .flowItem:focus-within .flowDelete {
   opacity: 1;
 }
+
+.productionFlow {
+  box-shadow: inset 0 0 0 1px var(--lab-accent-ring);
+}
+
+.productionBadge {
+  display: block;
+  margin-top: var(--lab-space-1);
+}

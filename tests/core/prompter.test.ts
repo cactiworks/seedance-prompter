@@ -100,14 +100,14 @@ describe('промптер: проверка и нормализация отв�
 
   it('видео: длительность строкой («8», «8s») приводится к числу, звук — к bool', () => {
     const video = modelsOf('video');
-    const out = answer({ modelId: 'kie/seedance-2-5', styleName: '', params: [{ key: 'durationSec', value: '8s' }, { key: 'audio', value: 'false' }, { key: 'resolution', value: '720p' }] });
+    const out = answer({ modelId: 'higgsfield/seedance-2-5', styleName: '', params: [{ key: 'durationSec', value: '8s' }, { key: 'audio', value: 'false' }, { key: 'resolution', value: '720p' }] });
     expect(validatePrompter(out, video, [])).toEqual([]);
     expect(normalizePrompter(out, [])?.params).toMatchObject({ durationSec: 8, audio: false, resolution: '720p' });
   });
 });
 
 describe('промптер: референсы владельца', () => {
-  const seedance = findModel('kie/seedance-2-5') as GenModel;
+  const seedance = findModel('higgsfield/seedance-2-5') as GenModel;
   const kling = findModel('kie/kling-3') as GenModel;
   const me: PrompterRef = { role: 'character', commentRu: 'это я' };
   const look: PrompterRef = { role: 'style', commentRu: 'взять свет' };
@@ -139,7 +139,7 @@ describe('промптер: референсы владельца', () => {
     expect(missing).toContain('prompt mentions image 3');
     expect(missing).toContain('image 2 (ref 2, style) is sent to the model, but the prompt never says');
     const video = modelsOf('video');
-    const plain = validatePrompter(answer({ modelId: 'kie/seedance-2-5', styleName: '', params: [], prompt: 'The person from image 1 walks; light as in image 2.' }), video, [], [me, look]).join('\n');
+    const plain = validatePrompter(answer({ modelId: 'higgsfield/seedance-2-5', styleName: '', params: [], prompt: 'The person from image 1 walks; light as in image 2.' }), video, [], [me, look]).join('\n');
     expect(plain).toContain('@Image1, @Image2');
   });
 

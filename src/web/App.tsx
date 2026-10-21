@@ -1,3 +1,4 @@
+import { GenerationQuote } from './gen/GenerationQuote.tsx';
 import { useEffect } from 'react';
 import { Calibration, CalibrationList } from './calibration/Calibration.tsx';
 import { Canvas, FlowList } from './canvas/Canvas.tsx';
@@ -39,7 +40,7 @@ export function App() {
     );
   }
   // Открытый ролик — прежний редактор кадра во весь экран; «Ролики» в его шапке возвращают в оболочку.
-  if (project !== null && host === null) return <Workspace pack={pack} />;
+  if (project !== null && host === null) return <><Workspace pack={pack} /><GenerationQuote /></>;
 
   return (
     <>
@@ -59,6 +60,7 @@ export function App() {
       </AppShell>
       {/* Seedance-промптер из canvas: тот же редактор кадра — попапом на весь экран поверх холста. */}
       {project !== null && host !== null && <WorkspaceOverlay pack={pack} />}
+      <GenerationQuote />
     </>
   );
 }

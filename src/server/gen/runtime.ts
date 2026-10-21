@@ -1,3 +1,4 @@
+import { createGenerationQuotes } from './quotes.ts';
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
 import { billedSeconds, estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenModel, type GenParams, type MediaKind, type ParamDef, type ProviderId, type SentRef } from '../../core/gen/models.ts';
@@ -30,6 +31,7 @@ export const SubmitRequestSchema = z.object({
   count: z.number().optional(),
   /** Сумма, которую владелец видел и подтвердил. Не совпала с оценкой — задача не создаётся. */
   confirmCredits: z.number().optional(),
+  quoteId: z.uuid().optional(),
   /** Согласие отправить рефы провайдеру. */
   refsConsent: z.boolean().optional(),
   origin: OriginSchema.optional(),
@@ -89,6 +91,7 @@ const pollDelay = (job: GenJob): number => Math.min(30_000, (job.kind === 'video
 export function createGenRuntime(options: GenRuntimeOptions) {
   const now = options.now ?? Date.now;
   const providers: Partial<Record<ProviderId, GenProvider>> = options.providers ?? { kie: createKieProvider(), higgsfield: createHiggsfieldProvider() };
+  const quotes = createGenerationQuotes(now);
   const jobs = createJobStore(options.dataDir);
   const library = createLibrary(options.dataDir, { fetch: options.fetch, now });
   const projects = createStore(options.dataDir);
@@ -184,10 +187,33 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     return (await measureRefs(model, parsed.data.refs)).measured;
   }
 
+  async function quote(raw: unknown) {
+    const request = SubmitRequestSchema.parse(raw);
+    const model = findModel(request.modelId);
+    if (!model?.quoteRequired || request.modelId !== model.id) throw new SubmitError('INVALID', 422, 'Выбери Seedance через Higgsfield.');
+    const provider = providerOf(model.provider);
+    if (!provider.hasKey()) throw new SubmitError('NO_KEY', 412, 'Нет ключа Higgsfield API.');
+    const refs: JobRef[] = (request.refs ?? []).map(r => ({ ...r, label: r.label ?? '', role: r.role ?? 'ref' }));
+    if (refs.length && request.refsConsent !== true) throw new SubmitError('REFS_CONSENT', 428, 'Для оценки подтверди передачу фото в Higgsfield. Генерация пока не запускается.');
+    const count = request.count ?? 1;
+    if (!Number.isInteger(count) || count < 1 || count > MAX_JOBS_PER_REQUEST) throw new SubmitError('BAD_COUNT', 422, 'За запуск от 1 до 4 вариантов.');
+    const params = { ...paramsFor(model, {}), ...(request.params ?? {}) };
+    const problems = validateGen(model, request.prompt, params, refs.map(r => r.role));
+    if (problems.length) throw new SubmitError('INVALID', 422, problems.join(' '));
+    const files = await Promise.all(refs.map(r => readRef(r.source)));
+    if (refs.some(r => r.role === 'start')) {
+      const size = imageSize(files[refs.findIndex(r => r.role === 'start')]!.bytes);
+      const [w, h] = String(params.aspectRatio).split(':').map(Number);
+      if (!size || Math.abs(size.width / size.height - w! / h!) > 0.02) throw new SubmitError('ASPECT_MISMATCH', 422, 'Формат стартового фото отличается от формата видео. Выбери совпадающий формат или явно измени размер фото.');
+    }
+    return quotes.prepare(provider, model, request.prompt, params, refs, count, files);
+  }
+
   async function submit(raw: unknown): Promise<{ jobs: GenJob[]; estimate: Estimate }> {
     const parsed = SubmitRequestSchema.safeParse(raw);
     if (!parsed.success) throw new SubmitError('BAD_REQUEST', 422, `Неверный запрос: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
     const request: SubmitRequest = parsed.data;
+    if (request.modelId === 'kie/seedance-2-5') throw new SubmitError('MODEL_MOVED', 409, 'Seedance теперь работает через Higgsfield. Обнови настройки и подтверди новую цену.');
     const model = findModel(request.modelId);
     if (model === undefined) throw new SubmitError('UNKNOWN_MODEL', 422, `Модели «${request.modelId}» нет в каталоге.`);
     const provider = providerOf(model.provider);
@@ -198,14 +224,14 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     // Параметры, которые меряет сервер (длинная сторона, секунды видео у апскейла): цена считается по ним, а не по словам клиента.
     const { measured: m, file: measuredFile } = await measureRefs(model, request.refs ?? []);
     const measured = m.params;
-    const params = paramsFor(model, { ...(request.params ?? {}), ...measured });
+    const params = model.quoteRequired ? { ...paramsFor(model, {}), ...(request.params ?? {}), ...measured } : paramsFor(model, { ...(request.params ?? {}), ...measured });
     const refs: JobRef[] = (request.refs ?? []).map((r) => ({ label: r.label ?? '', source: r.source, role: r.role ?? 'ref' }));
     const roles = refs.map((r) => r.role);
     const problems = validateGen(model, request.prompt, params, roles);
     if (problems.length > 0) throw new SubmitError('INVALID', 422, problems.join(' '), { problems });
 
-    const cost = estimate(model, params, count, refs.length);
-    if (request.confirmCredits !== cost.credits) {
+    let cost = estimate(model, params, count, refs.length);
+    if (!model.quoteRequired && request.confirmCredits !== cost.credits) {
       throw new SubmitError('COST_CHANGED', 409, `Стоимость — ${formatCost(cost)}, подтверждено другое. Проверь параметры и подтверди заново.`, { estimate: cost });
     }
     if (refs.length > 0 && request.refsConsent !== true) {
@@ -217,6 +243,8 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     // Файлы читаются до создания задач: отсутствующий реф не должен стоить ни кредита.
     // Первый файл уже прочитан замером — видео до 50 МБ второй раз в память не грузим.
     const files = await Promise.all(refs.map((r, i) => (i === 0 && measuredFile !== null ? measuredFile : readRef(r.source, model.refs.media))));
+    const quoted = model.quoteRequired ? await quotes.consume(request.quoteId, request.confirmCredits, provider, model, request.prompt, params, refs, count, files) : null;
+    if (quoted) cost = quoted.estimate;
     const sentPrompt = forProvider(model, request.prompt).prompt;
 
     // Конкретный seed у каждой задачи сохраняется в её параметрах — кадр можно повторить (решение 27).
@@ -267,9 +295,9 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     const fail = async (job: GenJob, code: string, messageRu: string): Promise<GenJob> => update(job, { status: 'failed', error: { code, messageRu }, finishedAt: iso() });
 
     // Рефы загружаются один раз на запуск и прямо перед задачей: у KIE загруженное живёт около суток.
-    const sent: SentRef[] = [];
+    const sent: SentRef[] = quoted?.sent ?? [];
     try {
-      for (const [i, file] of files.entries()) sent.push({ url: await provider.upload(file.bytes, file.fileName, file.mime), role: roles[i] ?? 'ref' });
+      if (!quoted) for (const [i, file] of files.entries()) sent.push({ url: await provider.upload(file.bytes, file.fileName, file.mime), role: roles[i] ?? 'ref' });
     } catch (error) {
       const messageRu = error instanceof GenError ? error.messageRu : 'Не удалось загрузить референсы.';
       return { jobs: await Promise.all(created.map((job) => fail(job, 'UPLOAD_FAILED', messageRu))), estimate: cost };
@@ -451,6 +479,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     sessions,
     styles,
     submit,
+    quote,
     measure,
     retry,
     status,

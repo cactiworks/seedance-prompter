@@ -1,3 +1,4 @@
+import { SeriesPreparation } from '../series/SeriesPreparation.tsx';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { activeCritiqueFindings } from '../../core/review.ts';
 import { pendingLabels } from '../../core/compose.ts';
@@ -230,6 +231,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
 
       <div className={styles.columns}>
         <div className={styles.form}>
+          {project.production && <SeriesPreparation key={project.slug} project={project} />}
           <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
             <div className={styles.aspect}>
               <Text variant="label" tone="secondary">Формат кадра</Text>

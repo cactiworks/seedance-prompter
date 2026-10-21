@@ -89,7 +89,7 @@ describe('нода canvas «Апскейл Topaz»', () => {
   });
 
   it('сумма flow включает апскейл по последнему замеру', () => {
-    expect(flowCost(graph(up({ params: { upscaleFactor: '2', sourceSec: 10, measuredFor } })))).toEqual({ credits: 80, usd: 0.4 });
+    expect(flowCost(graph(up({ params: { upscaleFactor: '2', sourceSec: 10, measuredFor } })))).toEqual({ credits: 80, usd: 0.4, unquoted: 1 });
   });
 });
 

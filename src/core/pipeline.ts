@@ -130,9 +130,12 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
   }
 
   const [ref1, ref2] = shot.locationRefs;
+  // A connected Production start frame already supplies the whole scene. Keep it out of the
+  // location-only template, whose verbatim instruction deliberately excludes people/poses.
+  const productionFrame = !!project.production && shot.panel.some(key => project.refs.some(r => r.key === key && r.kind === 'frame' && r.file));
   // В методе гайда без референса локации промпт не собирается («текст не заменяет референс»); в других режимах место
   // можно задать только словами — например, предметка в студии, — но об этом стоит знать.
-  if (ref1 === undefined && shooting.guide) blockers.push({ code: 'NO_LOCATION_REF', messageRu: 'Не выбран референс локации. Гайд: «текст не заменяет референс».' });
+  if (ref1 === undefined && shooting.guide && !productionFrame) blockers.push({ code: 'NO_LOCATION_REF', messageRu: 'Не выбран референс локации. Гайд: «текст не заменяет референс».' });
   if (project.world.place.ru.trim() === '' && project.world.place.en.trim() === '') blockers.push({ code: 'NO_PLACE', messageRu: 'Не описано место: заполни «Место» в секции «Локация и погода».' });
   for (const entity of project.entities) {
     if ((entity.nameRu ?? '').trim() === '' && entity.name.trim() === '') blockers.push({ code: 'ENTITY_NO_NAME', messageRu: `В «Герои и предметы» есть ${entity.kind === 'character' ? 'герой' : 'предмет'} без имени — назови или удали.` });
@@ -246,7 +249,7 @@ export function buildShot(project: Project, shot: Shot, pack: PackBundle): ShotB
   }
 
   // Вне метода гайда место можно задать только словами — но картинка надёжнее текста.
-  if (ref1 === undefined && !shooting.guide) {
+  if (ref1 === undefined && !shooting.guide && !productionFrame) {
     structural.push({ id: 'location', ruleId: 'NO_LOCATION_REF', family: 'refs', severity: 'warning', evidence: '', messageRu: 'Референса локации нет — место модель нарисует по словам, и в каждом прогоне оно будет другим.', fixHintRu: 'Гайд: «текст не заменяет референс». Добавь в панель картинку места с типом «Локация» — или подави находку, если место условное (студия, фон).' });
   }
   // Склейки с одним шотом — это тот же дубль, только с обещанием монтажа, которого не будет.

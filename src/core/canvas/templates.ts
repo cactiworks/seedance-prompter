@@ -98,13 +98,13 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
         newId,
         [
           { key: 'p1', type: 'prompt', x: 0, y: 0 },
-          { key: 'v1', type: 'generator', x: COL, y: 0, modelId: 'kie/seedance-2-5' },
+          { key: 'v1', type: 'generator', x: COL, y: 0, modelId: 'higgsfield/seedance-2-5' },
           { key: 'f1', type: 'frame', x: COL * 2, y: 0, which: 'last' },
           { key: 'p2', type: 'prompt', x: COL * 2, y: ROW },
-          { key: 'v2', type: 'generator', x: COL * 3, y: 0, modelId: 'kie/seedance-2-5' },
+          { key: 'v2', type: 'generator', x: COL * 3, y: 0, modelId: 'higgsfield/seedance-2-5' },
           { key: 'f2', type: 'frame', x: COL * 4, y: 0, which: 'last' },
           { key: 'p3', type: 'prompt', x: COL * 4, y: ROW },
-          { key: 'v3', type: 'generator', x: COL * 5, y: 0, modelId: 'kie/seedance-2-5' },
+          { key: 'v3', type: 'generator', x: COL * 5, y: 0, modelId: 'higgsfield/seedance-2-5' },
         ],
         [
           ['p1', 'v1', 'prompt'],

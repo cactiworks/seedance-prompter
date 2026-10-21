@@ -156,7 +156,7 @@ Bearer/API-key/JWT и URL убираются перед показом. Точн
 ## API
 
 Группы маршрутов в `src/server/app.ts`: `projects`, `llm/*` (fields, plan, write, critique, fix,
-vision, prompter, region-edit), `gen/*` (jobs, measure, status, styles), `library/*` (файлы, папки,
+vision, prompter, region-edit), `gen/*` (jobs, quote, measure, status, styles), `library/*` (файлы, папки,
 избранное, кадр, обрезка, импорт, выгрузка), `canvas/flows`, `studio/sessions`, `media/resize`,
 `moodboards`, `verdicts`, `learnings`, `calibration`, `prompter/*`, `uploads`, `packs/:id`, `health`,
 `production` (список/создание), `production/:id`, `production/:id/actions`, `production/:id/manifest`.
@@ -366,3 +366,31 @@ Netlify HTTPS proxy → Caddy с Basic Auth на всех путях → loopbac
 static root. Серверный launcher и эксплуатация — `deploy/README.md`.
 
 Story shots сохраняют scriptInstruction: точная цитата конкретной заказанной сцены либо пустая строка для свободной иллюстрации. scriptExcerpt остаётся привязкой к исходной фразе; несколько отдельных кадров могут иметь общую цитату. Валидаторы проверяют точность цитат и покрытие prompts, но не доказывают семантическую полноту LLM-плана. Явные ракурсы/возвраты не отбрасываются как случайные дубли. B-roll остаётся 1–8.
+
+
+## Production → Canvas и подготовка формы (21.10.2026)
+
+`core/production/canvas.ts` строит ветки принятых фото; `server/production/canvas.ts` выполняет
+идемпотентный handoff и очередь подготовки. `Flow.production` связывает серию; node/draft production
+хранят run/shot/artifact IDs. Deterministic Flow ID и flow lock предотвращают дубликаты. Drafts создаются
+до публикации графа. Повтор добавляет только новые фото, не меняет расположение/черновики.
+Копирование/импорт схемы очищает production связь; старые обычные flows ведут себя по-прежнему.
+
+POST `/api/production/:id/canvas` создаёт/дополняет Flow. POST `/api/series-prompter/prepare`
+принимает targets slug/rev, consent и optional reset; GET `/api/series-prompter/:slug` читает состояние,
+POST `/:slug/restore` восстанавливает предыдущую форму с проверкой rev. Каждый запуск использует
+Runner инициатора. Durable state — `data/series-preparation/<slug>.json`: queued/fill/critic/repair/recheck,
+ready/review/failed/interrupted, issues и context hash. После рестарта никакого автоматического resume.
+
+`SeriesFormSchema` задаёт применимые поля; `core/production/seriesForm.ts` проверяет ручные изменения,
+metadata английских производных, compiler/linter и references. Последняя агентская форма и предыдущая
+сохраняются в project.seriesFill; baseline отмечает исходную форму. Context включает весь план/сценарий,
+паспорта сцен и prompts; реальное accepted photo передаётся vision-входом, контекст и bytes хешируются.
+Переподключённая нода/смена accepted photo требуют явного разбора. Перед сохранением повторно проверяются
+контекст и rev; поздний результат не перезаписывает изменения. Изменение формы/фото/контекста делает
+проверку устаревшей. Все warning линтера видны вместе с критиком; максимум одна коррекция. Ошибка
+критика сохраняет подготовленную форму, но получает technical failure. Media runtime роли недоступен.
+
+`server/gen/quotes.ts` хранит одноразовые account quotes в памяти; рестарт требует новой оценки.
+`GenerationQuote` используется общим genStore.run во всех entrypoints Seedance. Attempt создаётся
+после подтверждения quote; отмена окна не добавляет фиктивную попытку.

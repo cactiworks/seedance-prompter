@@ -66,6 +66,13 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
       catch { throw new GenError('NETWORK', 'Не удалось загрузить reference сцены в Higgsfield. Генерация не отправлена.'); }
     },
 
+    async estimate(endpoint, input) {
+      const body = await call(`/estimate/${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+      const credits = Number(body.credits); const usd = Number(body.usd);
+      if (body.credits == null || body.usd == null || !Number.isFinite(credits) || !Number.isFinite(usd) || credits <= 0 || usd <= 0) throw new GenError('PROVIDER', 'Higgsfield не вернул корректную цену. Генерация не отправлена.');
+      return { credits, usd };
+    },
+
     async submit(endpoint, input) {
       const body = await call(`/${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
       if (typeof body.request_id !== 'string' || body.request_id === '') throw new GenError('PROVIDER', 'Higgsfield не вернул request_id.');

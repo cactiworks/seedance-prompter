@@ -1,3 +1,4 @@
+import { currentModelId } from '../gen/models.ts';
 import { z } from 'zod';
 import { GenParamsSchema, RefSourceSchema } from './media.ts';
 
@@ -21,6 +22,7 @@ export type InputPort = (typeof INPUT_PORTS)[number];
 
 export const CanvasNodeSchema = z.object({
   id: z.string().min(1),
+  production: z.object({ runId: z.string(), shotId: z.string(), artifactId: z.string() }).optional(),
   stale: z.boolean().optional(),
   runInputFingerprint: z.string().optional(),
   type: z.enum(CANVAS_NODE_TYPES),
@@ -33,7 +35,7 @@ export const CanvasNodeSchema = z.object({
   label: z.string().default(''),
   /** generator */
   kind: z.enum(['image', 'video']).default('image'),
-  modelId: z.string().default(''),
+  modelId: z.string().default('').transform(currentModelId),
   params: GenParamsSchema.default({}),
   /** Запуски ноды по порядку; выбранный вариант уходит дальше по графу. */
   jobIds: z.array(z.string()).default([]),
@@ -63,6 +65,7 @@ export const CanvasEdgeSchema = z.object({ id: z.string(), from: z.string(), to:
 export type CanvasEdge = z.infer<typeof CanvasEdgeSchema>;
 
 export const FlowSchema = z.object({
+  production: z.object({ runId: z.string(), title: z.string() }).optional(),
   id: z.string(),
   name: z.string(),
   rev: z.number().int().nonnegative().optional(),

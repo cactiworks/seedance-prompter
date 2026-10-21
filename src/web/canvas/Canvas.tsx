@@ -1,3 +1,4 @@
+import { SeriesFlow } from '../series/SeriesFlow.tsx';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { z } from 'zod';
@@ -36,9 +37,9 @@ export function FlowList() {
       </Text>
       <nav className={styles.flowList} aria-label="Мои холсты">
         {flows.map((f) => (
-          <div key={f.id} className={`${styles.flowItem} ${f.id === flow?.id ? styles.flowItemActive : ''}`}>
+          <div key={f.id} className={`${styles.flowItem} ${f.production ? styles.productionFlow : ''} ${f.id === flow?.id ? styles.flowItemActive : ''}`}>
             <button type="button" className={styles.flowLabel} aria-current={f.id === flow?.id ? 'page' : undefined} onClick={() => void openFlow(f.id)}>
-              <span>{f.name}</span>
+              <span>{f.name}{f.production && <Text as="span" variant="caption" tone="secondary" className={styles.productionBadge}>Из производства</Text>}</span>
               <Text as="span" variant="caption" tone="tertiary">
                 {f.nodes}
               </Text>
@@ -433,7 +434,7 @@ export function Canvas() {
       FlowSchema.parse({ ...parsed, id: 'import', createdAt: '', updatedAt: '' });
       // Новые id: импорт того же flow второй раз не должен делить с оригиналом ноды и черновики Seedance-промптеров.
       const ids = new Map(parsed.nodes.map((n) => [n.id, newId('n')]));
-      const nodes = parsed.nodes.map((n) => ({ ...n, id: ids.get(n.id) ?? n.id, ...cloneSeedance(n) }));
+      const nodes = parsed.nodes.map((n) => ({ ...n, production: undefined, id: ids.get(n.id) ?? n.id, ...cloneSeedance(n) }));
       const edges = parsed.edges.flatMap((e) => {
         const from = ids.get(e.from);
         const to = ids.get(e.to);
@@ -516,7 +517,7 @@ export function Canvas() {
           </div>
         </details>
       </header>
-
+      {flow.production && <SeriesFlow key={flow.id} flow={flow} />}
       <div
         ref={board}
         className={styles.board}
@@ -655,6 +656,7 @@ export function Canvas() {
         )}
         {/* Плавающая группа: история, масштаб и оценка генераций. */}
         <div className={styles.zoom}>
+          {cost.unquoted > 0 && <Text variant="caption" tone="secondary">Seedance: цена перед запуском · {cost.unquoted}</Text>}
           {cost.usd > 0 && (
             <span className={styles.cost} title="Оценка одного запуска каждого генератора. Каждый блок запускается отдельно, с ценой на кнопке.">
               <Text as="span" variant="caption" tone="secondary">

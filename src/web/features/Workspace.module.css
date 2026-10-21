@@ -75,6 +75,7 @@
   top: var(--lab-space-6);
   z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--lab-space-6);
   max-width: 96rem;
@@ -442,6 +443,51 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--lab-space-3);
+}
+
+.aspect > div {
+  max-width: 100%;
+  flex-wrap: wrap;
+  border-radius: var(--lab-radius-xl);
+}
+
+@media (width <= 48rem) {
+  .topbar {
+    position: static;
+    border-radius: var(--lab-radius-xl);
+    padding: var(--lab-space-6);
+  }
+
+  .spacer {
+    display: none;
+  }
+
+  .sectionBody {
+    padding-left: 0;
+  }
+}
+
+@media (width <= 36rem) {
+  .shell {
+    padding-inline: var(--lab-space-6);
+  }
+
+  .section {
+    padding: var(--lab-space-8);
+  }
+
+  .kits,
+  .duration,
+  .twoCols,
+  .addRow,
+  .entityRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .copyRow,
+  .segmentHead {
+    flex-wrap: wrap;
+  }
 }
 
 /* что агент сделал из поля — только чтение */

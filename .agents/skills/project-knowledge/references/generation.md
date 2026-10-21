@@ -12,17 +12,15 @@ pilot завершён: 3 Soul 2 и 1 Seedream; разрешение на вид
 ## Провайдеры
 
 KIE и Higgsfield используются только для медиа. Текстовые и визуальные LLM-агенты — Codex / OpenAI
-(см. [architecture.md](architecture.md)). Таблица ниже описывает текущий каталог. Для планируемого
-модуля производства владелец выбрал Higgsfield для Soul 2, Soul Cinema и Seedance 2.5; KIE — для
-Seedream и upscale. Расширение каталога и эти новые маршруты ещё не реализованы.
+(см. [architecture.md](architecture.md)). Таблица ниже описывает текущий каталог. Soul 2 и новые Seedance 2.5 используют Higgsfield; Seedream и upscale — KIE. Soul Cinema пока не добавлен.
 
 
 Набор моделей задал владелец (решение 24); ключи — в Keychain на Mac или приватных credential files на Linux, имена записей — [patterns.md](patterns.md).
 
 | провайдер | что |
 |---|---|
-| KIE | всё, кроме Soul 2: GPT Image 2.5, Seedream 5 Pro, Kling 3.0, Seedance 2.5, Topaz |
-| Higgsfield API (`api.higgsfield.ai`) | Soul 2 и готовые мудборды (`style_id`, список — с API, кеш на час); ключ в формате `KEY_ID:KEY_SECRET` |
+| KIE | GPT Image 2.5, Seedream 5 Pro, Kling 3.0, Topaz; исторические jobs Seedance |
+| Higgsfield API (`api.higgsfield.ai`) | Soul 2, Seedance 2.5 и готовые мудборды (`style_id`, список — с API, кеш на час); ключ в формате `KEY_ID:KEY_SECRET` |
 
 - Higgsfield API — отдельный продукт с балансом в USD, мимо подписки Plus. Soul ID выбирается по имени
   в общем picker Studio, Canvas и Production; из него же доступны создание и синхронизация списка.
@@ -43,7 +41,7 @@ Seedream и upscale. Расширение каталога и эти новые 
 
 ## Гейт стоимости (на сервере)
 
-- Задача без `confirmCredits`, равного оценке каталога, → 409 `COST_CHANGED`.
+- Задача без `confirmCredits`, равного оценке, → 409 `COST_CHANGED`. Для Seedance оценка приходит из Higgsfield account estimate; для остальных моделей — из каталога.
 - Референсы уходят провайдеру только с `refsConsent`, иначе 428: KIE передаёт запросы дальше (fal,
   replicate), на рефах бывает лицо владельца.
 - Не больше 4 задач за запрос. Фактическое списание (`creditsConsumed`) пишется в задачу.
@@ -72,15 +70,28 @@ Seedream и upscale. Расширение каталога и эти новые 
 - Seed есть только у Soul 2: сервер всегда отправляет конкретное число и хранит его — кадр повторяется
   через «Использовать настройки»; «Ещё раз» берёт новый (решение 27).
 
-## Seedance 2.5 через KIE
+## Seedance 2.5 через Higgsfield (21.10.2026)
 
-Факты о самой модели — `docs/research/seedance-2.5-facts.md`.
+`higgsfield/seedance-2-5`: роли выбирают `bytedance/seedance-2.5/{text-to-video,image-to-video,reference-to-video}`.
+I2V передаёт `image_url` и необязательный `end_image_url`; reference — `image_urls` в порядке @ImageN.
+Start/end нельзя смешивать с обычными refs. I2V сохраняет пропорции исходника; несовпадающий выбранный
+формат отклоняется до upload/submit. Для text/reference 2:3 и 3:2 недоступны. По умолчанию 480p,
+4–30 секунд, звук включён; Production дополнительно задаёт отсутствие речи/музыки в prompt.
 
-- Порядок `reference_image_urls` = N в `@ImageN`; номер больше числа рефов → отказ до отправки
-  (решение 23).
-- Черновик — 480p по умолчанию каталога; 720p и 1080p выбираются явно для финала (решение 38).
-- Seed у Seedance на KIE нет: перегенерация в другом разрешении даёт другой дубль. Тот же дубль доводит
-  до финала только апскейл видео Topaz (решение 39).
+POST `/api/gen/quote` проверяет входы и consent, загружает refs, получает credits/usd из
+`/estimate/{endpoint}`. Quote живёт 10 минут, связывает prompt/параметры/роли/файлы/число вариантов.
+Submit потребляет quote один раз и снова оценивает те же входы: изменились credits или USD —
+новое подтверждение. Нет оценки — нет jobs; неизвестная отправка не повторяется. Preview статической
+цены не используется для Seedance. Canvas показывает, что цена будет известна перед запуском.
+
+Legacy model ID переводится только в будущих настройках/импорте/шаблонах. Исторические KIE jobs,
+стоимость и результаты неизменны, active jobs опрашиваются через KIE. Прямой новый submit со старым
+ID отклоняется; fallback отсутствует. Production запускает по одному видео из Prompter.
+
+Источники: [I2V API](https://open.higgsfield.ai/models/bytedance/seedance-2.5/image-to-video/api-reference),
+[reference API](https://open.higgsfield.ai/models/bytedance/seedance-2.5/reference-to-video/api-reference),
+[account estimate](https://docs.higgsfield.ai/docs/concepts/billing-and-retention). Сверено 21.10.2026;
+реальный платный доступ и качество подтверждает только прогон владельца.
 
 ## Бесплатно и локально
 
@@ -186,7 +197,7 @@ POLL_TIMEOUT продолжают тот же job. Полный цикл про�
 Креативные B-roll используют тот же photos маршрут: master и независимые Soul 2 T2I, выбранный
 Soul ID, проверка внешности/master/кадров, ручной photo milestone. Новый contentMode не добавляет
 провайдеров и не обходит cost/refs consent; ни видео, ни upscale после milestone не запускаются.
-Плановые motion prompts — только текст для будущего этапа. Выбор и повтор невыбранных работают так же, как в story; обязательных автоправок нет.
+Плановые motion prompts входят в контекст подготовки связанного Canvas Prompter. Выбор и повтор невыбранных работают так же, как в story; обязательных автоправок нет.
 
 
 Новое согласие на master/series QC включает общий вид и четыре фрагмента каждой фотографии,

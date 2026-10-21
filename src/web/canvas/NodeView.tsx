@@ -1,3 +1,4 @@
+import { SeriesNodeStatus } from '../series/SeriesPreparation.tsx';
 import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
@@ -300,6 +301,7 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
 
   return (
     <>
+      {node.production && <SeriesNodeStatus slug={node.slug} />}
       <Text variant="caption" tone={node.text === '' ? 'tertiary' : 'secondary'} className={styles.seedanceSummary}>
         {node.text === '' ? 'Полный конструктор кадра: съёмка, камера, референсы по номерам, сценарий по шотам, агенты, проверка и генерация Seedance 2.5.' : node.text}
       </Text>

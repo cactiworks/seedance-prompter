@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { createProductionCanvas } from './production/canvas.ts';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -159,6 +161,7 @@ export function createApp(options: AppOptions) {
   downloadRoutes(app, options.dataDir);
 
   app.onError((error, c) => {
+    if (error instanceof z.ZodError) return c.json({ error: 'INVALID', messageRu: 'Некорректные поля запроса.', details: error.issues }, 422);
     if (error instanceof AccountError) return c.json({ error: 'ACCOUNT_REQUIRED', messageRu: error.message }, error.status);
     if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
     if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
@@ -170,7 +173,25 @@ export function createApp(options: AppOptions) {
 
   const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
   app.route('/api/characters', characterRoutes(characters));
-  app.route('/api/production', productionRoutes(options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor, gen }), characters, options.accounts));
+  const production = options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor, gen });
+  app.route('/api/production', productionRoutes(production, characters, options.accounts));
+  const seriesCanvas = createProductionCanvas({ ...options, production, gen, flows, store, pack: () => loadPack(options.rootDir, 'cinema-doc') });
+  app.post('/api/production/:id/canvas', async c => c.json(await seriesCanvas.handoff(c.req.param('id'))));
+  app.get('/api/series-prompter/:slug', async c => c.json(await seriesCanvas.inspect(c.req.param('slug'))));
+  app.post('/api/series-prompter/:slug/restore', async c => {
+    const body = z.object({ rev: z.number().int().nonnegative() }).parse(await c.req.json());
+    return c.json(await seriesCanvas.restore(c.req.param('slug'), body.rev));
+  });
+  app.post('/api/series-prompter/prepare', async c => {
+    const body = z.object({ targets: z.array(z.object({ slug: z.string(), rev: z.number().int().nonnegative() })).min(1).max(100), consent: z.literal(true), reset: z.boolean().optional() }).parse(await c.req.json());
+    const runner = await runFor(c);
+    const results = [];
+    for (const target of body.targets) {
+      try { results.push({ slug: target.slug, state: await seriesCanvas.start(target.slug, target.rev, runner, body.reset) }); }
+      catch (e) { results.push({ slug:target.slug, error: e instanceof StoreError ? e.message : 'Не удалось начать подготовку.' }); }
+    }
+    return c.json({ results }, 202);
+  });
 
   const routes = app
     .get('/api/health', (c) => c.json({ ok: true, name: APP_NAME, version: APP_VERSION, revision: process.env.SP_RELEASE ?? null }))
@@ -183,6 +204,7 @@ export function createApp(options: AppOptions) {
       // Копия ноды Seedance-промптера в canvas: черновик продолжается с того же места, но попытки — история оригинала.
       if (typeof body.copyFrom === 'string' && body.copyFrom !== '') {
         const source = await store.read(body.copyFrom);
+        delete source.production; delete source.seriesFill; delete source.seriesBaseline;
         const project = await store.write(slug, { ...source, slug, title, rev: 0, shots: source.shots.map((shot) => ({ ...shot, attempts: [] })) }, null);
         await store.copyRefs(source.slug, slug);
         return c.json(project, 201);
@@ -458,7 +480,7 @@ export function createApp(options: AppOptions) {
       const kind = body.kind === 'video' ? 'video' : 'image';
       const ideaRu = typeof body.ideaRu === 'string' ? body.ideaRu.trim() : '';
       if (ideaRu === '') return c.json({ error: 'EMPTY', messageRu: 'Опиши идею по-русски — хотя бы одним предложением.' }, 422);
-      const modelId = typeof body.modelId === 'string' ? body.modelId : 'auto';
+      const modelId = typeof body.modelId === 'string' ? (findModel(body.modelId)?.id ?? body.modelId) : 'auto';
       const candidates = modelId === 'auto' ? modelsOf(kind) : modelsOf(kind).filter((m) => m.id === modelId);
       if (candidates.length === 0) return c.json({ error: 'NO_MODEL', messageRu: 'Такой модели нет в студии.' }, 422);
       // Референсы: роль и комментарий владельца + уменьшенная копия (браузер делает JPEG ≤1568 px) в том же порядке.
@@ -489,7 +511,7 @@ export function createApp(options: AppOptions) {
         readFileSync(path.join(dir, 'system.md'), 'utf8'),
         readFileSync(path.join(dir, 'routing.md'), 'utf8'),
         // Правила владельца из калибровки дописываются в карточку — они главнее заявлений вендора.
-        candidates.map((m) => ({ modelId: m.id, text: withLearnings(readFileSync(path.join(dir, 'models', cardFile(m.id)), 'utf8'), learnings.filter((l) => l.modelId === m.id)) })),
+        candidates.map((m) => ({ modelId: m.id, text: withLearnings(readFileSync(path.join(dir, 'models', cardFile(m.id)), 'utf8'), learnings.filter((l) => findModel(l.modelId)?.id === m.id)) })),
       );
       // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
       const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
@@ -521,6 +543,7 @@ export function createApp(options: AppOptions) {
     // Готовые мудборды провайдера (Soul 2 — Higgsfield). Нет ключа — пустой список, форма работает без стиля.
     .get('/api/gen/styles', async (c) => c.json(await gen.styles(c.req.query('provider') === 'higgsfield' ? 'higgsfield' : 'kie')))
     // Только по клику: сервер сверяет подтверждённую сумму с оценкой и согласие на отправку рефов.
+    .post('/api/gen/quote', async c => c.json(await gen.quote(await c.req.json())))
     .post('/api/gen/jobs', async (c) => c.json(await gen.submit(await c.req.json()), 202))
     // Замер входа апскейла (длинная сторона, секунды видео) — тот же, что при запуске: цена на кнопке = гейт. Бесплатно, локально.
     .post('/api/gen/measure', async (c) => c.json(await gen.measure(await c.req.json())))

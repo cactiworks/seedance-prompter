@@ -23,6 +23,7 @@ export interface FlowListItem {
   name: string;
   nodes: number;
   updatedAt: string;
+  production?: Flow['production'];
 }
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
@@ -127,7 +128,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         try {
           const saved = await json<Flow>(await fetch(`/api/canvas/flows/${snapshot.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(outgoing), keepalive: true }));
           revisions.set(snapshot.id, saved.rev ?? outgoing.rev + 1);
-          set((state) => ({ flows: state.flows.map((item) => item.id === saved.id ? { id: saved.id, name: saved.name, nodes: saved.nodes.length, updatedAt: saved.updatedAt } : item) }));
+          set((state) => ({ flows: state.flows.map((item) => item.id === saved.id ? { id: saved.id, name: saved.name, nodes: saved.nodes.length, updatedAt: saved.updatedAt, production: saved.production } : item) }));
           if (pending === snapshot) {
             pending = null;
             try { localStorage.removeItem(draftKey(snapshot.id)); } catch { /* storage unavailable */ }
@@ -162,7 +163,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
   };
 
   /** Копия ноды без результатов: запуски принадлежат исходной ноде. Seedance-промптер получит копию черновика при открытии. */
-  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ...cloneSeedance(node) });
+  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, production: undefined, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ...cloneSeedance(node) });
 
   /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
   const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {

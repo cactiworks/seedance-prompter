@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const SCHEMA_VERSION = 1;
 
 /** Форматы, которые принимает Seedance 2.5 (fal API, 20.09.2026). «auto» не берём: формула гайда называет формат словами. */
-export const ASPECT_RATIOS = ['9:16', '3:4', '1:1', '4:3', '16:9', '21:9'] as const;
+export const ASPECT_RATIOS = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9', '21:9'] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
 const key = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, 'ключ: латиница, цифры, дефис');
@@ -215,7 +215,19 @@ export const ShotSchema = z.object({
 });
 export type Shot = z.infer<typeof ShotSchema>;
 
+export const WorldSchema = z.object({ place: TextUnitSchema, useOnlyEn: z.string().default('the space, architecture, ground, water, sky, and weather'), weather: TextUnitSchema });
+export const SeriesFormSchema = z.object({
+  world: WorldSchema,
+  entities: z.array(EntitySchema),
+  states: z.array(StateSchema),
+  shot: ShotSchema.omit({ id: true, panel: true, locationRefs: true, attempts: true, critique: true, suppressed: true }),
+});
+export type SeriesForm = z.infer<typeof SeriesFormSchema>;
+
 export const ProjectSchema = z.object({
+  production: z.object({ runId: z.string(), shotId: z.string(), artifactId: z.string(), flowId: z.string(), nodeId: z.string() }).optional(),
+  seriesBaseline: SeriesFormSchema.optional(),
+  seriesFill: z.object({ critique: CritiqueSchema.nullable().optional(), lastApplied: SeriesFormSchema, previous: SeriesFormSchema, contextHash: z.string(), formHash: z.string() }).optional(),
   schemaVersion: z.literal(SCHEMA_VERSION),
   rev: z.number().int().nonnegative().default(0),
   slug: key,

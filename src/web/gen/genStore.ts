@@ -1,3 +1,4 @@
+import { confirmGenerationQuote } from './GenerationQuote.tsx';
 import { remoteStudio, downloadFile } from '../download.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
@@ -225,7 +226,7 @@ interface GenState {
   /** «Ещё раз» — тот же запрос одной генерацией; цена видна на кнопке. */
   regenerate: (job: GenJob) => Promise<void>;
   /** Запуск из canvas: готовое тело запроса (промпт, параметры, картинки и подтверждённая цена). */
-  run: (body: Record<string, unknown>) => Promise<GenJob[]>;
+  run: (body: Record<string, unknown>, beforeSubmit?: () => void) => Promise<GenJob[]>;
 }
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -519,7 +520,10 @@ export const useGen = create<GenState>((set, get) => {
       }).catch(() => { /* run exposes the error in the shared task status. */ });
     },
 
-    run: async (body) => {
+    run: async (body, beforeSubmit) => {
+      const model = findModel(String(body.modelId));
+      if (model?.quoteRequired) body = await confirmGenerationQuote({ ...body, modelId: model.id });
+      beforeSubmit?.();
       if (body.refsConsent === true) rememberConsent();
       set((s) => ({ submitting: s.submitting + 1, submissionError: null }));
       // Start observing before submit returns: the server may already have a submitting job.

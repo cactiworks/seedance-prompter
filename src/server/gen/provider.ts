@@ -22,6 +22,7 @@ export interface GenProvider {
   upload(bytes: Uint8Array, fileName: string, mime: string): Promise<string>;
   /** Создать задачу; возвращает taskId. Повторять вслепую нельзя: идемпотентности нет. */
   submit(providerModel: string, input: Record<string, unknown>): Promise<string>;
+  estimate?(endpoint: string, input: Record<string, unknown>): Promise<{ credits: number; usd: number }>;
   poll(taskId: string): Promise<PollResult>;
   /** Запасная ссылка на результат, если прямая не отдаёт файл; null — не получилось. */
   freshUrl(url: string): Promise<string | null>;

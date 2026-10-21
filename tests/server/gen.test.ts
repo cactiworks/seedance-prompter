@@ -63,7 +63,7 @@ function setup(patch: Partial<GenProvider> = {}, dataDir = mkdtempSync(path.join
   const clock = { now: () => t, advance: (ms: number) => (t += ms) };
   const mock = mockProvider(patch);
   const cdn = mediaServer();
-  const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider }, fetch: cdn.fetch, now: clock.now });
+  const gen = createGenRuntime({ dataDir, providers: { kie: mock.provider, higgsfield: { ...mock.provider, id: 'higgsfield', estimate: async () => ({ credits:112, usd:0.56 }) } }, fetch: cdn.fetch, now: clock.now });
   const app = createApp({ ...mediaStubs, rootDir: ROOT, dataDir, gen, reveal: false });
   const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
   return { app, gen, mock, cdn, clock, dataDir, post };
@@ -112,22 +112,24 @@ describe('жизненный цикл: задача → опрос сервер�
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
     await app.request('/api/projects/demo/refs/hero.png', { method: 'PUT', headers: { host, [CLIENT_HEADER]: '1' }, body: png });
 
-    const res = await post('/api/gen/jobs', {
-      modelId: 'kie/seedance-2-5',
+    const request = {
+      modelId: 'higgsfield/seedance-2-5',
       prompt: 'Hero <<<image_1>>> walks.',
       params: { resolution: '480p', durationSec: 4, aspectRatio: '9:16' },
       refs: [{ label: 'Герой', source: { type: 'projectRef', slug: 'demo', file: 'hero.png?v=123' } }],
       confirmCredits: 112,
       refsConsent: true,
       origin: { projectSlug: 'demo', shotId: 's1', attemptN: 1 },
-    });
+    };
+    const quote = await (await post('/api/gen/quote', request)).json();
+    const res = await post('/api/gen/jobs', { ...request, quoteId:quote.quoteId });
     expect(res.status).toBe(202);
     const [job] = ((await res.json()) as { jobs: GenJob[] }).jobs;
     expect(job).toMatchObject({ status: 'queued', taskId: 'task-1', prompt: 'Hero @Image1 walks.', estimateCredits: 112 });
     expect(mock.calls.upload).toEqual([{ fileName: 'hero.png', mime: 'image/png', size: 8 }]);
     expect(mock.calls.submit[0]).toEqual({
-      model: 'bytedance/seedance-2-5',
-      input: { prompt: 'Hero @Image1 walks.', resolution: '480p', aspect_ratio: '9:16', duration: 4, generate_audio: true, reference_image_urls: ['https://up.example/hero.png'] },
+      model: 'bytedance/seedance-2.5/reference-to-video',
+      input: { prompt: 'Hero @Image1 walks.', resolution: '480p', aspect_ratio: '9:16', duration: 4, generate_audio: true, image_urls: ['https://up.example/hero.png'], output_format:'mp4' },
     });
 
     await gen.tick();
@@ -270,8 +272,8 @@ describe('перезапуск сервера', () => {
 describe('GET /api/gen/status', () => {
   it('баланс — только по запросу', async () => {
     const { app } = setup();
-    expect(await (await app.request('/api/gen/status', { headers: { host } })).json()).toEqual({ kie: { hasKey: true } });
-    expect(await (await app.request('/api/gen/status?balance=1', { headers: { host } })).json()).toEqual({ kie: { hasKey: true, balance: 1234 } });
+    expect(await (await app.request('/api/gen/status', { headers: { host } })).json()).toEqual({ kie: { hasKey: true }, higgsfield:{ hasKey:true } });
+    expect(await (await app.request('/api/gen/status?balance=1', { headers: { host } })).json()).toEqual({ kie: { hasKey: true, balance: 1234 }, higgsfield:{ hasKey:true, balance:1234 } });
   });
 });
 
@@ -429,7 +431,7 @@ describe('кадр из видео (ffmpeg)', () => {
         writeFileSync(args.at(-1) as string, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7]));
       },
     });
-    await app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify({ modelId: 'kie/seedance-2-5', prompt: 'x', params: { resolution: '480p', durationSec: 4 }, confirmCredits: 112 }) });
+    await app.request('/api/gen/jobs', { method: 'POST', headers, body: JSON.stringify({ modelId: 'kie/kling-3', prompt: 'x', params: { durationSec: 4 }, confirmCredits: 56 }) });
     cdn.files.set('https://cdn.example/v.mp4', { bytes: new Uint8Array([1, 2, 3]), type: 'video/mp4' });
     mock.queue.push(success(['https://cdn.example/v.mp4'], 112));
     t += 10_000;
@@ -517,7 +519,7 @@ describe('инструменты: обрезка (ffmpeg) и апскейл Topa
       },
     });
     const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
-    await post('/api/gen/jobs', { modelId: 'kie/seedance-2-5', prompt: 'x', params: { resolution: '480p', durationSec: 4 }, confirmCredits: 112 });
+    await post('/api/gen/jobs', { modelId: 'kie/kling-3', prompt: 'x', params: { durationSec: 4 }, confirmCredits: 56 });
     cdn.files.set('https://cdn.example/v.mp4', { bytes: new Uint8Array([1, 2, 3]), type: 'video/mp4' });
     mock.queue.push(success(['https://cdn.example/v.mp4'], 112));
     t += 10_000;
@@ -560,7 +562,7 @@ describe('обрезка видео по времени (ffmpeg)', () => {
       },
     });
     const post = (url: string, body: unknown) => app.request(url, { method: 'POST', headers, body: JSON.stringify(body) });
-    await post('/api/gen/jobs', { modelId: 'kie/seedance-2-5', prompt: 'x', params: { resolution: '480p', durationSec: 4 }, confirmCredits: 112 });
+    await post('/api/gen/jobs', { modelId: 'kie/kling-3', prompt: 'x', params: { durationSec: 4 }, confirmCredits: 56 });
     cdn.files.set('https://cdn.example/v.mp4', { bytes: new Uint8Array([1, 2, 3]), type: 'video/mp4' });
     mock.queue.push(success(['https://cdn.example/v.mp4'], 112));
     t += 10_000;

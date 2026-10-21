@@ -31,9 +31,10 @@ describe('каталог: набор владельца 27.09', () => {
 });
 
 describe('цена по прайсу 27.09.2026', () => {
-  it('Seedance 2.5 — кредиты в секунду по разрешению', () => {
-    expect(estimate(seedance, paramsFor(seedance, { resolution: '720p', durationSec: 5 }))).toEqual({ credits: 315, usd: 1.575, unitRu: 'кр' });
-    expect(estimate(seedance, paramsFor(seedance, { resolution: '480p', durationSec: 4 })).credits).toBe(112);
+  it('Seedance требует серверную оценку и не показывается бесплатным', () => {
+    expect(estimate(seedance, defaults(seedance)).requiresQuote).toBe(true);
+    expect(formatCost(estimate(seedance, defaults(seedance)))).toContain('рассчитать цену');
+    expect(seedance.id).toBe('higgsfield/seedance-2-5');
   });
 
   it('Kling 3.0 — режим × звук × секунды', () => {
@@ -86,9 +87,9 @@ describe('тело запроса и id модели', () => {
     });
   });
 
-  it('Seedance 2.5: кадры → first/last_frame_url, референсы → reference_image_urls', () => {
-    expect(seedance.input('x', defaults(seedance), [ref('https://s', 'start'), ref('https://e', 'end')])).toMatchObject({ first_frame_url: 'https://s', last_frame_url: 'https://e' });
-    expect(seedance.input('x', defaults(seedance), [ref('https://r')])).toMatchObject({ reference_image_urls: ['https://r'] });
+  it('Seedance 2.5: кадры → image_url/end_image_url, референсы → image_urls', () => {
+    expect(seedance.input('x', defaults(seedance), [ref('https://s', 'start'), ref('https://e', 'end')])).toMatchObject({ image_url: 'https://s', end_image_url: 'https://e' });
+    expect(seedance.input('x', defaults(seedance), [ref('https://r')])).toMatchObject({ image_urls: ['https://r'] });
   });
 
   it('Soul 2: Soul ID со strength, seed не передаётся, умолчания явно', () => {

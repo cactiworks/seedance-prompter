@@ -63,7 +63,7 @@ generations, [provisional] no official guide exists — treat as a starting poin
 4. Choose parameters from the candidate's options only. Aspect ratio follows the idea: social / reels /
    stories → 9:16; a poster → 3:4 or 2:3; a scene → 16:9 unless the idea implies vertical. Resolution: the
    model's sensible default unless the idea needs more (small text, print). For video, duration and
-   resolution drive the price (Seedance 1080p costs 2.5× more than 720p per second): keep the defaults
+   resolution affect the price (Seedance pricing is estimated by Higgsfield for the exact inputs and account): keep the defaults
    unless the idea states a length or quality. Parameters not listed for a candidate (seed, Soul ID, prompt
    enhancement) belong to the owner — do not mention them.
 5. For Soul 2 pick a moodboard from `styleOptions` when one clearly matches the look the owner describes

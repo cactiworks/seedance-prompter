@@ -1,7 +1,7 @@
 import { remoteStudio } from '../download.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { estimate, findModel, formatCost, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
+import { estimate, findModel, formatCost, mediaCostLabel, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
 import { mediaUrl, useGen } from '../gen/genStore.ts';
 import { STATUS_RU, awaitingFiles } from '../../core/gen/jobStatus.ts';
@@ -130,7 +130,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
       PARAM_RU[k] ?? k,
       k === 'durationSec' ? `${String(v)} с` : k === 'styleId' ? (v === '' ? 'нет' : (styleNames.get(String(v)) ?? String(v))) : k === 'seed' && v === 0 ? 'случайный' : showValue(v),
     ]),
-    ['Списано', item.creditsConsumed === null ? '—' : `${item.creditsConsumed} ${item.provider === 'higgsfield' ? '$' : 'кр'}`],
+    ['Списано', item.creditsConsumed === null ? '—' : mediaCostLabel(item,item.creditsConsumed)],
     ['Референсы', item.refs.length === 0 ? 'нет' : String(item.refs.length)],
     ['Создано', formatDate(item.savedAt)],
     ['Файл', `${item.file} · ${(item.bytes / 1024 / 1024).toFixed(1)} МБ`],

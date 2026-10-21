@@ -150,19 +150,22 @@ export function trimProblems(start: number, end: number, duration: number | null
 }
 
 /** Стоимость всех генераторов flow по одному запуску — видна в шапке, запускать всё разом нельзя. */
-export function flowCost(flow: Flow): { credits: number; usd: number } {
+export function flowCost(flow: Flow): { credits: number; usd: number; unquoted: number } {
   let credits = 0;
+  let unquoted = 0;
   let usd = 0;
   for (const node of flow.nodes) {
     // Апскейл считается по последнему замеру входа (до замера — по умолчанию модели: 1024 px / 5 с).
     const model = modelOfNode(node);
+    if (node.type === 'seedance') { unquoted++; continue; }
     if (model === undefined) continue;
+    if (model.quoteRequired) { unquoted++; continue; }
     const refCount = flow.edges.filter((e) => e.to === node.id && e.port !== 'prompt').length;
     const e = estimate(model, paramsFor(model, node.params), 1, refCount);
     if (e.unitRu === 'кр') credits += e.credits;
     usd += e.usd;
   }
-  return { credits: Math.round(credits * 100) / 100, usd: Math.round(usd * 10_000) / 10_000 };
+  return { unquoted, credits: Math.round(credits * 100) / 100, usd: Math.round(usd * 10_000) / 10_000 };
 }
 
 /** Ребро не должно замыкать цикл: from не может быть достижим из to. */
