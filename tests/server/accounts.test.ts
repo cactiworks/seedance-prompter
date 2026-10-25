@@ -6,15 +6,17 @@ import type { ChatgptAccount } from '../../src/core/chatgpt.ts';
 import { DEMO_INPUT, type ProductionRun } from '../../src/core/production/model.ts';
 import { createApp, HOST, PORT } from '../../src/server/app.ts';
 import { createAccounts, type Accounts } from '../../src/server/accounts/service.ts';
+import type { ApiLogin } from '../../src/server/accounts/apiLogin.ts';
 import { parseDeviceCode, type DeviceLogin } from '../../src/server/accounts/deviceLogin.ts';
 import { LlmError, type runCodex } from '../../src/server/llm/codexCli/provider.ts';
 import { createProductionRuntime, type ProductionRuntime } from '../../src/server/production/runtime.ts';
 import { SCRIPT, sceneDraft, promptPlan } from '../production/fixtures.ts';
 
+const gateway='https://gateway.example.test:8443';
 const headers = { host: `${HOST}:${PORT}`, 'x-sp-client': '1', 'content-type': 'application/json' };
 const resources: { dir: string; accounts: Accounts; rt: ProductionRuntime }[] = [];
 const fakeAuth = (email: string) => JSON.stringify({ auth_mode: 'chatgpt', tokens: { access_token: 'fake-access', refresh_token: 'fake-refresh', id_token: `fake.${Buffer.from(JSON.stringify({ email, 'https://api.openai.com/auth': { chatgpt_plan_type: 'plus' } })).toString('base64url')}.fake` } });
-async function setup(run?: typeof runCodex, ignoreAbort = false) {
+async function setup(run?: typeof runCodex, ignoreAbort = false, importApi?: ApiLogin) {
   const dir = await mkdtemp(path.join(tmpdir(), 'sp-accounts-'));
   const logins: { home: string; finish: (email?: string) => Promise<void>; reject: () => void; signal: AbortSignal }[] = [];
   const login: DeviceLogin = (home, onCode, signal) => new Promise<void>((resolve, reject) => {
@@ -24,12 +26,20 @@ async function setup(run?: typeof runCodex, ignoreAbort = false) {
     if (!ignoreAbort) signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
   });
   const homes: string[] = [];
-  const runner: typeof runCodex = async <T>(request: Parameters<typeof runCodex>[0], options?: { codexHome?: string }) => {
-    homes.push(options!.codexHome!);
+  const methods: (string | undefined)[] = [];
+  const baseUrls: (string | undefined)[] = [];
+  const apiImports: {home:string; key:string}[] = [];
+  const apiLogin: ApiLogin = async (home, key, signal) => {
+    apiImports.push({ home, key });
+    if (importApi) return importApi(home,key,signal);
+    await writeFile(path.join(home,'auth.json'),JSON.stringify({ auth_mode:'apikey', OPENAI_API_KEY:key }));
+  };
+  const runner: typeof runCodex = async <T>(request: Parameters<typeof runCodex>[0], options?: { codexHome?: string; authMethod?: 'chatgpt' | 'api'; apiBaseUrl?:string }) => {
+    homes.push(options!.codexHome!); methods.push(options?.authMethod); baseUrls.push(options?.apiBaseUrl);
     if (run) return run<T>(request, options);
     return { data: (request.taskRu === 'Режиссёр Production' ? sceneDraft() : promptPlan()) as T, meta: { model: 'fixture', durationMs: 1, inputTokens: 1, outputTokens: 1, turns: 1 } };
   };
-  const accounts = createAccounts({ dir: path.join(dir, 'accounts'), secureCookie: true, login, run: runner });
+  const accounts = createAccounts({ dir: path.join(dir, 'accounts'), secureCookie: true, login, apiLogin, allowedApiBaseUrls:[gateway], run: runner });
   const rt = createProductionRuntime({ dataDir: path.join(dir, 'data'), runLlmForAccount: accounts.runnerFor });
   const app = createApp({ rootDir: process.cwd(), dataDir: path.join(dir, 'data'), accounts, production: rt });
   resources.push({ dir, accounts, rt });
@@ -44,7 +54,7 @@ async function setup(run?: typeof runCodex, ignoreAbort = false) {
     await vi.waitFor(async () => expect((await status(cookie)).status).toBe('connected'));
     return { cookie, home: current.home };
   }
-  return { accounts, rt, app, req, status, connect, logins, homes, dir };
+  return { accounts, rt, app, req, status, connect, logins, homes, methods, baseUrls, apiImports, dir };
 }
 afterEach(async () => { for (const s of resources.splice(0)) { s.rt.stop(); await s.accounts.close(); await rm(s.dir, { recursive: true, force: true }); } });
 
@@ -164,5 +174,108 @@ describe('private browser ChatGPT connections', () => {
     expect((await s.rt.get(saved.id)).preparation?.codexAccountId).toBe(path.basename(b.home));
     const spoof = await s.req('/api/production', b.cookie, { ...input, codexAccountId: path.basename(a.home) });
     expect(spoof.status).toBe(422);
+  });
+});
+
+
+const fakeKey = 'sk-fixture-not-real-0000000000000000';
+describe('private browser OpenAI API credentials', () => {
+  it('imports a key privately, persists its method after restart and clears only its browser on logout', async () => {
+    const s = await setup(); const chat = await s.connect();
+    const response = await s.req('/api/chatgpt/api-key', '', { apiKey:` ${fakeKey} ` });
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get('set-cookie')!.split(';')[0]!;
+    const data = await response.json();
+    expect(data).toEqual({ enabled:true, status:'connected', method:'api', baseUrl:'https://api.openai.com/v1' });
+    expect(JSON.stringify(data)).not.toContain(fakeKey);
+    expect(s.homes).toHaveLength(0);
+    expect(s.apiImports[0]!.key).toBe(fakeKey);
+    const home = s.apiImports[0]!.home;
+    expect((await stat(path.join(home,'auth.json'))).mode & 0o777).toBe(0o600);
+    const restarted = createAccounts({ dir:path.join(s.dir,'accounts'), secureCookie:true });
+    const app = createApp({ rootDir:process.cwd(), dataDir:path.join(s.dir,'data'), accounts:restarted });
+    expect(await (await app.request('/api/chatgpt',{ headers:{...headers,cookie} })).json()).toEqual(data);
+    expect((await s.status(chat.cookie)).method).toBe('chatgpt');
+    expect((await s.status('')).status).toBe('disconnected');
+    await s.req('/api/chatgpt/logout',cookie,{});
+    expect((await s.status(cookie)).status).toBe('disconnected');
+    expect((await s.status(chat.cookie)).status).toBe('connected');
+    expect(await stat(path.join(home,'auth.json')).catch(()=>null)).toBeNull();
+  });
+  it('binds Production roles to the API profile and selects API authentication for every call', async () => {
+    const s = await setup();
+    const response = await s.req('/api/chatgpt/api-key','',{apiKey:fakeKey});
+    const cookie = response.headers.get('set-cookie')!.split(';')[0]!;
+    const result = await s.req('/api/production',cookie,{...DEMO_INPUT,planningMode:'codex',script:SCRIPT});
+    expect(result.status).toBe(201);
+    const created = await result.json() as ProductionRun;
+    await s.rt.waitForPreparation(created.id);
+    expect((await s.rt.get(created.id)).planned).toBe(true);
+    expect(s.homes).toEqual([s.apiImports[0]!.home,s.apiImports[0]!.home]);
+    expect(s.methods).toEqual(['api','api']);
+  });
+  it('routes a custom Responses gateway only for its profile and rejects unconfigured targets', async () => {
+    const s=await setup();const chat=await s.connect();
+    for (const baseUrl of ['http://127.0.0.1:4317', 'https://127.0.0.1', 'https://evil.example.test', `${gateway}?key=x`, `${gateway}/unexpected`, `https://user:secret@gateway.example.test:8443`]) {
+      expect((await s.req('/api/chatgpt/api-key',chat.cookie,{apiKey:fakeKey,baseUrl})).status).toBe(422);
+    }
+    expect(s.apiImports).toHaveLength(0);
+    const response=await s.req('/api/chatgpt/api-key',chat.cookie,{apiKey:fakeKey,baseUrl:gateway+'/'});
+    expect(await response.json()).toMatchObject({method:'api',baseUrl:gateway});
+    expect(await stat(path.join(chat.home,'auth.json')).catch(()=>null)).toBeNull();
+    const home=s.apiImports[0]!.home;
+    await s.accounts.runnerFor(path.basename(home))({system:'',user:'',jsonSchema:{},model:'fixture',timeoutMs:100});
+    expect(s.methods).toEqual(['api']);expect(s.baseUrls).toEqual([gateway]);
+    const restarted=createAccounts({dir:path.join(s.dir,'accounts'),secureCookie:true,allowedApiBaseUrls:[gateway]});
+    const app=createApp({rootDir:process.cwd(),dataDir:path.join(s.dir,'data'),accounts:restarted});
+    const state=await (await app.request('/api/chatgpt',{headers:{...headers,cookie:chat.cookie}})).json();
+    expect(state).toMatchObject({method:'api',baseUrl:gateway});expect(JSON.stringify(state)).not.toContain(fakeKey);
+  });
+  it('preserves a working connection when an import fails and never exposes raw credential errors', async () => {
+    const s = await setup(undefined,false,async()=>{throw new Error(fakeKey);});
+    const chat = await s.connect();
+    const response = await s.req('/api/chatgpt/api-key',chat.cookie,{apiKey:fakeKey});
+    expect(response.status).toBe(409);expect(await response.text()).not.toContain(fakeKey);
+    expect((await s.status(chat.cookie)).method).toBe('chatgpt');
+    expect(await stat(s.apiImports[0]!.home).catch(()=>null)).toBeNull();
+  });
+  it('replaces a pending device login without allowing its late completion to overwrite the key', async () => {
+    const s = await setup(undefined,true);
+    const response = await s.req('/api/chatgpt/login','',{});const cookie=response.headers.get('set-cookie')!.split(';')[0]!;
+    expect((await s.req('/api/chatgpt/api-key',cookie,{apiKey:fakeKey})).status).toBe(200);
+    await s.logins[0]!.finish();
+    await vi.waitFor(async()=>expect(await stat(s.logins[0]!.home).catch(()=>null)).toBeNull());
+    expect((await s.status(cookie)).method).toBe('api');
+  });
+  it('rejects malformed/oversized input and cross-origin writes without starting a CLI or inference', async () => {
+    const s=await setup();
+    for (const apiKey of [null,42,'','sk-short','sk-secret\nextra']) expect((await s.req('/api/chatgpt/api-key','',{apiKey})).status).toBe(422);
+    expect((await s.req('/api/chatgpt/api-key','',{apiKey:'sk-'+ 'x'.repeat(5000)})).status).toBe(413);
+    expect((await s.app.request('/api/chatgpt/api-key',{method:'POST',headers:{...headers,origin:'https://evil.test'},body:JSON.stringify({apiKey:fakeKey})})).status).toBe(403);
+    expect((await s.app.request('/api/chatgpt/api-key',{method:'POST',headers:{host:headers.host},body:JSON.stringify({apiKey:fakeKey})})).status).toBe(403);
+    expect(s.apiImports).toHaveLength(0);expect(s.homes).toHaveLength(0);
+  });
+  it('blocks changing an active API profile and retires only rejected credentials', async () => {
+    let finish!:()=>void;
+    const s=await setup(async()=>{await new Promise<void>(resolve=>{finish=resolve;});throw new LlmError('NOT_LOGGED_IN','fixture rejected');});
+    const response=await s.req('/api/chatgpt/api-key','',{apiKey:fakeKey});const cookie=response.headers.get('set-cookie')!.split(';')[0]!;
+    const profile=path.basename(s.apiImports[0]!.home);
+    const invoke=s.accounts.runnerFor(profile)({system:'',user:'',jsonSchema:{},model:'fixture',timeoutMs:1000});
+    const rejected=expect(invoke).rejects.toMatchObject({code:'NOT_LOGGED_IN'});
+    await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    expect((await s.req('/api/chatgpt/api-key',cookie,{apiKey:fakeKey})).status).toBe(409);
+    expect((await s.req('/api/chatgpt/logout',cookie,{})).status).toBe(409);
+    finish();await rejected;
+    expect((await s.status(cookie)).status).toBe('disconnected');
+    expect(s.methods).toEqual(['api']);
+    await expect(s.accounts.runnerFor(profile)({system:'',user:'',jsonSchema:{},model:'fixture',timeoutMs:1000})).rejects.toMatchObject({code:'NOT_LOGGED_IN'});
+    expect(s.methods).toEqual(['api']);
+  });
+  it('keeps key imports outside detached async transport and limits repeated writes', async () => {
+    const s=await setup();
+    const response=await s.app.request('/api/chatgpt/api-key',{method:'POST',headers:{...headers,prefer:'respond-async'},body:JSON.stringify({apiKey:fakeKey})});
+    expect(response.status).toBe(200);expect(response.headers.get('set-cookie')).toBeTruthy();expect(response.headers.get('x-sp-request')).toBeNull();
+    for (let i=0;i<11;i++) expect((await s.req('/api/chatgpt/api-key','',{apiKey:fakeKey})).status).toBe(200);
+    expect((await s.req('/api/chatgpt/api-key','',{apiKey:fakeKey})).status).toBe(429);
   });
 });

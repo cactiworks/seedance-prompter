@@ -394,3 +394,21 @@ metadata английских производных, compiler/linter и referen
 `server/gen/quotes.ts` хранит одноразовые account quotes в памяти; рестарт требует новой оценки.
 `GenerationQuote` используется общим genStore.run во всех entrypoints Seedance. Attempt создаётся
 после подтверждения quote; отмена окна не добавляет фиктивную попытку.
+
+
+## API key в личном подключении (25.10.2026)
+
+POST `/api/chatgpt/api-key` принимает apiKey и baseUrl; Host/Origin/x-sp-client, 4 KiB body limit
+и общий auth rate limit обязательны. Ответ/status содержат только method=api и Base URL, никогда ключ.
+Существующий непрозрачный session cookie связывает private profile; `connection.json` хранит endpoint,
+`auth.json` создаётся официальным `codex login --with-api-key` через stdin. Оба файла 0600, каталоги 0700,
+вне shared data/export. Значение не передаётся в argv/env и вырезается из ошибок провайдера.
+
+Endpoint проверяется по точному списку `SP_LLM_API_BASE_URLS` плюс OpenAI default, только HTTPS,
+без userinfo/query/hash. Allowlist проверяется при подключении и перед каждым вызовом (удалённый
+из конфигурации endpoint перестаёт работать). Конкретные endpoints задаёт владелец вне публичного Git.
+`runCodex` выбирает forced_login_method=api и `studio_api` с wire_api=responses, requires_openai_auth=true;
+ChatGPT использует прежний built-in provider. Все LLM roles продолжают общий Runner контракт.
+При API import сначала создаётся новый профиль, затем атомарно меняется session binding, прежний
+retired; ошибка импорта сохраняет рабочий профиль. Device completion после смены отбрасывается.
+Импорт не проверяет entitlement или баланс: это устанавливает только явный вызов пользователя.

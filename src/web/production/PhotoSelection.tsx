@@ -35,7 +35,7 @@ export function PhotoSelection({ run, ids, onDone, onLoading }: { run: Productio
     <Text variant="label">Выбрано {ids.length}. {remaining ? `Без галочки: ${remaining} — будут созданы заново.` : 'Все оставшиеся позиции выбраны.'}</Text>
     {error && <Text role="alert">{error}</Text>}
     {current ? <>
-      <Text variant="caption" tone="secondary">Сохраним выбранные. Позиций на перегенерацию: {current.quote.count}. Кнопка подтверждает {photoPrice(current.quote.usd)}, передачу данных в Higgsfield и проверку фото с фрагментами и до шести refs в Codex / OpenAI (квота ChatGPT).</Text>
+      <Text variant="caption" tone="secondary">Сохраним выбранные. Позиций на перегенерацию: {current.quote.count}. Кнопка подтверждает {photoPrice(current.quote.usd)}, передачу данных в Higgsfield и проверку фото с фрагментами и до шести refs в Codex / OpenAI (лимиты и оплата твоего подключения).</Text>
       <div><Button variant="primary" disabled={busy || run.paused} onClick={() => void commit(current.quote, current.requestId)}>Пересоздать {current.quote.count} · {photoPrice(current.quote.usd)}</Button></div>
     </> : <div><Button variant="primary" disabled={busy || loading || run.paused} loading={loading} onClick={() => void next()}>Продолжить</Button></div>}
   </div>;

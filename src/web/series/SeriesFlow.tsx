@@ -30,7 +30,7 @@ export function SeriesFlow({ flow }: { flow: Flow }) {
     <details><summary>Подготовить Prompter · выбрано {chosen.length} из {nodes.length}</summary><div className={styles.batch}>
       <Text variant="caption" tone="secondary">Отметь партию для заполнения. Видео запускается отдельно в каждом Prompter.</Text>
       <div className={styles.choices}>{nodes.map(n => <label key={n.id} className={styles.choice}><input type="checkbox" checked={selected.includes(n.id)} onChange={e => setSelected(e.target.checked ? [...selected, n.id] : selected.filter(id => id !== n.id))} />{n.label}</label>)}</div>
-      <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />Передать выбранные фото и контекст серии в моё ChatGPT-подключение · до 4 вызовов на кадр</label>
+      <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />Передать выбранные фото и контекст серии в моё AI-подключение · до 4 вызовов на кадр</label>
       <Button size="s" variant="primary" disabled={!chosen.length || !consent} loading={busy} onClick={() => void prepare()}>Заполнить по серии · {chosen.length}</Button>
       {message && <Text role="status" variant="caption">{message}</Text>}
     </div></details>

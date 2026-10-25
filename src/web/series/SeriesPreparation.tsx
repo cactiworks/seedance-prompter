@@ -87,7 +87,7 @@ export function SeriesPreparation({ project }: { project: Project }) {
     <Text variant="caption" tone="secondary">Агент заполнит форму по режиссуре всей серии и исходному фото. Ручные поля сохранятся; после критика — не больше одного исправления.</Text>
     {data?.contextProblem && <Text role="alert" variant="caption">{data.contextProblem}</Text>}
     {!!data?.state?.issues.length && <ul className={styles.issues}>{data.state.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}
-    <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} disabled={running || busy} />Передать фото и контекст серии в моё ChatGPT-подключение · до 4 вызовов</label>
+    <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} disabled={running || busy} />Передать фото и контекст серии в моё AI-подключение · до 4 вызовов</label>
     <div className={styles.row}>
       <Button variant="primary" size="s" loading={busy || running} disabled={!consent || !!data?.contextProblem} onClick={() => void start()}>{reset ? 'Заполнить заново с заменой ручных полей' : 'Заполнить по серии'}</Button>
       <Button variant="ghost" size="s" disabled={busy || running} onClick={() => setReset(!reset)}>{reset ? 'Отменить сброс' : 'Полный сброс и заполнение'}</Button>

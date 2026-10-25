@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
@@ -55,8 +55,8 @@ function classify(text: string): LlmError | null {
 const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 /** Keep a bounded diagnostic, never an auth header, API key or signed URL. */
-function safeDiagnostic(text: string): string {
-  return text
+function safeDiagnostic(text: string, secret = ''): string {
+  return (secret ? text.split(secret).join('[redacted]') : text)
     .replace(/\bBearer\s+[^\s"']+/gi, 'Bearer [redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]')
@@ -65,9 +65,16 @@ function safeDiagnostic(text: string): string {
 }
 
 /** One restricted, ephemeral Codex invocation. Authentication stays in the user's CODEX_HOME. */
-export async function runCodex<T>(request: LlmRequest, options: { codexHome?: string } = {}): Promise<LlmResult<T>> {
+export async function runCodex<T>(request: LlmRequest, options: { codexHome?: string; authMethod?: 'chatgpt' | 'api'; apiBaseUrl?: string } = {}): Promise<LlmResult<T>> {
   if (request.signal?.aborted === true) throw new LlmError('CANCELLED', 'Отменено.');
   const started = Date.now();
+  let credential = '';
+  if (options.authMethod === 'api' && options.codexHome) {
+    try {
+      const auth = JSON.parse(readFileSync(path.join(options.codexHome,'auth.json'),'utf8')) as {OPENAI_API_KEY?:unknown};
+      if (typeof auth.OPENAI_API_KEY === 'string') credential = auth.OPENAI_API_KEY;
+    } catch { /* the CLI reports missing credentials without exposing file contents */ }
+  }
   const parentEnv = options.codexHome ? { ...process.env, CODEX_HOME: options.codexHome } : process.env;
   const cwd = mkdtempSync(path.join(tmpdir(), 'seedance-prompter-codex-'));
   const cleanup = (): void => rmSync(cwd, { recursive: true, force: true });
@@ -81,7 +88,7 @@ export async function runCodex<T>(request: LlmRequest, options: { codexHome?: st
       writeFileSync(file, Buffer.from(image.base64, 'base64'), { mode: 0o600 });
       return file;
     });
-    args = buildCliArgs({ system: request.system, schemaFile, model: request.model, effort: request.effort, imageFiles, disabledSkillPaths: skillPathsToDisable(parentEnv) });
+    args = buildCliArgs({ system: request.system, schemaFile, model: request.model, effort: request.effort, imageFiles, authMethod: options.authMethod, apiBaseUrl:options.apiBaseUrl, disabledSkillPaths: skillPathsToDisable(parentEnv) });
     if (options.codexHome) args.splice(args.length - 1, 0, '-c', 'cli_auth_credentials_store="file"');
   } catch (error) {
     cleanup();
@@ -154,7 +161,7 @@ export async function runCodex<T>(request: LlmRequest, options: { codexHome?: st
       if (event.type === 'item.completed') {
         const item = event.item as { type?: string; text?: string; message?: string };
         if (item.type === 'agent_message' && typeof item.text === 'string') finalText = item.text;
-        if (item.type === 'error' && typeof item.message === 'string') diagnosticText = safeDiagnostic(item.message);
+        if (item.type === 'error' && typeof item.message === 'string') diagnosticText = safeDiagnostic(item.message, credential);
       }
       if (event.type === 'error' || event.type === 'turn.failed') {
         const detail = event.error as { message?: string } | undefined;
@@ -201,8 +208,8 @@ export async function runCodex<T>(request: LlmRequest, options: { codexHome?: st
       settled = true;
       detach();
       if (code !== 0 || !completed || errorText !== '') {
-        const detail = safeDiagnostic(errorText || diagnosticText || stderr.slice(-2000));
-        const known = classify(`${stderr}\n${errorText}\n${diagnosticText}`);
+        const detail = safeDiagnostic(errorText || diagnosticText || stderr.slice(-2000), credential);
+        const known = classify(safeDiagnostic(`${stderr}\n${errorText}\n${diagnosticText}`, credential));
         if (known !== null) return reject(known);
         return reject(new LlmError('PROCESS_CRASH', `${task}: Codex завершился с ошибкой.${detail ? ` ${detail}` : ''}`, `code=${String(code)} ${detail}`));
       }

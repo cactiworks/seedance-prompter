@@ -39,10 +39,17 @@ export function createProductionCanvas(o: { rootDir: string; dataDir: string; fl
   const file = (slug: string) => { if (!/^cv-[a-z0-9-]{1,61}$/.test(slug)) throw new StoreError('BAD_SLUG', 'Нужен черновик Prompter из Canvas.'); return path.join(dir, `${slug}.json`); };
   const saveStatus = async (state: PreparationStatus) => { state.updatedAt = new Date().toISOString(); await atomicWrite(file(state.slug), JSON.stringify(state)); };
   async function status(slug: string): Promise<PreparationStatus | null> {
-    let state: PreparationStatus;
-    try { state = JSON.parse(await readFile(file(slug), 'utf8')) as PreparationStatus; } catch { return null; }
-    if (state.status === 'running' && !active.has(slug)) { state.status = 'interrupted'; state.issues = ['Подготовка прервана. Продолжи явной кнопкой; автоматического повтора нет.']; await saveStatus(state); }
-    return state;
+    return serialize(file(slug), async () => {
+      let state: PreparationStatus;
+      try {
+        state = JSON.parse(await readFile(file(slug), 'utf8')) as PreparationStatus;
+        // A read started during execution can return its old running snapshot after
+        // the terminal write and active.delete. Re-read before declaring a restart.
+        if (state.status === 'running' && !active.has(slug)) state = JSON.parse(await readFile(file(slug), 'utf8')) as PreparationStatus;
+      } catch { return null; }
+      if (state.status === 'running' && !active.has(slug)) { state.status = 'interrupted'; state.issues = ['Подготовка прервана. Продолжи явной кнопкой; автоматического повтора нет.']; await saveStatus(state); }
+      return state;
+    });
   }
   async function handoff(id: string): Promise<Flow> {
     const run = await o.production.get(id);

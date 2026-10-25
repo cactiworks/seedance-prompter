@@ -1,3 +1,4 @@
+import { apiLogin } from '../../src/server/accounts/apiLogin.ts';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -52,6 +53,35 @@ afterEach(() => {
 });
 
 describe('Codex CLI request boundary', () => {
+  it('imports API keys only through stdin, without argv/env/output or a model invocation', async () => {
+    const secret='sk-fixture-not-real-0000000000000000';
+    const promise=apiLogin('/private/api-fixture',secret,new AbortController().signal);
+    const [command,args,options]=mocked.spawn.mock.calls[0] as [string,string[],{env:Record<string,string>;stdio:string[]}];
+    expect(command).toBe('codex');expect(args).toContain('--with-api-key');
+    expect(args.join(' ')).not.toContain(secret);expect(JSON.stringify(options)).not.toContain(secret);
+    expect(options.stdio).toEqual(['pipe','ignore','ignore']);
+    expect(child.stdin.end).toHaveBeenCalledWith(`${secret}\n`);
+    child.emit('close',0);await promise;
+  });
+  it('uses API authentication while retaining all isolation and schema checks', async () => {
+    const promise=runCodex(request,{codexHome:'/private/api-fixture',authMethod:'api',apiBaseUrl:'https://gateway.example.test:8443'});
+    const [,args]=mocked.spawn.mock.calls[0] as [string,string[]];
+    expect(args).toContain('forced_login_method="api"');expect(args).not.toContain('forced_login_method="chatgpt"');
+    expect(args).toContain('features.shell_tool=false');expect(args).toContain('--output-schema');
+    expect(args).toContain('model_provider="studio_api"');
+    expect(args).toContain('model_providers.studio_api={name="Personal API",base_url="https://gateway.example.test:8443",wire_api="responses",requires_openai_auth=true}');
+    child.succeed();await promise;
+  });
+  it.each(['Gateway failed with', 'Rate limit exceeded with'])('redacts nonstandard gateway keys from %s diagnostics', async (message) => {
+    const home=mkdtempSync(path.join(tmpdir(),'api-credential-redact-'));
+    const secret='fixture-gateway-secret-without-prefix';
+    writeFileSync(path.join(home,'auth.json'),JSON.stringify({OPENAI_API_KEY:secret}));
+    try {
+      const promise=runCodex(request,{codexHome:home,authMethod:'api'});
+      child.emitJson({type:'error',message:`${message} ${secret}`});child.emit('close',1);
+      await expect(promise).rejects.toMatchObject({messageRu:expect.not.stringContaining(secret),message:expect.not.stringContaining(secret)});
+    } finally {rmSync(home,{recursive:true,force:true});}
+  });
   it('uses only the explicit account home and file store, without modifying the process environment', async () => {
     const original = process.env.CODEX_HOME;
     const promise = runCodex(request, { codexHome: '/private/accounts/example' });

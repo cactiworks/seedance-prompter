@@ -78,3 +78,12 @@ start:offline, dev и явные SP_PORT/SP_DATA_DIR остаются локал
 по умолчанию это соседний с data каталог `accounts`. Глобальный CODEX_HOME не используется.
 На localhost без SP_ACCOUNTS_DIR прежний CLI-вход сохранён. Вход, backup и откат описаны в
 `deploy/README.md`. `doctor` проверяет локальный CLI; `/api/chatgpt` — собственный browser profile.
+
+
+25.10.2026: в header «Подключить AI» есть API key + Base URL рядом с ChatGPT. Разрешённые внешние
+Responses endpoints — `SP_LLM_API_BASE_URLS`, comma-separated точные HTTPS URLs без query/credentials.
+Указывать полный API path (обычно `/v1`), endpoint сохраняется для своего browser profile. OpenAI
+`https://api.openai.com/v1` доступен по умолчанию. Конкретные адреса/private credentials вне Git.
+Ключ импортируется официальным CLI через stdin, поэтому поддержка `--with-api-key` обязательна.
+Accounts backup содержит секреты и хранится отдельно от shared data с ограниченными правами.
+На локальном single-user без SP_ACCOUNTS_DIR кнопка по-прежнему скрыта; server mode использует личные profiles.

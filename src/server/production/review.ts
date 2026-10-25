@@ -61,7 +61,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
       if (input.consent !== true || run.mode !== 'photos' || run.paused || !reviewArtifacts(run).length || jobsActive(run) || run.photos?.status === 'running' || pending.has(id) || ['running', 'pending'].includes(run[key]?.status ?? '')) throw new ProductionError('INVALID', 'Проверка доступна после остановки генерации и согласия на передачу изображений Codex.');
       if (key === 'masterReview' && (!run.photos?.masterArtifactId || !appearanceReady(run))) throw new ProductionError('INVALID', 'Сначала нужны закреплённая внешность и сохранённый master.');
       run[key] = { ...pendingReview(input.requestId, options.now()), codexAccountId, referenceLimit: input.referenceLimit ?? 2 };
-      record(run, options.now(), 'Разрешена проверка фото, общей сцены и до шести локальных фото Soul ID через Codex. Расходуется квота ChatGPT.');
+      record(run, options.now(), 'Разрешена проверка фото, общей сцены и до шести локальных фото Soul ID через Codex. Действуют лимиты и оплата выбранного AI-подключения.');
     });
     await tick(id); return run;
   }

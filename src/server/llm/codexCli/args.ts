@@ -8,6 +8,8 @@ export interface ImageInput {
 }
 
 export interface CliArgsInput {
+  authMethod?: 'chatgpt' | 'api';
+  apiBaseUrl?: string;
   system: string;
   schemaFile: string;
   model: string;
@@ -21,8 +23,6 @@ export interface CliArgsInput {
 // read-only/never denies edits; the event tripwire rejects any tool activity. This
 // is a restricted CLI session, not a claim that the CLI offers a zero-tool mode.
 export const ISOLATION_CONFIG = [
-  'model_provider="openai"',
-  'forced_login_method="chatgpt"',
   'approval_policy="never"',
   'project_doc_max_bytes=0',
   'project_doc_fallback_filenames=[]',
@@ -57,6 +57,10 @@ export function buildCliArgs(input: CliArgsInput): string[] {
     '--model', input.model, '--output-schema', input.schemaFile,
   ];
   for (const setting of ISOLATION_CONFIG) args.push('-c', setting);
+  args.push('-c', `forced_login_method=${JSON.stringify(input.authMethod ?? 'chatgpt')}`);
+  if (input.authMethod === 'api' && input.apiBaseUrl) {
+    args.push('-c', 'model_provider="studio_api"', '-c', `model_providers.studio_api={name="Personal API",base_url=${JSON.stringify(input.apiBaseUrl)},wire_api="responses",requires_openai_auth=true}`);
+  } else args.push('-c','model_provider="openai"');
   // JSON string escaping is also valid for these TOML basic strings. No shell is involved.
   args.push('-c', `developer_instructions=${JSON.stringify(input.system)}`);
   args.push('-c', `model_reasoning_effort=${JSON.stringify(input.effort ?? 'medium')}`);

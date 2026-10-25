@@ -1,3 +1,4 @@
+import type * as FsPromises from 'node:fs/promises';
 import { mkdtemp, copyFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -17,6 +18,15 @@ import { buildShot, type PackBundle } from '../../src/core/pipeline.ts';
 import type { Runner } from '../../src/server/llm/tasks/write.ts';
 import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 import { SCRIPT, sceneDraft, promptPlan } from './fixtures.ts';
+const readBarrier=vi.hoisted(()=>({file:'',afterRead:undefined as undefined | (()=>Promise<void>)}));
+vi.mock('node:fs/promises',async importOriginal=>{
+  const actual=await importOriginal<typeof FsPromises>();
+  return {...actual,readFile:async(...args:Parameters<typeof actual.readFile>)=>{
+    const result=await actual.readFile(...args);
+    if(String(args[0])===readBarrier.file && readBarrier.afterRead){const pause=readBarrier.afterRead;readBarrier.afterRead=undefined;await pause();}
+    return result;
+  }};
+});
 const rootDir = path.resolve(import.meta.dirname, '../..');
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map(d => rm(d, { recursive:true, force:true }))); });
@@ -102,6 +112,26 @@ describe('Production Canvas preparation without media submission',()=>{
     const f=await fixture();const p=await f.store.read(f.node.slug);const r=runner([filled(p),new Error('offline')]);await f.service.start(p.slug,p.rev,r.run);
     const state=await finished(f);expect(state.state?.status).toBe('failed');expect(state.project.seriesFill).toBeDefined();
     const restored=await f.service.restore(p.slug,state.project.rev);expect(formOf(restored).world.place.ru).toBe('');expect(f.submit).not.toHaveBeenCalled();
+  });
+  it('does not overwrite a terminal report when an in-flight poll returns an old running snapshot',async()=>{
+    const f=await fixture();const p=await f.store.read(f.node.slug);
+    let releaseCritic!:()=>void;const criticGate=new Promise<void>(r=>{releaseCritic=r;});
+    const r=runner([filled(p),async()=>{await criticGate;throw new Error('offline');}]);
+    await f.service.start(p.slug,p.rev,r.run);
+    await vi.waitFor(()=>expect(r.requests).toHaveLength(2));
+    let releaseRead!:()=>void;const readGate=new Promise<void>(r=>{releaseRead=r;});
+    let didRead!:()=>void;const captured=new Promise<void>(r=>{didRead=r;});
+    readBarrier.file=path.join(f.options.dataDir,'series-preparation',`${p.slug}.json`);
+    readBarrier.afterRead=async()=>{didRead();await readGate;};
+    const poll=f.service.inspect(p.slug);
+    try {
+      await captured;releaseCritic();
+      const actual=await vi.importActual<typeof FsPromises>('node:fs/promises');
+      await vi.waitFor(async()=>expect(JSON.parse(await actual.readFile(readBarrier.file,'utf8')).status).toBe('failed'));
+      releaseRead();
+      const result=await poll;expect(result.state?.status).toBe('failed');
+      expect((await f.service.inspect(p.slug)).state?.status).toBe('failed');
+    } finally {releaseCritic();releaseRead();readBarrier.afterRead=undefined;readBarrier.file='';}
   });
   it('refill keeps manual Russian, regenerates English; explicit reset may replace it',async()=>{
     const f=await fixture();let p=await f.store.read(f.node.slug); p.world.place.ru='Моё место'; p=await f.store.write(p.slug,p,p.rev);
