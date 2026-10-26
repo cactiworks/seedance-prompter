@@ -43,9 +43,15 @@ import { createJournal } from './storage/journal.ts';
 import { createMoodboards } from './storage/moodboards.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
 
-export const HOST = '127.0.0.1';
-/** SP_PORT — второй экземпляр для проверки, пока основной занят (с SP_DATA_DIR, чтобы не делить данные). */
-export const PORT = Number(process.env.SP_PORT ?? 4317);
+const cliArg = (name: string): string | undefined => {
+  const inline = process.argv.find((arg) => arg.startsWith(`--${name}=`));
+  if (inline !== undefined) return inline.slice(name.length + 3);
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+};
+export const HOST = cliArg('host') ?? process.env.SP_HOST ?? '127.0.0.1';
+/** SP_PORT или npm run dev -- --port N — второй экземпляр с отдельным SP_DATA_DIR. */
+export const PORT = Number(cliArg('port') ?? process.env.SP_PORT ?? 4317);
 
 /** Заголовок, который обязан прислать наш клиент на любой мутации. */
 export const CLIENT_HEADER = 'x-sp-client';

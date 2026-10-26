@@ -147,8 +147,47 @@
   min-width: 0;
 }
 
-.addMenu {
+.addMenu,
+.moreMenu {
   position: static;
+}
+
+.moreTrigger {
+  padding: var(--lab-space-3) var(--lab-space-4);
+  border-radius: var(--lab-radius-s);
+  color: var(--lab-text-secondary);
+  font-size: var(--lab-type-label-size);
+  list-style: none;
+  cursor: pointer;
+}
+
+.moreTrigger::-webkit-details-marker {
+  display: none;
+}
+
+.moreTrigger:hover {
+  background: var(--lab-fill-4);
+  color: var(--lab-text-primary);
+}
+
+.morePanel {
+  position: absolute;
+  top: calc(100% + var(--lab-space-2));
+  right: var(--lab-space-10);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lab-space-1);
+  min-width: 13rem;
+  padding: var(--lab-space-2);
+  border: 1px solid var(--lab-border-subtle);
+  border-radius: var(--lab-radius-l);
+  background: var(--lab-bg-surface);
+  box-shadow: var(--lab-shadow-l);
+}
+
+.morePanel > button {
+  justify-content: flex-start;
 }
 
 .addTrigger {

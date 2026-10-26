@@ -92,6 +92,11 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
     ...panelFiles.filter((f) => f.file === null).map((f) => `У картинки ${f.n} панели нет файла.`),
     ...(seedance === undefined ? [] : validateGen(seedance, build.prompt, genParams, panelFiles.map(() => project.production ? 'start' as const : 'ref' as const))),
   ];
+  const genBlockers = [
+    ...(!apiPassed ? ['Отметь просмотренные предупреждения и замечания в шаге 5. Настройки и порядок картинок сервер выставит сам.'] : []),
+    ...(needConsent ? ['Подтверди передачу картинок панели в Higgsfield API галочкой выше.'] : []),
+    ...genProblems,
+  ];
   const generate = async (): Promise<void> => {
     if (seedance === undefined || genCost === null) return;
     setGenBusy(true);
@@ -163,18 +168,13 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
               <Text variant="label">Картинки панели ({panelFiles.length}) уйдут в Higgsfield API. Если на них лицо, оно тоже уйдёт.</Text>
             </label>
           )}
-          {genProblems.length > 0 && (
-            <Text variant="caption" tone="secondary">
-              {genProblems.join(' ')}
-            </Text>
-          )}
-          {!apiPassed && (
-            <Text variant="caption" tone="secondary">
-              Отметь пункты чек-листа в шаге 5 (кроме настроек Higgsfield и порядка картинок — их сервер выставит сам).
+          {genBlockers.length > 0 && (
+            <Text variant="caption" tone="secondary" role="status">
+              Чтобы рассчитать стоимость: {genBlockers.join(' ')}
             </Text>
           )}
           <div className={styles.row}>
-            <Button variant="dark" size="m" icon={<Icon name="sparkle" />} loading={genBusy} disabled={!apiPassed || needConsent || genProblems.length > 0 || genCost === null} onClick={() => void generate()}>
+            <Button variant="dark" size="m" icon={<Icon name="sparkle" />} loading={genBusy} disabled={genBlockers.length > 0 || genCost === null} onClick={() => void generate()}>
               Рассчитать стоимость видео
             </Button>
             {launched !== null && (

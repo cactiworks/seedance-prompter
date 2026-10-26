@@ -106,6 +106,7 @@ export function Canvas() {
   const board = useRef<HTMLDivElement>(null);
   const importer = useRef<HTMLInputElement>(null);
   const addMenu = useRef<HTMLDetailsElement>(null);
+  const moreMenu = useRef<HTMLDetailsElement>(null);
   /** Связь дошла до входа — меню «в пустоту» не нужно. */
   const linked = useRef(false);
   const [linkMenu, setLinkMenu] = useState<{ from: string; screenX: number; screenY: number; x: number; y: number } | null>(null);
@@ -120,6 +121,7 @@ export function Canvas() {
   useEffect(() => {
     const dismiss = (event: PointerEvent): void => {
       if (addMenu.current !== null && !addMenu.current.contains(event.target as Node)) addMenu.current.open = false;
+      if (moreMenu.current !== null && !moreMenu.current.contains(event.target as Node)) moreMenu.current.open = false;
     };
     document.addEventListener('pointerdown', dismiss);
     return () => document.removeEventListener('pointerdown', dismiss);
@@ -468,14 +470,24 @@ export function Canvas() {
           </Text>
         </div>
         {error !== null && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().saveCopy()}>Сохранить копию</Button>}
-        <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>Связи ({flow.edges.length})</Button>
         <span className={styles.grow} />
-        <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title="Скачать схему холста в JSON. Медиафайлы скачиваются из результата.">
-          Сохранить схему
-        </Button>
-        <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title="Открыть сохранённую схему холста из JSON">
-          Открыть схему
-        </Button>
+        <details
+          ref={moreMenu}
+          className={styles.moreMenu}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector('summary')?.focus();
+          }}
+        >
+          <summary className={styles.moreTrigger}>Ещё</summary>
+          <div className={styles.morePanel}>
+            <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>Связи ({flow.edges.length})</Button>
+            <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title="Скачать схему холста в JSON. Медиафайлы скачиваются из результата.">Сохранить схему</Button>
+            <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title="Открыть сохранённую схему холста из JSON">Открыть схему</Button>
+          </div>
+        </details>
         <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(event) => event.target.files?.[0] !== undefined && void importFlow(event.target.files[0]).finally(() => (event.target.value = ''))} />
         <details
           ref={addMenu}
