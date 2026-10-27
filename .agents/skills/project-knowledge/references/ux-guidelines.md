@@ -114,7 +114,7 @@ Photos-интерфейс: компактный путь «План → Опор
 Inspector сначала показывает фото и короткий verdict; prompt/task ID раскрываются отдельно.
 Отказ master показывает причину, «Пересоздать опорный кадр» с cost gate и перепроверку без генерации.
 Повтор сохраняет серию, сценарий и профиль; до трёх master всего, предыдущие попытки доступны в истории.
-После третьего отказа ясно указан лимит и доступна перепроверка/заполненный brief для изменения замысла.
+После третьего отказа ясно указан лимит; сохранённый master и причина видны в основном milestone. Рядом доступна «Новая серия по этому плану»: копия Codex-плана без LLM/artifacts и автоматической генерации, с отдельным cost gate. Перепроверка и заполненный brief для изменения замысла сохраняются.
 Старый строгий отказ не становится pass автоматически. Consent перечисляет до шести refs,
 до пяти Codex-вызовов и запас бюджета. Ручная приёмка не является override master gate.
 
@@ -184,3 +184,22 @@ connected — «Мой ChatGPT» или «Мой API». API form: Base URL, ск
 reload/отключения сохраняется выбранный способ и endpoint. Состояния ChatGPT и отмена прежние.
 QA: API form на1440/1281/1280/1279/1089/1087/1024/769/767/430/360 px, обе темы; connected API,
 connected ChatGPT и device code на1440/360. Yab отдельно обе темы; ключи/LLM только fixtures.
+
+26.10.2026: заблокированная кнопка «Рассчитать стоимость видео» сопровождается актуальными причинами:
+согласие на refs, обязательные ручные пункты шага 5 и конкретные ключ/file/param problems. Два API-only
+пункта (settings/panel) в блокеры не входят. В шапке Canvas вторичные связи/import/export собраны в
+«Ещё»; название, статус сохранения/ошибка и «Добавить» остаются видимыми. Меню закрывается снаружи и Esc,
+без закрытия по WebKit blur до click. Browser fixtures проверили 1440/390 px, включая отсутствие overflow.
+
+
+27.10.2026: Seedance quote с tariff-only ответом показывает «Ориентировочная цена», базу 16:9,
+ставку/длительность и предупреждение об отличии фактического списания. Дополнительная галочка
+открывает кнопку с суммой. Точный account quote сохраняет прежний путь без этой галочки.
+При failed master проверка не подписывается как «идёт»; видны причина и явный retry без генерации фото.
+
+
+27.10.2026 recovery: failed/interrupted master shows the saved image, cause and explicit critic retry;
+paid continuation is offered only after that check succeeds. Failed/interrupted final selection can be
+retried in the focus block. Prompter stays open after failed/conflicting save, displays the cause and
+provides retry for network errors plus JSON form download. Batch results refresh a saved open editor;
+manual changes remain protected. An unchanged Production handoff does not create a revision conflict.

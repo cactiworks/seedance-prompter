@@ -49,6 +49,8 @@ export const GenJobSchema = z.object({
   tag: z.string().nullable().default(null),
   estimateCredits: z.number(),
   estimateUsd: z.number(),
+  estimateUnit: z.literal('$').optional(),
+  approximate: z.boolean().optional(),
   status: z.enum(JOB_STATUSES),
   taskId: z.string().nullable(),
   /** Сырое состояние у провайдера (waiting, generating…) — для отладки. */

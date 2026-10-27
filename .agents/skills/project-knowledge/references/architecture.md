@@ -412,3 +412,17 @@ ChatGPT использует прежний built-in provider. Все LLM roles 
 При API import сначала создаётся новый профиль, затем атомарно меняется session binding, прежний
 retired; ошибка импорта сохраняет рабочий профиль. Device completion после смены отбрасывается.
 Импорт не проверяет entitlement или баланс: это устанавливает только явный вызов пользователя.
+
+
+27.10.2026: master critic schema допускает 11 observations, по одному на каждый из 11 checks,
+без удаления обязательных evidence. Ошибки валидации возвращают только безопасную причину/пути
+полей, без сырого ответа. Failed master показывает явную кнопку повтора; после успешной проверки
+новая генерация кадров всё равно требует cost gate. Предыдущие отчёты автоматически не перепроверяются.
+
+
+Canvas recovery (27.10.2026): unchanged Production handoff preserves flow revision; adding photos
+forces a fresh client snapshot even for the current flow, without replacing a newer acknowledged edit.
+Corrupt flow files fail closed and stay on disk. Recovery copies retain media/job history but create
+independent Seedance drafts and drop Production ownership. Terminal series polls may refresh a saved,
+idle editor only to a higher revision; dirty/saving/conflict and active editor agents are protected.
+Source-frame key and planned duration (unless manually protected) are checked before series criticism.

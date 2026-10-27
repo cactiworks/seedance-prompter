@@ -12,23 +12,26 @@ export const DETAIL_CRITERIA = 'details-v4' as const;
 export const LOGIC_CRITERIA = 'logic-v5' as const;
 const LOGIC_EVIDENCE = ['wardrobe', 'sceneLogic', 'visualInterest'] as const;
 const DETAIL_EVIDENCE = ['face', 'character', 'hands', 'identityLeakage', 'text'] as const;
+// There are 11 checks; a report may provide separate evidence for every check.
+const MAX_OBSERVATIONS = 11;
+export class ReviewValidationError extends Error {}
 export const ReviewResultSchema = z.object({
   artifactId: text(120), verdict: z.enum(['keep', 'reject', 'uncertain']), reason: text(700),
   checks: z.object({ face: check, likeness: check, character: check.optional(), hands: check, identityLeakage: check.optional(), text: check.optional(), continuity: check, shotMatch: check, visualInterest: check, wardrobe: check.optional(), sceneLogic: check.optional() }).strict(),
   faceDetail: faceDetail.optional(), wardrobeDetail: wardrobeDetail.optional(),
-  observations: z.array(observation).min(1).max(10),
+  observations: z.array(observation).min(1).max(MAX_OBSERVATIONS),
 }).strict();
 export const ReviewReportSchema = z.object({ summary: text(1400), results: z.array(ReviewResultSchema).min(1) }).strict();
 export const GeneratedReviewResultSchema = ReviewResultSchema.extend({ checks: ReviewResultSchema.shape.checks.extend({ character: check, identityLeakage: check, text: check }) });
 export const GeneratedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema).min(1) });
-export const DetailedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema.extend({ faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(5).max(10) })).min(1) });
+export const DetailedReviewReportSchema = ReviewReportSchema.extend({ results: z.array(GeneratedReviewResultSchema.extend({ faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(5).max(MAX_OBSERVATIONS) })).min(1) });
 /** New replies must explicitly inspect clothing coverage and the physical scene; old reports stay readable. */
 export const LogicReviewResultSchema = GeneratedReviewResultSchema.extend({
   checks: GeneratedReviewResultSchema.shape.checks.extend({ wardrobe: detailCheck, sceneLogic: z.enum(['pass', 'fail', 'uncertain']) }),
   wardrobeDetail,
 });
 export const LogicReviewReportSchema = ReviewReportSchema.extend({ results: z.array(LogicReviewResultSchema.extend({
-  faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(8).max(10),
+  faceDetail, observations: z.array(observation.extend({ check: observation.shape.check.unwrap() })).min(8).max(MAX_OBSERVATIONS),
 })).min(1) });
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 export type ReviewReport = z.infer<typeof ReviewReportSchema>;
@@ -74,7 +77,7 @@ export function masterApproved(run: ProductionRun): boolean {
 /** Do not accept fabricated/missing IDs, contradictions or a face comparison without a reference. */
 export function validateReview(report: ReviewReport, ids: string[], identityCount: number, identityRequired = true): ReviewReport {
   const results = report.results.map((r) => r.artifactId);
-  if (results.length !== ids.length || new Set(results).size !== ids.length || ids.some((id) => !results.includes(id))) throw new Error('Критик вернул неполный список кадров.');
+  if (results.length !== ids.length || new Set(results).size !== ids.length || ids.some((id) => !results.includes(id))) throw new ReviewValidationError('Критик вернул неполный список кадров.');
   return { ...report, results: report.results.map((r) => {
     const checks = { ...r.checks };
     if (r.wardrobeDetail) {
@@ -90,8 +93,8 @@ export function validateReview(report: ReviewReport, ids: string[], identityCoun
       else if (values.includes('uncertain') && checks.face !== 'fail') checks.face = 'uncertain';
       else if (values.every(v => v === 'not_visible') && checks.face === 'pass') checks.face = 'uncertain';
     }
-    if (Object.entries(checks).some(([key, value]) => value === 'variation' && !['continuity', 'shotMatch', 'visualInterest'].includes(key))) throw new Error('Допустимое отклонение не заменяет проверку внешности и анатомии.');
-    if (['continuity', 'shotMatch', 'visualInterest', 'identityLeakage', 'sceneLogic'].some((key) => checks[key as keyof typeof checks] === 'not_visible') || Object.entries(checks).some(([key, value]) => value === 'not_applicable' && (key !== 'likeness' || identityRequired))) throw new Error('Критик пропустил обязательный критерий.');
+    if (Object.entries(checks).some(([key, value]) => value === 'variation' && !['continuity', 'shotMatch', 'visualInterest'].includes(key))) throw new ReviewValidationError('Допустимое отклонение не заменяет проверку внешности и анатомии.');
+    if (['continuity', 'shotMatch', 'visualInterest', 'identityLeakage', 'sceneLogic'].some((key) => checks[key as keyof typeof checks] === 'not_visible') || Object.entries(checks).some(([key, value]) => value === 'not_applicable' && (key !== 'likeness' || identityRequired))) throw new ReviewValidationError('Критик пропустил обязательный критерий.');
     if (!identityRequired) checks.likeness = 'not_applicable';
     else if (checks.face === 'not_visible') checks.likeness = 'not_visible';
     else if (identityCount === 0 || checks.likeness === 'not_visible') checks.likeness = 'uncertain';
@@ -106,7 +109,7 @@ export function validateReview(report: ReviewReport, ids: string[], identityCoun
 export function validateDetailedReview(report: ReviewReport, ids: string[], identityCount: number, identityRequired: boolean, faceExpected: string[] = []): ReviewReport {
   const detailed = DetailedReviewReportSchema.parse(report);
   for (const result of detailed.results) {
-    if (DETAIL_EVIDENCE.some(key => !result.observations.some(o => o.check === key))) throw new Error('Критик не описал обязательные области проверки.');
+    if (DETAIL_EVIDENCE.some(key => !result.observations.some(o => o.check === key))) throw new ReviewValidationError('Критик не описал обязательные области проверки.');
     if (faceExpected.includes(result.artifactId) && (result.checks.face === 'not_visible' || Object.values(result.faceDetail).every(v => v === 'not_visible'))) {
       result.checks.face = 'uncertain'; result.checks.shotMatch = 'uncertain'; result.verdict = result.verdict === 'reject' ? 'reject' : 'uncertain';
       result.reason = 'Лицо главного героя не удалось проверить. Нужен читаемый кадр или ручная проверка.';
@@ -127,7 +130,7 @@ export function logicReviewPassed(result: ReviewResult | undefined): boolean {
 }
 export function validateLogicResult(result: ReviewResult): void {
   LogicReviewResultSchema.parse(result);
-  if (!logicReviewed(result)) throw new Error('Критик не описал одежду, логику сцены и манеру съёмки.');
+  if (!logicReviewed(result)) throw new ReviewValidationError('Критик не описал одежду, логику сцены и манеру съёмки.');
 }
 export function validateLogicReview(report: ReviewReport, ids: string[], identityCount: number, identityRequired: boolean, faceExpected: string[] = []): ReviewReport {
   const current = LogicReviewReportSchema.parse(report);

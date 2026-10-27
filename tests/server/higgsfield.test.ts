@@ -59,13 +59,26 @@ describe('Higgsfield API (Soul 2)', () => {
     expect(hf.balance).toBeUndefined();
   });
 
-  it('blocks Seedance when Higgsfield returns a pricing description instead of an account quote', async () => {
-    const { fetch } = fakeFetch(json({ type: 'description', pricing_description: 'Actual pricing depends on output dimensions and billable duration.' }));
-    const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch });
-    await expect(hf.estimate?.('bytedance/seedance-2.5/image-to-video', { duration: 4 })).rejects.toMatchObject({
-      code: 'PROVIDER',
-      messageRu: expect.stringContaining('только описание тарифа'),
-    });
+  it('calculates an explicitly approximate Seedance estimate from the live tariff shape', async () => {
+    const description='For 16:9 video without video input, your request costs roughly $0.2056 per second of generated video at 480p, $0.4622 at 720p, and $1.1372 at 1080p. Actual pricing depends on output dimensions and billable duration. Rates shown are before any applicable customer discount.';
+    for (const [resolution,usd] of [['480p',0.8224],['720p',1.8488],['1080p',4.5488]] as const) {
+      const {fetch}=fakeFetch(json({type:'description',pricing_description:description}));
+      const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
+      expect(await hf.estimate!('bytedance/seedance-2.5/image-to-video',{duration:4,resolution})).toMatchObject({usd,credits:usd,unitRu:'$',approximate:true,pricingDescription:description});
+    }
+  });
+  it.each([{type:'description',pricing_description:'Contact sales'}, {type:'description',pricing_description:'Price $0.01'}, {credits:null,usd:0.5}, {credits:true,usd:0.1}, {credits:'',usd:0.1}])('rejects unknown or nonnumeric price shapes without fallback: %j',async body=>{
+    const {fetch}=fakeFetch(json(body));const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
+    await expect(hf.estimate!('bytedance/seedance-2.5/text-to-video',{duration:4,resolution:'480p'})).rejects.toMatchObject({code:'PROVIDER'});
+  });
+  it('preserves exact account credits/USD when the endpoint supplies them',async()=>{
+    const {fetch}=fakeFetch(json({credits:'42.000',usd:'0.210'}));const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
+    expect(await hf.estimate!('bytedance/seedance-2.5/text-to-video',{})).toEqual({credits:42,usd:0.21});
+  });
+  it('prefers numeric account prices when a response also includes a tariff description', async () => {
+    const {fetch}=fakeFetch(json({type:'description',pricing_description:'A human readable tariff',credits:42,usd:0.21}));
+    const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
+    expect(await hf.estimate!('bytedance/seedance-2.5/text-to-video',{})).toEqual({credits:42,usd:0.21});
   });
 });
 

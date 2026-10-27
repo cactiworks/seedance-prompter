@@ -29,8 +29,9 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
     if (!FLOW_ID.test(id)) return undefined;
     try {
       return FlowSchema.parse(JSON.parse(await readFile(fileOf(id), 'utf8')));
-    } catch {
-      return undefined;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw new StoreError('INVALID', 'Холст не удалось прочитать. Файл сохранён; восстанови его из резервной копии перед продолжением.');
     }
   }
 
@@ -40,6 +41,7 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
       return serialize(fileOf(id), async () => {
         const base = await get(id) ?? { id, name, rev: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, createdAt: iso(), updatedAt: iso() };
         const next = FlowSchema.parse(await update(base));
+        if (JSON.stringify(next) === JSON.stringify(base)) return base;
         return write({ ...next, rev: (base.rev ?? 0) + 1, updatedAt: iso() });
       });
     },
@@ -48,7 +50,7 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
       const out = [];
       for (const file of await readdir(dir)) {
         if (!file.endsWith('.json')) continue;
-        const flow = await get(file.slice(0, -5));
+        const flow = await get(file.slice(0, -5)).catch(() => undefined);
         if (flow !== undefined) out.push({ id: flow.id, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt, production: flow.production });
       }
       return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

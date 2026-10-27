@@ -604,10 +604,14 @@ describe('whole-character lock and mandatory master gate', () => {
   });
   it('a failed master critic has no auto retry; explicit retry alone never resumes paid dispatch', async () => {
     let bad = true;
-    const critic: Runner = async <T>(request: LlmRequest) => ({ data: reviewReport(bad ? ['wrong-id'] : JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId)) as T, meta });
+    const critic: Runner = async <T>(request: LlmRequest) => {
+      const report = reviewReport(bad ? ['wrong-id'] : JSON.parse(request.user).candidates.map((c: { artifactId: string }) => c.artifactId));
+      if (!bad) for (const result of report.results) for (const check of ['likeness','continuity','shotMatch']) result.observations.push({check:check as typeof result.observations[number]['check'],region:'Тестовая область',evidence:'Детерминированное наблюдение.'});
+      return {data:report as T,meta};
+    };
     const s = await setup(1, {}, identity, undefined, critic); await s.rt.photos.start(s.id, await s.input());
     for (let i = 0; i < 10; i++) await s.cycle();
-    let run = await s.get(); expect(run.masterReview?.status).toBe('failed'); expect(s.submit).toHaveBeenCalledTimes(1); expect(s.calls).toHaveLength(4);
+    let run = await s.get(); expect(run.masterReview?.status).toBe('failed'); expect(run.masterReview?.error).toContain('неполный список'); expect(s.submit).toHaveBeenCalledTimes(1); expect(s.calls).toHaveLength(4);
     bad = false; const input = { rev: run.rev, requestId: crypto.randomUUID(), consent: true as const, scope: 'master' as const, referenceLimit: 6 as const };
     await Promise.all([s.rt.review.start(s.id, input), s.rt.review.start(s.id, input)]); await s.rt.review.wait(s.id);
     for (let i = 0; i < 5; i++) await s.cycle();

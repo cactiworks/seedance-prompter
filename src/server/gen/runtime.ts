@@ -32,6 +32,7 @@ export const SubmitRequestSchema = z.object({
   /** Сумма, которую владелец видел и подтвердил. Не совпала с оценкой — задача не создаётся. */
   confirmCredits: z.number().optional(),
   quoteId: z.uuid().optional(),
+  acceptApproximate: z.boolean().optional(),
   /** Согласие отправить рефы провайдеру. */
   refsConsent: z.boolean().optional(),
   origin: OriginSchema.optional(),
@@ -243,7 +244,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
     // Файлы читаются до создания задач: отсутствующий реф не должен стоить ни кредита.
     // Первый файл уже прочитан замером — видео до 50 МБ второй раз в память не грузим.
     const files = await Promise.all(refs.map((r, i) => (i === 0 && measuredFile !== null ? measuredFile : readRef(r.source, model.refs.media))));
-    const quoted = model.quoteRequired ? await quotes.consume(request.quoteId, request.confirmCredits, provider, model, request.prompt, params, refs, count, files) : null;
+    const quoted = model.quoteRequired ? await quotes.consume(request.quoteId, request.confirmCredits, provider, model, request.prompt, params, refs, count, files, request.acceptApproximate) : null;
     if (quoted) cost = quoted.estimate;
     const sentPrompt = forProvider(model, request.prompt).prompt;
 
@@ -270,6 +271,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
           tag: request.tag ?? null,
           estimateCredits: cost.credits / count,
           estimateUsd: cost.usd / count,
+          ...(cost.approximate ? { estimateUnit:'$' as const, approximate:true } : {}),
           status: 'submitting',
           taskId: null,
           providerState: null,

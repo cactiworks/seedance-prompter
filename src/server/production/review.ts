@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { pendingReview, reviewArtifacts, GeneratedReviewReportSchema, DetailedReviewReportSchema, LogicReviewReportSchema, DETAIL_CRITERIA, LOGIC_CRITERIA, validateLogicReview, validateDetailedReview, validateReview, masterApproved, type ReviewStartSchema } from '../../core/production/review.ts';
+import { pendingReview, reviewArtifacts, GeneratedReviewReportSchema, DetailedReviewReportSchema, LogicReviewReportSchema, DETAIL_CRITERIA, LOGIC_CRITERIA, validateLogicReview, validateDetailedReview, validateReview, masterApproved, ReviewValidationError, type ReviewStartSchema } from '../../core/production/review.ts';
 import { ProductionError, record } from '../../core/production/engine.ts';
 import type { ProductionRun } from '../../core/production/model.ts';
 import { visionCopy, inspectionViews, DETAIL_VIEWS } from './vision.ts';
@@ -162,7 +162,10 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
         await store.update(id, (run) => {
           if (run[key]?.requestId !== requestId || run[key]!.status !== 'running') return;
           Object.assign(run[key], { status: controller.signal.aborted ? 'interrupted' : 'failed',
-            error: error instanceof LlmError ? error.messageRu : 'Критик не завершил проверку: файл или ответ недоступен либо ответ не прошёл проверку. Повтори проверку вручную.',
+            error: error instanceof LlmError ? error.messageRu : error instanceof z.ZodError
+              ? `Отчёт критика не прошёл схему: ${error.issues.slice(0,3).map(i=>i.path.join('.')).join(', ')}. Повтори проверку.`
+              : error instanceof ReviewValidationError ? `${error.message} Повтори проверку; фото сохранено.`
+              : 'Критик не завершил проверку: файл недоступен или проверяемые данные изменились. Повтори проверку вручную.',
             model: meta?.model ?? model, inputTokens: meta?.inputTokens ?? null, outputTokens: meta?.outputTokens ?? null });
           if (key === 'masterReview' && run.photos) {
             run.photos.status = 'stopped';

@@ -15,7 +15,7 @@ export function createGenerationQuotes(now: () => number) {
     if (!provider.estimate) throw new SubmitError('NO_ESTIMATE', 412, 'Оценка Higgsfield недоступна. Генерация не отправлена.');
     const value = await provider.estimate(model.target(params, sent.map(r => r.role)), model.input(forProvider(model, prompt).prompt, params, sent));
     if (!Number.isFinite(value.credits) || !Number.isFinite(value.usd) || value.credits <= 0 || value.usd <= 0) throw new SubmitError('NO_ESTIMATE', 412, 'Higgsfield не вернул цену. Генерация не отправлена.');
-    return { credits: Number((value.credits * count).toFixed(6)), usd: Number((value.usd * count).toFixed(6)), unitRu: 'кр Higgsfield' };
+    return { ...value, credits: Number((value.credits * count).toFixed(6)), usd: Number((value.usd * count).toFixed(6)), unitRu: value.unitRu ?? 'кр Higgsfield' };
   }
   return {
     async prepare(provider: GenProvider, model: GenModel, prompt: string, params: GenParams, refs: JobRef[], count: number, files: QuoteFile[]) {
@@ -28,13 +28,14 @@ export function createGenerationQuotes(now: () => number) {
       quotes.set(quoteId, { fingerprint: fingerprint(model, prompt, params, refs, count, files), expiresAt: now() + 600_000, sent, estimate });
       return { quoteId, estimate };
     },
-    async consume(id: string | undefined, confirmed: number | undefined, provider: GenProvider, model: GenModel, prompt: string, params: GenParams, refs: JobRef[], count: number, files: QuoteFile[]) {
+    async consume(id: string | undefined, confirmed: number | undefined, provider: GenProvider, model: GenModel, prompt: string, params: GenParams, refs: JobRef[], count: number, files: QuoteFile[], acceptApproximate = false) {
       const quote = id ? quotes.get(id) : undefined;
       if (!quote || quote.expiresAt <= now() || quote.fingerprint !== fingerprint(model, prompt, params, refs, count, files)) throw new SubmitError('QUOTE_REQUIRED', 409, 'Запрос изменился или оценка устарела. Рассчитай и подтверди цену заново.');
       // Reserve synchronously before any await: a double click cannot spend twice.
       quotes.delete(id!);
       const estimate = await price(provider, model, prompt, params, quote.sent, count);
-      if (confirmed !== quote.estimate.credits || quote.estimate.credits !== estimate.credits || quote.estimate.usd !== estimate.usd) throw new SubmitError('COST_CHANGED', 409, 'Цена Higgsfield изменилась. Рассчитай и подтверди её заново.', { estimate });
+      if (confirmed !== quote.estimate.credits || JSON.stringify(quote.estimate) !== JSON.stringify(estimate)) throw new SubmitError('COST_CHANGED', 409, 'Цена или тариф Higgsfield изменились. Рассчитай и подтверди заново.', { estimate });
+      if (estimate.approximate && !acceptApproximate) throw new SubmitError('APPROXIMATE_CONSENT',428,'Подтверди ориентировочную цену: фактическое списание Higgsfield может отличаться.');
       return { estimate, sent: quote.sent };
     },
   };

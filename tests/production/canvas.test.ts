@@ -77,6 +77,13 @@ async function finished(f: Awaited<ReturnType<typeof fixture>>) {
   expect(value.state?.status).not.toBe('running'); return value;
 }
 describe('Production Canvas preparation without media submission',()=>{
+  it('an unchanged handoff does not advance revision or conflict with an open Canvas', async () => {
+    const f=await fixture();
+    const again=await f.service.handoff(f.run.id);
+    expect(again.rev).toBe(f.flow.rev);
+    await expect(f.flows.save(f.flow.id,{...f.flow,name:'Manual title'})).resolves.toMatchObject({name:'Manual title'});
+    expect(f.submit).not.toHaveBeenCalled();
+  });
   it('one flow for a partial series; repeat/add preserves layout and manual drafts under concurrent handoffs', async()=>{
     const f=await fixture(); expect(f.flow.nodes).toHaveLength(2);
     await f.flows.save(f.flow.id,{...f.flow,nodes:f.flow.nodes.map(n=>({...n,x:777}))});
@@ -101,6 +108,19 @@ describe('Production Canvas preparation without media submission',()=>{
     expect(r.requests[0]!.images).toEqual([{mediaType:'image/png',base64:'test-photo'}]);
     const other=flow.nodes.find(n=>n.type==='seedance' && n.id!==f.node.id)!; expect((await f.store.read(other.slug)).seriesFill).toBeUndefined();
     expect(state.project.seriesFill?.previous).toEqual(formOf(p)); expect(f.submit).not.toHaveBeenCalled();
+  });
+  it('repairs a wrong existing first-frame reference and unrequested duration before the critic', async () => {
+    const f=await fixture(); let p=await f.store.read(f.node.slug);
+    p.refs.push({...p.refs[0]!,key:'extra-frame'});p.shots[0]!.panel.push('extra-frame');p=await f.store.write(p.slug,p,p.rev);
+    const wrong=filled(p);wrong.shot.segments[0]!.frameRef='extra-frame';wrong.shot.durationSec=8;
+    const r=runner([wrong,filled(p),ready]);await f.service.start(p.slug,p.rev,r.run);
+    const state=await finished(f);expect(r.requests).toHaveLength(3);
+    expect(r.requests[2]?.taskRu).toBe('Критик Prompter серии');
+    expect(state.state?.issues.join(' ')).not.toContain('исходного принятого фото');
+    expect(state.state?.issues.join(' ')).not.toContain('режиссёрскому плану');
+    const repair=JSON.parse(r.requests[1]!.user).repair.issues.join(' ');
+    expect(repair).toContain('исходного принятого фото');expect(repair).toContain('режиссёрскому плану: 6');
+    expect(state.project.shots[0]?.durationSec).toBe(6);expect(f.submit).not.toHaveBeenCalled();
   });
   it.each([true,false])('one repair then recheck (repaired=%s)',async repaired=>{
     const f=await fixture();const p=await f.store.read(f.node.slug);const form=filled(p);
@@ -145,6 +165,16 @@ describe('Production Canvas preparation without media submission',()=>{
     const f=await fixture();let p=await f.store.read(f.node.slug); p.world.place.ru='Моё место';p=await f.store.write(p.slug,p,p.rev);
     const r=runner([filled(p),filled(p)]);await f.service.start(p.slug,p.rev,r.run);const state=await finished(f);
     expect(state.state?.status).toBe('review');expect(state.project.world.place.ru).toBe('Моё место');expect(r.requests).toHaveLength(2);
+  });
+  it('keeps a creator duration override instead of restoring the director duration', async () => {
+    const f=await fixture();let p=await f.store.read(f.node.slug);
+    p.shots[0]!.durationSec=8;p=await f.store.write(p.slug,p,p.rev);
+    const form=filled(p);form.shot.durationSec=8;
+    const r=runner([form,ready]);await f.service.start(p.slug,p.rev,r.run);
+    const state=await finished(f);expect(state.project.shots[0]?.durationSec).toBe(8);
+    expect(state.state?.issues.join(' ')).not.toContain('режиссёрскому плану');
+    expect(JSON.parse(r.requests[0]!.user).protectedManualFields).toContainEqual({path:['shot','durationSec'],value:8});
+    expect(f.submit).not.toHaveBeenCalled();
   });
   it('late result never overwrites concurrent edits',async()=>{
     const f=await fixture();const p=await f.store.read(f.node.slug);let release:()=>void=()=>{};const wait=new Promise<void>(r=>{release=r;});

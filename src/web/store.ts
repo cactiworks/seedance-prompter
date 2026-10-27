@@ -52,6 +52,7 @@ interface State {
   /** Закрыть ролик: сначала дописать незаписанное (автосейв ждёт 800 мс), потом выйти. */
   closeProject: () => Promise<void>;
   flushProject: () => Promise<boolean>;
+  retryProjectSave: () => Promise<boolean>;
   selectShot: (shotId: string) => void;
   /** Новый кадр наследует комплект, правила и панель текущего: мир ролика общий. */
   addShot: () => void;
@@ -187,7 +188,7 @@ export const useStore = create<State>((set, get) => {
     try {
       const res = await fetch(`/api/projects/${project.slug}`, { method: 'PUT', headers: { ...HEADERS, 'if-match': String(project.rev) }, body: JSON.stringify(project) });
       if (res.status === 409) {
-        set({ save: 'conflict', error: 'Проект изменён в другом окне. Перезагрузи страницу, чтобы не затереть правки.' });
+        set({ save: 'conflict', error: 'Проект изменён в другом окне. Скачай свой черновик перед перезагрузкой; текущие правки остаются в редакторе.' });
         return;
       }
       const saved = await json<Project>(res);
@@ -220,6 +221,10 @@ export const useStore = create<State>((set, get) => {
       if (timer !== null) { clearTimeout(timer); timer = null; }
       return get().save === 'saved';
     },
+    retryProjectSave: async () => {
+      if (get().save === 'error') set({ save:'dirty' });
+      return get().flushProject();
+    },
     loadPack: async () => set({ pack: await json<PackBundle>(await fetch('/api/packs/cinema-doc')) }),
     loadProjects: async () => set({ projects: await json<ProjectListItem[]>(await fetch('/api/projects')) }),
 
@@ -243,14 +248,9 @@ export const useStore = create<State>((set, get) => {
 
     closeProject: async () => {
       // Автосейв ждёт паузу в 800 мс: без этого правка, сделанная за миг до «Назад», терялась.
-      if (timer !== null) {
-        clearTimeout(timer);
-        timer = null;
-        await flush();
-      }
-      while (get().save === 'saving') await new Promise((resolve) => setTimeout(resolve, 50));
+      if (!await get().flushProject()) return;
       set({ project: null, shotId: null, host: null, writeReport: null, planReport: null, proposals: null, exportResult: null });
-      void get().loadProjects();
+      void get().loadProjects().catch(() => undefined);
     },
 
     selectShot: (shotId) => set({ shotId, writeReport: null }),

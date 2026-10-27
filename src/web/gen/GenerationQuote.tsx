@@ -18,10 +18,11 @@ function QuoteDialog({ pending }: { pending: Pending }) {
   const [quote, setQuote] = useState<{ quoteId: string; estimate: Estimate } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [acceptApproximate,setAcceptApproximate] = useState(false);
   const refs = Array.isArray(pending.body.refs) ? pending.body.refs.length : 0;
   const cancel = () => { useQuote.setState({ pending: null }); pending.reject(new Error('Запуск отменён. Видео не отправлено.')); };
   const calculate = async () => {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setAcceptApproximate(false);
     try {
       const res = await fetch('/api/gen/quote', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sp-client': '1' }, body: JSON.stringify({ ...pending.body, refsConsent: true }) });
       const value = await res.json();
@@ -31,12 +32,16 @@ function QuoteDialog({ pending }: { pending: Pending }) {
     finally { setBusy(false); }
   };
   return <Dialog open onOpenChange={open => { if (!open) cancel(); }} title="Seedance 2.5 · Higgsfield" description="Стоимость этого запуска" size="m">
-    <Text>{quote ? `Запуск ${Number(pending.body.count ?? 1)} видео: ${formatCost(quote.estimate)}` : 'Получим цену для твоего аккаунта и выбранных настроек. Видео пока не запускается.'}</Text>
+    <Text>{quote ? `${quote.estimate.approximate ? 'Ориентировочная цена' : 'Цена'} за ${Number(pending.body.count ?? 1)} видео: ${formatCost(quote.estimate)}` : 'Запросим цену Higgsfield. Если сервис вернёт только тариф, покажем ориентировочный расчёт. Видео пока не запускается.'}</Text>
+    {quote?.estimate.approximate && <>
+      <Text variant="caption" tone="secondary">{quote.estimate.pricingNote} Выбранный формат: {String((pending.body.params as Record<string,unknown> | undefined)?.aspectRatio ?? 'по исходному фото')}.</Text>
+      <label style={{display:'flex',alignItems:'flex-start',gap:'var(--lab-space-4)',marginTop:'var(--lab-space-8)'}}><input type="checkbox" checked={acceptApproximate} onChange={e=>setAcceptApproximate(e.target.checked)} />Понимаю, что цена ориентировочная и фактическое списание может отличаться.</label>
+    </>}
     {refs > 0 && <Text variant="caption" tone="secondary">Для расчёта и генерации {refs} фото будут переданы в Higgsfield API.</Text>}
     {error && <Text role="alert">{error}</Text>}
     <div style={{ display: 'flex', gap: 'var(--lab-space-8)', flexWrap: 'wrap', marginTop: 'var(--lab-space-16)' }}>
       <Button variant="border" onClick={cancel}>Отмена</Button>
-      {quote ? <Button variant="primary" onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits }); }}>Сгенерировать · {formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>Рассчитать цену</Button>}
+      {quote ? <Button variant="primary" disabled={quote.estimate.approximate && !acceptApproximate} onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits, acceptApproximate }); }}>Сгенерировать · {formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>Рассчитать цену</Button>}
     </div>
   </Dialog>;
 }

@@ -55,6 +55,23 @@ describe('Higgsfield Seedance quote contract',()=>{
     await f.gen.submit({...request,quoteId:q.quoteId});expect(f.upload).toHaveBeenCalledTimes(1);expect(f.submit.mock.calls[0]![1]).not.toHaveProperty('aspect_ratio');
     const again=await f.gen.quote(request);await store.writeRef('photo','frame.png',new Uint8Array([1,2,3]));await expect(f.gen.submit({...request,quoteId:again.quoteId})).rejects.toMatchObject({code:'QUOTE_REQUIRED'});
   });
+  it('requires separate tariff consent and stores approximate USD as USD, never as credits',async()=>{
+    const f=await fixture();f.provider.estimate=async()=>({credits:0.8224,usd:0.8224,unitRu:'$',approximate:true,pricingNote:'16:9 tariff',pricingDescription:'fixture tariff v1'});
+    let q=await f.gen.quote(f.request);expect(q.estimate).toMatchObject({approximate:true,unitRu:'$',usd:0.8224});
+    await expect(f.gen.submit({...f.request,confirmCredits:0.8224,quoteId:q.quoteId})).rejects.toMatchObject({code:'APPROXIMATE_CONSENT'});
+    expect(f.submit).not.toHaveBeenCalled();expect(await f.gen.jobs.all()).toEqual([]);
+    q=await f.gen.quote(f.request);
+    const {jobs}=await f.gen.submit({...f.request,confirmCredits:0.8224,quoteId:q.quoteId,acceptApproximate:true});
+    expect(jobs[0]).toMatchObject({estimateUnit:'$',approximate:true,estimateUsd:0.8224});
+    const {mediaCostLabel}=await import('../../src/core/gen/models.ts');expect(mediaCostLabel(jobs[0]!,jobs[0]!.estimateCredits)).toBe('$0.8224');
+    expect(f.submit).toHaveBeenCalledTimes(1);
+  });
+  it('reconfirms a changed pricing description even when the displayed rate is unchanged',async()=>{
+    const f=await fixture();f.provider.estimate=async()=>({credits:1,usd:1,unitRu:'$',approximate:true,pricingDescription:'tariff v1'});
+    const q=await f.gen.quote(f.request);
+    f.provider.estimate=async()=>({credits:1,usd:1,unitRu:'$',approximate:true,pricingDescription:'tariff v2'});
+    await expect(f.gen.submit({...f.request,confirmCredits:1,quoteId:q.quoteId,acceptApproximate:true})).rejects.toMatchObject({code:'COST_CHANGED'});expect(f.submit).not.toHaveBeenCalled();
+  });
   it('legacy KIE history polls KIE; new legacy-id dispatch is rejected; imported nodes migrate',async()=>{
     const f=await fixture();const job=GenJobSchema.parse({id:'j-legacy123',createdAt:'2026-10-01',updatedAt:'2026-10-01',modelId:'kie/seedance-2-5',provider:'kie',providerModel:'bytedance/seedance-2-5',kind:'video',prompt:'old',params:{},refs:[],origin:null,estimateCredits:112,estimateUsd:0.56,status:'queued',taskId:'old-task',providerState:null,creditsConsumed:null,resultUrls:[],mediaIds:[],error:null,polls:0,pollingSince:0,nextCheckAt:0,downloadAttempts:0,finishedAt:null});
     await f.gen.jobs.put(job);await f.gen.tick();expect(f.kie.poll).toHaveBeenCalledWith('old-task');expect((await f.gen.jobs.get(job.id))?.provider).toBe('kie');

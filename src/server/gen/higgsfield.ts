@@ -1,6 +1,7 @@
 import { keyProblem, readSecret, KEYCHAIN } from '../secrets.ts';
 import { GenError, type GenProvider, type PollResult, type PollState } from './provider.ts';
 import { uploadHiggsfieldFile } from './higgsfieldUpload.ts';
+import { seedanceTariff } from './seedancePricing.ts';
 
 // Официальный API: docs.higgsfield.ai (quickstart, authentication, models/soul-2). Сверено 27.09.2026.
 // Отдельный продукт с балансом в USD — кредиты подписки higgsfield.ai здесь не тратятся (решение 21).
@@ -68,12 +69,11 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
 
     async estimate(endpoint, input) {
       const body = await call(`/estimate/${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
-      if (body.type === 'description' && typeof body.pricing_description === 'string') {
-        throw new GenError('PROVIDER', 'Higgsfield для Seedance вернул только описание тарифа, а не точную цену для этого аккаунта. Запуск заблокирован до появления account estimate; проверь endpoint /estimate или запусти через Higgsfield вручную.');
-      }
+      const numeric = (value:unknown) => typeof value === 'number' || (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value));
       const credits = Number(body.credits); const usd = Number(body.usd);
-      if (body.credits == null || body.usd == null || !Number.isFinite(credits) || !Number.isFinite(usd) || credits <= 0 || usd <= 0) throw new GenError('PROVIDER', 'Higgsfield не вернул корректную цену. Генерация не отправлена.');
-      return { credits, usd };
+      if (numeric(body.credits) && numeric(body.usd) && Number.isFinite(credits) && Number.isFinite(usd) && credits > 0 && usd > 0) return { credits, usd };
+      if (body.type === 'description' && typeof body.pricing_description === 'string') return seedanceTariff(endpoint,input,body.pricing_description);
+      throw new GenError('PROVIDER', 'Higgsfield не вернул корректную цену. Генерация не отправлена.');
     },
 
     async submit(endpoint, input) {

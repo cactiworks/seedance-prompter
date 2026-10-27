@@ -231,6 +231,15 @@ export function Workspace({ pack }: { pack: PackBundle }) {
 
       <div className={styles.columns}>
         <div className={styles.form}>
+          {store.error && <Card padding="l" role="alert">
+            <Text variant="label">{store.error}</Text>
+            {store.save === 'error' && <Button variant="border" size="s" onClick={() => void store.retryProjectSave()}>Повторить сохранение</Button>}
+            {(store.save === 'error' || store.save === 'conflict') && <Button variant="ghost" size="s" onClick={() => {
+              const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type:'application/json' }));
+              const link = document.createElement('a'); link.href = url; link.download = `${project.slug}-draft.json`; link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}>Скачать черновик формы</Button>}
+          </Card>}
           {project.production && <SeriesPreparation key={project.slug} project={project} />}
           <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
             <div className={styles.aspect}>

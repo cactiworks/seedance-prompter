@@ -97,7 +97,7 @@ export function createProductionCanvas(o: { rootDir: string; dataDir: string; fl
     const bytes = await o.store.readRef(project.slug, source.file.split('?')[0]!);
     if (createHash('sha256').update(bytes).digest('hex') !== media.sha256) throw new StoreError('CONFLICT', 'Фото в Prompter заменено. Верни исходное принятое фото через Canvas или продолжи вручную.');
     const referenceFiles = await Promise.all(project.refs.filter(r => project.shots[0]!.panel.includes(r.key) && r.file).map(async r => [r.key, createHash('sha256').update(await o.store.readRef(project.slug, r.file!.split('?')[0]!)).digest('hex')]));
-    return { data, hash: hash([data, media.sha256, referenceFiles]), bytes };
+    return { data, hash: hash([data, media.sha256, referenceFiles]), bytes, sourceKey:key };
   }
   async function execute(base: Project, state: PreparationStatus, runner: Runner, reset: boolean) {
     let draft = base; let draftValid = false;
@@ -121,7 +121,13 @@ export function createProductionCanvas(o: { rootDir: string; dataDir: string; fl
         if (!parsed.success) return { candidate: null, raw: result.data, issues: parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`) };
         const candidate = applyForm(base, parsed.data);
         const manual = manualProblems(parsed.data, locked);
-        return { candidate: manual.length ? null : candidate, raw: parsed.data, issues: [...manual, ...formProblems(candidate, pack)] };
+        const plannedDuration = ctx.data.scenePlan?.shots.find(shot => shot.id === base.production!.shotId)?.durationSec;
+        const durationProtected = locked.some(field => field.path[0] === 'shot' && field.path[1] === 'durationSec');
+        const seriesProblems = [
+          ...(candidate.shots[0]?.segments[0]?.frameRef !== ctx.sourceKey ? ['Первый отрезок должен начинаться с исходного принятого фото серии.'] : []),
+          ...(!durationProtected && plannedDuration !== undefined && durationOf(candidate,candidate.shots[0]!) !== plannedDuration ? [`Длительность должна соответствовать режиссёрскому плану: ${plannedDuration} с.`] : []),
+        ];
+        return { candidate: manual.length ? null : candidate, raw: parsed.data, issues: [...manual, ...seriesProblems, ...formProblems(candidate, pack)] };
       };
       const critique = async (candidate: Project, second: boolean) => {
         state.stage = second ? 'recheck' : 'critic'; await saveStatus(state);

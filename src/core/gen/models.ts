@@ -234,7 +234,7 @@ const GENERATORS: readonly GenModel[] = [
     params: [resolution(['480p', '720p', '1080p'], '480p'), aspect(['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9', '21:9'], '9:16'), duration(4, 30, 5), audio(true)],
     refs: { max: 30, roles: ['ref', 'start', 'end'], framesExclusive: true },
     promptRefs: 'at-image',
-    // Статической цены нет: quoteRequired требует account-specific /estimate перед запуском.
+    // Статической цены нет: /estimate даёт account-цену или отдельно подтверждённый ориентир тарифа.
     credits: () => 0, // Unknown until /estimate; never presented as free.
     target: (_p, roles) => `bytedance/seedance-2.5/${roles.includes('start') ? 'image-to-video' : roles.length ? 'reference-to-video' : 'text-to-video'}`,
     input: (prompt, p, refs) => ({ prompt, resolution: str(p, 'resolution'), duration: num(p, 'durationSec'), generate_audio: p.audio === true, output_format: 'mp4', ...(refs.some(r => r.role === 'start') ? { image_url: urls(refs, 'start')[0], ...(urls(refs, 'end')[0] ? { end_image_url: urls(refs, 'end')[0] } : {}) } : { aspect_ratio: str(p, 'aspectRatio'), ...(refs.length ? { image_urls: urls(refs, 'ref') } : {}) }) }),
@@ -409,6 +409,9 @@ export interface Estimate {
   usd: number;
   unitRu: string;
   requiresQuote?: boolean;
+  approximate?: boolean;
+  pricingNote?: string;
+  pricingDescription?: string;
 }
 
 const round = (value: number, digits: number): number => Math.round(value * 10 ** digits) / 10 ** digits;
@@ -423,7 +426,7 @@ export function estimate(model: GenModel, params: GenParams, count = 1, refCount
 /** «8 кр ≈ $0.04» или «$0.0057» — одна запись цены на весь интерфейс. */
 export function formatCost(e: Estimate): string {
   if (e.requiresQuote) return 'рассчитать цену Higgsfield';
-  const usd = `$${e.usd < 0.1 ? String(e.usd) : e.usd.toFixed(2)}`;
+  const usd = `${e.approximate ? '≈ ' : ''}$${e.usd < 0.1 ? String(e.usd) : e.usd.toFixed(e.approximate ? 4 : 2)}`;
   return e.unitRu === '$' ? usd : `${e.credits} ${e.unitRu} ≈ ${usd}`;
 }
 
@@ -431,6 +434,7 @@ export function formatCost(e: Estimate): string {
 export const currentModelId = (id: string): string => id === 'kie/seedance-2-5' ? 'higgsfield/seedance-2-5' : id;
 
 /** Stored history keeps its provider and price units, independent of the current model alias. */
-export function mediaCostLabel(item: {provider: string; modelId:string}, cost:number): string {
+export function mediaCostLabel(item: {provider: string; modelId:string; estimateUnit?:string; creditsConsumed?:number|null}, cost:number): string {
+  if (item.estimateUnit === '$' && item.creditsConsumed == null) return `$${cost}`;
   return item.provider === 'higgsfield' && item.modelId !== 'higgsfield/seedance-2-5' ? `$${cost}` : `${cost} кр${item.provider === 'higgsfield' ? ' Higgsfield' : ''}`;
 }

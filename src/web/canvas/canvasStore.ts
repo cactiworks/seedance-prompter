@@ -66,7 +66,7 @@ interface CanvasState {
   past: Flow[];
   future: Flow[];
   loadFlows: () => Promise<void>;
-  openFlow: (id: string) => Promise<void>;
+  openFlow: (id: string, reload?: boolean) => Promise<boolean>;
   newFlow: (from?: Pick<Flow, 'nodes' | 'edges' | 'name'>) => Promise<void>;
   deleteFlow: (id: string) => Promise<void>;
   restoreFlow: (id: string) => Promise<void>;
@@ -220,12 +220,18 @@ export const useCanvas = create<CanvasState>((set, get) => {
         return true;
       };
     },
-    openFlow: async (id) => {
+    openFlow: async (id, reload = false) => {
       const request = ++navigation;
-      if (!await flush()) return;
-      if (get().flow?.id === id) return;
-      const saved = await json<Flow>(await fetch(`/api/canvas/flows/${id}`));
-      if (request !== navigation || !await flush() || request !== navigation) return;
+      if (!await flush()) return false;
+      if (get().flow?.id === id && !reload) return true;
+      let saved: Flow;
+      try { saved = FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${id}`))); }
+      catch (error) { if (request === navigation) set({ error: error instanceof Error ? error.message : 'Не удалось открыть холст.' }); return false; }
+      if (request !== navigation || !await flush() || request !== navigation) return false;
+      // A forced refresh may race with typing into this same flow. Its newer
+      // acknowledged save is authoritative over the snapshot fetched earlier.
+      const current = get().flow;
+      if (current?.id === id && (current.rev ?? 0) > (saved.rev ?? 0)) saved = current;
       revisions.set(id, saved.rev ?? 0);
       let flow = saved;
       try {
@@ -238,6 +244,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (conflict) revisions.set(id, flow.rev ?? 0);
       set({ flow, selected: null, selection: [], save: restored ? 'dirty' : 'saved', past: [], future: [], error: conflict ? 'Есть локальный черновик и другая версия на сервере. Сохрани схему или создай копию, чтобы не потерять правки.' : null });
       if (restored) { pending = flow; if (!conflict) persist(); }
+      return true;
     },
     saveCopy: async () => {
       let draft = get().flow;
@@ -247,10 +254,15 @@ export const useCanvas = create<CanvasState>((set, get) => {
       try {
         const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: `${draft.name} — копия` }) }));
         if (get().flow?.id === draft.id) draft = get().flow!;
+        // Recovery copies own their drafts; reusing slugs would edit the original
+        // Prompter from a different flow. Saved media/jobs remain as history.
+        const ids = new Map(draft.nodes.map(node => [node.id, newId('n')]));
+        const nodes = draft.nodes.map(node => ({ ...node, id:ids.get(node.id)!, production:undefined, ...cloneSeedance(node) }));
+        const edges = draft.edges.map(edge => ({ ...edge, id:newId('e'), from:ids.get(edge.from)!, to:ids.get(edge.to)! }));
         // The original browser draft is retained until the new copy is confirmed on disk.
         navigation += 1;
         revisions.set(created.id, created.rev ?? 0);
-        set({ flow: { ...created, nodes: draft.nodes, edges: draft.edges, viewport: draft.viewport }, save: 'dirty', error: null, past: [], future: [] });
+        set({ flow: { ...created, nodes, edges, viewport: draft.viewport }, save: 'dirty', error: null, past: [], future: [] });
         persist();
         if (await flush()) { try { localStorage.removeItem(draftKey(draft.id)); } catch { /* storage unavailable */ } }
         await get().loadFlows();

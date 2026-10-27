@@ -1,10 +1,11 @@
 import { seriesFormFingerprint } from '../../core/production/seriesForm.ts';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Project } from '../../core/model/project.ts';
 import { useStore } from '../store.ts';
 import { Button, Text } from '../ui/components/index.ts';
 import { seriesApi, preparationLabel, type Inspection } from './api.ts';
 import styles from './Series.module.css';
+import { preparedProject } from './sync.ts';
 
 /** Read-only status polling. No preparation or generation is triggered by mounting. */
 export function usePreparation(slug: string) {
@@ -13,12 +14,15 @@ export function usePreparation(slug: string) {
   useEffect(() => {
     if (!slug) return;
     let stopped = false; let timer: ReturnType<typeof setTimeout>;
+    let latest = 0;
+    setData(null); setError('');
     const poll = async () => {
       clearTimeout(timer);
+      const request = ++latest;
       try {
         const value = await seriesApi<Inspection>(`/api/series-prompter/${slug}`);
-        if (!stopped) { setData(value); setError(''); timer = setTimeout(() => void poll(), value.state?.status === 'running' ? 1500 : 8000); }
-      } catch (e) { if (!stopped) { setError(e instanceof Error ? e.message : 'Статус недоступен.'); timer = setTimeout(() => void poll(), 8000); } }
+        if (!stopped && request === latest) { setData(value); setError(''); timer = setTimeout(() => void poll(), value.state?.status === 'running' ? 1500 : 8000); }
+      } catch (e) { if (!stopped && request === latest) { setError(e instanceof Error ? e.message : 'Статус недоступен.'); timer = setTimeout(() => void poll(), 8000); } }
     };
     const refresh = () => void poll();
     void poll(); window.addEventListener('series-preparation', refresh);
@@ -37,14 +41,9 @@ export function SeriesPreparation({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [reset, setReset] = useState(false);
-  const expected = useRef<{rev:number; id:string} | null>(null);
   useEffect(() => {
-    if (expected.current === null || !data?.state || data.state.status === 'running' || data.state.id !== expected.current.id) return;
-    const local = useStore.getState();
-    if (data.project.rev > expected.current.rev && local.project?.slug === data.project.slug && local.project.rev === expected.current.rev && local.save === 'saved') {
-      useStore.setState({ project:data.project, error:null });
-    }
-    expected.current = null;
+    const ready = preparedProject(useStore.getState(), data);
+    if (ready) useStore.setState({ project:ready, error:null });
   }, [data]);
   useEffect(() => {
     if (!data?.stale) return;
@@ -64,7 +63,7 @@ export function SeriesPreparation({ project }: { project: Project }) {
       const current = useStore.getState().project!;
       const response = await seriesApi<{ results: { state?: {id:string}; error?: string }[] }>('/api/series-prompter/prepare', { targets:[{ slug:current.slug, rev:current.rev }], consent, reset });
       if (response.results[0]?.error) throw new Error(response.results[0].error);
-      expected.current = { rev:current.rev, id:response.results[0]!.state!.id }; setReset(false); refreshPreparation();
+      setReset(false); refreshPreparation();
     } catch(e) { setError(e instanceof Error ? e.message : 'Не удалось начать.'); }
     finally { setBusy(false); }
   };

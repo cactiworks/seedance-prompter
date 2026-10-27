@@ -80,3 +80,13 @@ describe('clothing coverage and scene logic (labelled reports, not a vision benc
     expect(auditPassed(validateRetouchAudit({ result: report().results[0]!, preserved: 'pass', fixes: [] }, 'photo', 2, true))).toBe(true);
   });
 });
+
+
+it('accepts one observation for each of the 11 checks without weakening required evidence',()=>{
+  const report=LogicReviewReportSchema.parse(reviewReport(['master']));const r=report.results[0]!;
+  for(const check of ['likeness','continuity','shotMatch'])r.observations.push({check:check as NonNullable<typeof r.observations[number]['check']>,region:'Область кадра',evidence:'Синтетическое наблюдение.'});
+  expect(r.observations).toHaveLength(11);
+  expect(()=>validateLogicReview(report,['master'],1,true,['master'])).not.toThrow();
+  const missing=structuredClone(report);missing.results[0]!.observations=missing.results[0]!.observations.filter(o=>o.check!=='wardrobe');
+  expect(()=>validateLogicReview(missing,['master'],1,true,['master'])).toThrow('одежду');
+});

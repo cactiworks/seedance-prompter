@@ -3,7 +3,7 @@ import { seriesApi } from '../series/api.ts';
 import { useState } from 'react';
 import { currentArtifact, type ProductionRun } from '../../core/production/model.ts';
 import { photoOutput } from '../../core/production/output.ts';
-import { masterAttempts, masterRejected, photoPrice } from '../../core/production/photos.ts';
+import { canRegenerateMaster, masterAttempts, masterRejected, photoPrice } from '../../core/production/photos.ts';
 import { LOGIC_CRITERIA, masterApproved, reviewedPhoto } from '../../core/production/review.ts';
 import { boundPrompts } from '../../core/production/appearance.ts';
 import { hasStoryEvents, sceneForShot } from '../../core/production/plan.ts';
@@ -22,7 +22,7 @@ const STATUS: Record<string, string> = { pending: 'Ожидает', submitting: 
 export function ReusePlan({ run }: { run: ProductionRun }) {
   const { photoCommand, busy } = useProduction();
   const [requestId] = useState(() => crypto.randomUUID());
-  return <div className={styles.notice}><Text variant="label">Сохранённые сцена и prompts доступны для новой серии. Codex повторно не вызывается; стоимость фото подтвердишь отдельно.</Text><div><Button variant="border" disabled={busy} onClick={() => void photoCommand('fork-photos', { rev: run.rev, requestId })}>Реальные фото по этому плану</Button></div></div>;
+  return <div className={styles.notice}><Text variant="label">Создай новую серию по сохранённому плану и prompts. Codex повторно не вызывается и ничего не генерируется автоматически; стоимость фото подтвердишь отдельно.</Text><div><Button variant="primary" disabled={busy} onClick={() => void photoCommand('fork-photos', { rev: run.rev, requestId })}>Новая серия по этому плану</Button></div></div>;
 }
 function progress(run: ProductionRun): number {
   if (!run.planned) return 0;
@@ -80,13 +80,14 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       {run.planned && !run.photos && hasStoryEvents(run.scenePlan) && <details className={styles.detail}><summary>{run.contentMode === 'broll' ? 'Идеи B-roll' : 'События по сценарию'} · кадров: {run.shots.length} · сцен: {run.scenePlan!.scenes!.length}</summary><div className={styles.shotPlan}>{run.scenePlan!.shots.map(shot => <article className={styles.planShot} key={shot.id}><Text variant="label" medium>{shot.title}</Text><>{shot.scriptExcerpt && <blockquote className={styles.scriptQuote}>{shot.scriptExcerpt}</blockquote>}{shot.concept && <Text variant="label">{shot.concept}</Text>}</><Text variant="label">{shot.action}</Text><Text variant="caption" tone="secondary">{sceneForShot(run.scenePlan!, shot).title} · {shot.framing}</Text></article>)}</div></details>}
       {run.planned && !run.photos && !hasStoryEvents(run.scenePlan) && <><Text variant="caption" tone="secondary">Это прежний план с общей сценой. Для отдельных событий и локаций нужна новая режиссура; сценарий и фото сохранятся.</Text><div><Button variant="border" disabled={busy} onClick={replan}>Новая режиссура по этому сценарию</Button></div></>}
       <PhotoStart run={run} />
+      {master && <div className={styles.masterStrip}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорный кадр"><img src={master.url} alt="Опорный кадр" /></button><div><Text variant="label" medium>Опорный кадр · {masterAttempts(run)} / 3</Text><Text variant="caption" tone="secondary">{masterApproved(run) ? run.masterReview?.criteriaVersion !== LOGIC_CRITERIA ? 'Одежда и логика требуют перепроверки' : hasStoryEvents(run.scenePlan) ? 'Образ проверен · у кадров своя композиция' : 'Задаёт образ и сцену для серии' : masterRejected(run) ? 'Не прошёл проверку — открой кадр, чтобы увидеть причину' : ['failed', 'interrupted'].includes(run.masterReview?.status ?? '') ? 'Проверка остановилась — повтори её без пересоздания фото' : 'Проверяется'}</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Рассмотреть</Button></div></div>}
+      {master && ['failed', 'interrupted'].includes(run.masterReview?.status ?? '') && <div className={styles.costControls} role="status">
+        <Text variant="label" medium>Опорный кадр сохранён, но проверка остановилась</Text>
+        <Text variant="caption" tone="secondary">Остальные кадры не запускались. Подключи AI и повтори проверку ниже — новая платная генерация не создаётся. После успешной проверки продолжение серии подтверждается отдельно.</Text>
+      </div>}
       <PhotoReview run={run} scope="master" />
-      {run.masterReview?.status === 'failed' && (
-        <div className={styles.costControls} role="alert">
-          <Text variant="label" medium>Опорный кадр сохранён, но проверка остановилась</Text>
-          <Text variant="caption" tone="secondary">Остальные кадры не запускались. Подключи AI-подключение и нажми «Перепроверить этот кадр без генерации» ниже — это не создаст новую платную задачу.</Text>
-        </div>
-      )}
+      {masterRejected(run) && !canRegenerateMaster(run) && <ReusePlan run={run} />}
+      {masterApproved(run) && ['failed', 'interrupted'].includes(run.review?.status ?? '') && <PhotoReview run={run} />}
       {failures.map(item => <div className={styles.costControls} key={item.tag}>
         <Text variant="caption">{item.key === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === item.key)?.title}: {item.error}</Text>
         {item.jobId && (item.status === 'download_failed' || item.errorCode === 'POLL_TIMEOUT') && <div><Button variant="border" disabled={busy} onClick={() => void photoCommand('photos/retry', { jobId: item.jobId })}>Повторить {item.status === 'download_failed' ? 'скачивание' : 'проверку статуса'} · без генерации</Button></div>}
@@ -98,7 +99,8 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
         void (async () => {
           if (!await useCanvas.getState().flush()) throw new Error('Сначала сохрани открытый Canvas.');
           const flow = await seriesApi<{id:string}>(`/api/production/${run.id}/canvas`, {});
-          await useCanvas.getState().loadFlows(); await useCanvas.getState().openFlow(flow.id);
+          await useCanvas.getState().loadFlows();
+          if (!await useCanvas.getState().openFlow(flow.id, true)) throw new Error('Не удалось обновить Canvas. Правки сохранены; повтори переход.');
           window.location.hash = '/canvas';
         })().catch(e => setDownloadError(e instanceof Error ? e.message : 'Не удалось открыть Canvas.')).finally(() => setHandoffBusy(false));
       }}>Продолжить в Canvas</Button><Button variant="border" loading={downloading} onClick={() => {
@@ -118,7 +120,6 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       })}</div> : <div className={styles.resultEmpty}><Text variant="label" tone="secondary">Здесь появятся кадры серии после проверки опорного изображения.</Text></div>}
     </section>
     <details className={styles.productionDetails}><summary>Детали производства</summary><div className={styles.detailsBody}>
-      {master && <div className={styles.masterStrip}><button type="button" className={styles.thumbnail} onClick={() => setInspect(master.id)} aria-label="Открыть опорный кадр"><img src={master.url} alt="Опорный кадр" /></button><div><Text variant="label" medium>Опорный кадр · {masterAttempts(run)} / 3</Text><Text variant="caption" tone="secondary">{masterApproved(run) ? run.masterReview?.criteriaVersion !== LOGIC_CRITERIA ? 'Одежда и логика требуют перепроверки' : hasStoryEvents(run.scenePlan) ? 'Образ проверен · у кадров своя композиция' : 'Задаёт образ и сцену для серии' : masterRejected(run) ? 'Требует внимания' : 'Проверяется'}</Text><Button variant="ghost" onClick={() => setInspect(master.id)}>Рассмотреть</Button></div></div>}
       <details className={styles.detail}><summary>{run.contentMode === 'broll' ? 'Визуальный вектор и идеи B-roll' : 'Сценарий, сцена и план кадров'}</summary>{run.script && <pre>{run.script}</pre>}<pre>{run.direction}</pre><Preparation run={run} /></details>
       <details className={styles.detail}><summary>Внешность и prompts</summary>{run.appearance?.error && <Text>{run.appearance.error}</Text>}{run.appearance?.output && <><Text>{run.appearance.output.profile.summaryRu}</Text><pre>{JSON.stringify(run.appearance.output.profile, null, 2)}</pre></>}<pre>{boundPrompts(run)?.masterPrompt}</pre>{boundPrompts(run)?.shots.map(shot => <pre key={shot.shotId}>{shot.shotId}: {shot.imagePrompt}</pre>)}</details>
       <PhotoReview run={run} allowComplete /><details className={styles.detail}><summary>Задачи и проверки</summary>{run.photos?.items.map(item => <div className={styles.photoJob} key={item.tag}><div><Text variant="label">{item.key === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === item.key)?.title}</Text><Text variant="caption">{item.taskId} {item.error}</Text></div><Tag>{STATUS[item.status]}</Tag></div>)}{[run.appearance, run.masterReview, run.review].filter(Boolean).map((state, i) => <pre key={i}>{JSON.stringify(state, null, 2)}</pre>)}</details>

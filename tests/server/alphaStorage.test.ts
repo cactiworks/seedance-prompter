@@ -70,6 +70,17 @@ it('B04: a corrupt series does not block startup or healthy series; the damaged 
   } finally { runtime.stop(); }
 });
 
+it('a corrupt production flow cannot be silently replaced by the next handoff', async () => {
+  const dir = await directory(); const flows = createFlows(dir);
+  const healthy = await flows.create('Healthy');
+  const id = 'f-production-broken';
+  const file = path.join(dir, 'canvas', `${id}.json`);
+  await writeFile(file, '{');
+  await expect(flows.ensureProduction(id, 'Replacement', flow => flow)).rejects.toMatchObject({ code: 'INVALID' });
+  expect(await readFile(file, 'utf8')).toBe('{');
+  expect((await flows.list()).map(flow => flow.id)).toEqual([healthy.id]);
+});
+
 it('B06: concurrent/replayed create requests keep one run and two text calls, including after restart', async () => {
   const dir = await directory(); let calls = 0;
   const runner: Runner = async <T>() => ({ data: (calls++ === 0 ? sceneDraft() : promptPlan()) as T, meta: { model: 'fake', inputTokens: 1, outputTokens: 1, durationMs: 1, turns: 1 } });

@@ -11,6 +11,10 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => storage.set(k, v), removeItem: (k: string) => storage.delete(k) });
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const id = url.split('/').at(-1)!;
+    if (url === '/api/canvas/flows' && init?.method === 'POST') {
+      const created = { ...mk('f-copy-123'), name: JSON.parse(init.body as string).name };
+      flows.set(created.id, created); return Response.json(created);
+    }
     if (init?.method === 'PUT') {
       const incoming = JSON.parse(init.body as string) as Flow;
       if (incoming.rev !== flows.get(id)?.rev) return Response.json({ messageRu: 'Конфликт' }, { status: 409 });
@@ -99,4 +103,57 @@ it('B02: edits made while the next flow is loading are saved before it replaces 
   useCanvas.getState().rename('Typed during navigation'); release(); await opening;
   expect(flows.get('f-alpha-123')?.name).toBe('Typed during navigation');
   expect(useCanvas.getState().flow?.id).toBe('f-other-123');
+});
+
+it('refreshing the current production flow loads newly handed-off branches without losing saved edits', async () => {
+  const canvas = useCanvas.getState();
+  await canvas.openFlow('f-alpha-123');
+  canvas.rename('My manual title');
+  await canvas.flush();
+  const saved = flows.get('f-alpha-123')!;
+  flows.set(saved.id, { ...saved, rev: saved.rev! + 1, nodes: [blankNode('image', 80, 80)] });
+  await canvas.openFlow(saved.id, true);
+  expect(useCanvas.getState().flow?.nodes).toHaveLength(1);
+  expect(useCanvas.getState().flow?.name).toBe('My manual title');
+  canvas.rename('After the next handoff');
+  expect(await canvas.flush()).toBe(true);
+});
+
+it('refreshing the same flow cannot replace edits made while its snapshot was loading', async () => {
+  const canvas = useCanvas.getState();
+  await canvas.openFlow('f-alpha-123');
+  const realFetch = globalThis.fetch;
+  let release!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const result = await realFetch(url, init);
+    if (url.endsWith('f-alpha-123') && !init?.method) { entered(); await gate; }
+    return result;
+  }));
+  const opening = canvas.openFlow('f-alpha-123', true);
+  await started;
+  canvas.rename('Typed while refreshing');
+  release(); await opening;
+  expect(useCanvas.getState().flow?.name).toBe('Typed while refreshing');
+  expect(flows.get('f-alpha-123')?.name).toBe('Typed while refreshing');
+});
+
+it('saving a recovery copy gives Seedance drafts independent ownership and keeps historical results', async () => {
+  const canvas = useCanvas.getState();
+  await canvas.openFlow('f-alpha-123');
+  const image = blankNode('image', 80, 80);
+  const seedance = { ...blankNode('seedance', 440, 80), slug:'cv-original', shotId:'shot-1', jobIds:['historical-job'], production:{ runId:'series',shotId:'shot-1',artifactId:'photo' } };
+  canvas.update(f => ({ ...f, nodes:[image,seedance], edges:[{id:'e-original',from:image.id,to:seedance.id,port:'ref'}] }));
+  await canvas.flush();
+  await canvas.saveCopy();
+  const copy = useCanvas.getState().flow!;
+  const copied = copy.nodes.find(n => n.type === 'seedance')!;
+  expect(copy.id).not.toBe('f-alpha-123');
+  expect(copied.id).not.toBe(seedance.id);
+  expect(copied.slug).toBe(''); expect(copied.copyFrom).toBe(seedance.slug);
+  expect(copied.production).toBeUndefined(); expect(copied.jobIds).toEqual(['historical-job']);
+  expect(copy.edges[0]?.to).toBe(copied.id);
+  expect(flows.get('f-alpha-123')?.nodes[1]?.slug).toBe(seedance.slug);
 });
