@@ -18,7 +18,7 @@ export function PhotoStart({ run }: { run: ProductionRun }) {
   useEffect(() => { setQuote(null); setConsent(false); }, [run.characterId, run.paused, run.resolution, run.aspectRatio, rejected]);
   const blocked = run.photos?.items.some(i => ['failed', 'unknown', 'download_failed', 'submitting', 'queued', 'running', 'downloading'].includes(i.status));
   const remaining = run.photos ? run.photos.items.filter(i => i.status === 'pending').length : run.shots.length + 1;
-  if (!run.planned || run.photos?.status === 'running' || blocked || !remaining || [run.appearance, run.masterReview, run.review].some(s => s?.status === 'running')) return null;
+  if (!run.planned || run.photos?.status === 'running' || blocked || !remaining || run.masterReview?.status === 'failed' || [run.appearance, run.masterReview, run.review].some(s => s?.status === 'running')) return null;
   if (rejected && !canRegenerateMaster(run)) return <Text variant="label" tone="secondary">{masterAttempts(run) >= 3 ? 'Лимит — три опорных кадра на серию.' : 'По этому master уже создавались кадры — заменить его в этой серии нельзя.'} Можно перепроверить сохранённый кадр или изменить замысел в деталях производства.</Text>;
   async function price(): Promise<void> {
     setLoading(true); setError(null); setConsent(false);

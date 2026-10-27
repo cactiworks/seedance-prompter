@@ -81,6 +81,12 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
       {run.planned && !run.photos && !hasStoryEvents(run.scenePlan) && <><Text variant="caption" tone="secondary">Это прежний план с общей сценой. Для отдельных событий и локаций нужна новая режиссура; сценарий и фото сохранятся.</Text><div><Button variant="border" disabled={busy} onClick={replan}>Новая режиссура по этому сценарию</Button></div></>}
       <PhotoStart run={run} />
       <PhotoReview run={run} scope="master" />
+      {run.masterReview?.status === 'failed' && (
+        <div className={styles.costControls} role="alert">
+          <Text variant="label" medium>Опорный кадр сохранён, но проверка остановилась</Text>
+          <Text variant="caption" tone="secondary">Остальные кадры не запускались. Подключи AI-подключение и нажми «Перепроверить этот кадр без генерации» ниже — это не создаст новую платную задачу.</Text>
+        </div>
+      )}
       {failures.map(item => <div className={styles.costControls} key={item.tag}>
         <Text variant="caption">{item.key === 'scene' ? 'Опорный кадр' : run.shots.find(s => s.id === item.key)?.title}: {item.error}</Text>
         {item.jobId && (item.status === 'download_failed' || item.errorCode === 'POLL_TIMEOUT') && <div><Button variant="border" disabled={busy} onClick={() => void photoCommand('photos/retry', { jobId: item.jobId })}>Повторить {item.status === 'download_failed' ? 'скачивание' : 'проверку статуса'} · без генерации</Button></div>}

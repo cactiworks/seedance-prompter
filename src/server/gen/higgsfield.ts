@@ -68,6 +68,9 @@ export function createHiggsfieldProvider(options: HiggsfieldOptions = {}): GenPr
 
     async estimate(endpoint, input) {
       const body = await call(`/estimate/${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+      if (body.type === 'description' && typeof body.pricing_description === 'string') {
+        throw new GenError('PROVIDER', 'Higgsfield для Seedance вернул только описание тарифа, а не точную цену для этого аккаунта. Запуск заблокирован до появления account estimate; проверь endpoint /estimate или запусти через Higgsfield вручную.');
+      }
       const credits = Number(body.credits); const usd = Number(body.usd);
       if (body.credits == null || body.usd == null || !Number.isFinite(credits) || !Number.isFinite(usd) || credits <= 0 || usd <= 0) throw new GenError('PROVIDER', 'Higgsfield не вернул корректную цену. Генерация не отправлена.');
       return { credits, usd };

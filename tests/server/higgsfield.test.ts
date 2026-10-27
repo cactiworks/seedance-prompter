@@ -58,6 +58,15 @@ describe('Higgsfield API (Soul 2)', () => {
     expect(seen).toHaveLength(0);
     expect(hf.balance).toBeUndefined();
   });
+
+  it('blocks Seedance when Higgsfield returns a pricing description instead of an account quote', async () => {
+    const { fetch } = fakeFetch(json({ type: 'description', pricing_description: 'Actual pricing depends on output dimensions and billable duration.' }));
+    const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch });
+    await expect(hf.estimate?.('bytedance/seedance-2.5/image-to-video', { duration: 4 })).rejects.toMatchObject({
+      code: 'PROVIDER',
+      messageRu: expect.stringContaining('только описание тарифа'),
+    });
+  });
 });
 
 describe('формат ключа: запись с текстом команды вместо ключа ловится сразу', () => {

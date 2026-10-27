@@ -34,7 +34,9 @@ export function PhotoReview({ run, scope = 'series', allowComplete = false }: { 
   if (master && state?.status === 'complete' && !outdated && masterApproved(run)) return null;
   if (state?.status === 'complete' && !outdated && !allowComplete && (!master || masterApproved(run))) return null;
   return <details className={styles.detail} open={state?.status !== 'complete'}>
-    <summary>{outdated ? master ? 'Перепроверить одежду и логику master' : 'Перепроверить одежду и логику сцены' : master ? 'Перепроверить этот кадр без генерации' : 'Повторить отбор фотографий'}</summary>
+    <summary>{state?.status === 'failed' ? 'Повторить остановленную проверку без генерации' : state?.status === 'interrupted' ? 'Продолжить проверку вручную' : outdated ? master ? 'Перепроверить одежду и логику master' : 'Перепроверить одежду и логику сцены' : master ? 'Перепроверить этот кадр без генерации' : 'Повторить отбор фотографий'}</summary>
+    {state?.status === 'failed' && <Text role="alert" variant="label">{state.error ?? 'Проверка остановилась технически. Повтори её явно; фото и бюджет сохранены.'}</Text>}
+    {state?.status === 'interrupted' && <Text role="status" variant="label">Проверка прервана. Запусти её снова после подключения AI.</Text>}
     {outdated && <Text variant="caption">В прежнем отчёте нет отдельной проверки одежды и логики сцены. Сохранённые фото можно проверить заново; генерация не запускается.</Text>}
     {master && state?.status === 'complete' && <Text variant="caption">{state.criteriaVersion ? 'Кадр будет проверен заново; фото не перегенерируются.' : 'Короткие рукава и мелкие отличия одежды теперь допустимы. Кадр будет проверен заново; фото не перегенерируются.'}</Text>}
     <Text variant="caption" tone="secondary">Критик увидит общий кадр и четыре крупных фрагмента каждого исходника. Проверит глаза, рот, руки, фоновые лица, текст, комплект одежды, физическую логику сцены и выбранную манеру съёмки; художественные отклонения оценивает отдельно.</Text>
