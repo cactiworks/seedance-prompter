@@ -1,6 +1,8 @@
+import { formatCost, tariffNote } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { useState } from 'react';
 import { create } from 'zustand';
-import { formatCost, type Estimate } from '../../core/gen/models.ts';
+import { type Estimate } from '../../core/gen/models.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { Button, Dialog, Text } from '../ui/components/index.ts';
 
@@ -31,17 +33,17 @@ function QuoteDialog({ pending }: { pending: Pending }) {
     } catch (e) { setError(e instanceof Error ? e.message : 'Оценка недоступна.'); }
     finally { setBusy(false); }
   };
-  return <Dialog open onOpenChange={open => { if (!open) cancel(); }} title="Seedance 2.5 · Higgsfield" description="Стоимость этого запуска" size="m">
-    <Text>{quote ? `${quote.estimate.approximate ? 'Ориентировочная цена' : 'Цена'} за ${Number(pending.body.count ?? 1)} видео: ${formatCost(quote.estimate)}` : 'Запросим цену Higgsfield. Если сервис вернёт только тариф, покажем ориентировочный расчёт. Видео пока не запускается.'}</Text>
+  return <Dialog open onOpenChange={open => { if (!open) cancel(); }} title="Seedance 2.5 · Higgsfield" description={ui("Стоимость этого запуска")} size="m">
+    <Text>{quote ? ui("{0} за {1} видео: {2}", quote.estimate.approximate ? ui("Ориентировочная цена") : ui("Цена"), Number(pending.body.count ?? 1), formatCost(quote.estimate)) : ui("Запросим цену Higgsfield. Если сервис вернёт только тариф, покажем ориентировочный расчёт. Видео пока не запускается.")}</Text>
     {quote?.estimate.approximate && <>
-      <Text variant="caption" tone="secondary">{quote.estimate.pricingNote} Выбранный формат: {String((pending.body.params as Record<string,unknown> | undefined)?.aspectRatio ?? 'по исходному фото')}.</Text>
-      <label style={{display:'flex',alignItems:'flex-start',gap:'var(--lab-space-4)',marginTop:'var(--lab-space-8)'}}><input type="checkbox" checked={acceptApproximate} onChange={e=>setAcceptApproximate(e.target.checked)} />Понимаю, что цена ориентировочная и фактическое списание может отличаться.</label>
+      <Text variant="caption" tone="secondary">{tariffNote(quote.estimate.pricingNote)} {ui(" Выбранный формат: ")}{String((pending.body.params as Record<string,unknown> | undefined)?.aspectRatio ?? ui("по исходному фото"))}.</Text>
+      <label style={{display:'flex',alignItems:'flex-start',gap:'var(--lab-space-4)',marginTop:'var(--lab-space-8)'}}><input type="checkbox" checked={acceptApproximate} onChange={e=>setAcceptApproximate(e.target.checked)} />{ui("Понимаю, что цена ориентировочная и фактическое списание может отличаться.")}</label>
     </>}
-    {refs > 0 && <Text variant="caption" tone="secondary">Для расчёта и генерации {refs} фото будут переданы в Higgsfield API.</Text>}
+    {refs > 0 && <Text variant="caption" tone="secondary">{ui("Для расчёта и генерации ")}{refs} {ui(" фото будут переданы в Higgsfield API.")}</Text>}
     {error && <Text role="alert">{error}</Text>}
     <div style={{ display: 'flex', gap: 'var(--lab-space-8)', flexWrap: 'wrap', marginTop: 'var(--lab-space-16)' }}>
-      <Button variant="border" onClick={cancel}>Отмена</Button>
-      {quote ? <Button variant="primary" disabled={quote.estimate.approximate && !acceptApproximate} onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits, acceptApproximate }); }}>Сгенерировать · {formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>Рассчитать цену</Button>}
+      <Button variant="border" onClick={cancel}>{ui("Отмена")}</Button>
+      {quote ? <Button variant="primary" disabled={quote.estimate.approximate && !acceptApproximate} onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits, acceptApproximate }); }}>{ui("Сгенерировать · ")}{formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>{ui("Рассчитать цену")}</Button>}
     </div>
   </Dialog>;
 }

@@ -1,3 +1,4 @@
+import { ui } from '../../language.ts';
 import { Dialog as RadixDialog } from 'radix-ui';
 import { useRef, type ReactNode } from 'react';
 import { Icon } from '../icons/Icon.tsx';
@@ -36,7 +37,7 @@ export function Dialog({ open, onOpenChange, title, description, footer, size = 
               )}
             </div>
             <RadixDialog.Close asChild>
-              <Button variant="ghost" size="s" iconOnly aria-label="Закрыть" icon={<Icon name="close" />} />
+              <Button variant="ghost" size="s" iconOnly aria-label={ui("Закрыть")} icon={<Icon name="close" />} />
             </RadixDialog.Close>
           </header>
           <div className={styles.body}>{children}</div>

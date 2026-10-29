@@ -165,6 +165,12 @@
   border-top: 1px solid var(--lab-border-subtle);
 }
 
+.preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lab-space-3);
+}
+
 .providers {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,7 @@ export type Route = (typeof ROUTES)[number];
 export const PRIMARY_ROUTES: Route[] = ['canvas', 'production', 'images', 'video', 'library'];
 export const TOOL_ROUTES: Route[] = ['shots', 'prompter', 'calibration'];
 export const ROUTE_RU: Record<Route, string> = { production: 'Производство', shots: 'Seedance-сценарий', prompter: 'Помощник промптов', images: 'Изображения', video: 'Видео', canvas: 'Canvas', library: 'Материалы', calibration: 'Калибровка' };
+export const ROUTE_EN: Record<Route, string> = { production: 'Production', shots: 'Seedance script', prompter: 'Prompt helper', images: 'Images', video: 'Video', canvas: 'Canvas', library: 'Assets', calibration: 'Calibration' };
 export const ROUTE_HINT: Record<Route, string> = {
   production: 'Серии фото и клипов: этапы и две точки приёмки · mock',
   canvas: 'Холст: референсы, генерация и обработка вместе',
@@ -16,6 +17,16 @@ export const ROUTE_HINT: Record<Route, string> = {
   shots: 'Подробный промпт по кадрам, референсам и репликам',
   prompter: 'Помощь с промптом и выбором модели по твоей идее',
   calibration: 'Сравнение моделей на одинаковых задачах',
+};
+export const ROUTE_HINT_EN: Record<Route, string> = {
+  production: 'Photo series and clips: stages and review gates · mock',
+  canvas: 'Canvas: references, generation and processing together',
+  images: 'Fast image generation and editing',
+  video: 'Generate video from text or an image',
+  library: 'Saved results and uploaded files',
+  shots: 'Detailed prompt with shots, references and dialogue',
+  prompter: 'Prompt and model help for your idea',
+  calibration: 'Compare models on the same tasks',
 };
 
 const parse = (hash: string): Route => {

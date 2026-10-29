@@ -1,7 +1,9 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { remoteStudio } from '../download.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { estimate, findModel, formatCost, mediaCostLabel, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
+import { estimate, findModel, mediaCostLabel, paramsFor, sourceTitleRu } from '../../core/gen/models.ts';
 import type { GenJob, MediaItem } from '../../core/model/media.ts';
 import { mediaUrl, useGen } from '../gen/genStore.ts';
 import { STATUS_RU, awaitingFiles } from '../../core/gen/jobStatus.ts';
@@ -40,7 +42,7 @@ export function DownloadMediaButton({ item, size = 's' }: { item: Pick<MediaItem
     <Button
       variant="border"
       size={size}
-      title={`Скачать ${filename}`}
+      title={ui("Скачать {0}", filename)}
       onClick={() => {
         const link = document.createElement('a');
         link.href = mediaUrl(item.id);
@@ -50,8 +52,7 @@ export function DownloadMediaButton({ item, size = 's' }: { item: Pick<MediaItem
         link.remove();
       }}
     >
-      Скачать
-    </Button>
+      {ui("Скачать")}</Button>
   );
 }
 
@@ -128,27 +129,27 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
     ['Модель', sourceTitleRu(item.modelId)],
     ...Object.entries(item.params).map(([k, v]): [string, string] => [
       PARAM_RU[k] ?? k,
-      k === 'durationSec' ? `${String(v)} с` : k === 'styleId' ? (v === '' ? 'нет' : (styleNames.get(String(v)) ?? String(v))) : k === 'seed' && v === 0 ? 'случайный' : showValue(v),
+      k === 'durationSec' ? ui("{0} с", String(v)) : k === 'styleId' ? (v === '' ? 'нет' : (styleNames.get(String(v)) ?? String(v))) : k === 'seed' && v === 0 ? 'случайный' : showValue(v),
     ]),
     ['Списано', item.creditsConsumed === null ? '—' : mediaCostLabel(item,item.creditsConsumed)],
     ['Референсы', item.refs.length === 0 ? 'нет' : String(item.refs.length)],
     ['Создано', formatDate(item.savedAt)],
-    ['Файл', `${item.file} · ${(item.bytes / 1024 / 1024).toFixed(1)} МБ`],
+    ['Файл', ui("{0} · {1} МБ", item.file, (item.bytes / 1024 / 1024).toFixed(1))],
   ];
 
   return createPortal(
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={`Просмотр: ${sourceTitleRu(item.modelId)}`} onPointerDown={(event) => event.stopPropagation()}>
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={ui("Просмотр: {0}", sourceTitleRu(item.modelId))} onPointerDown={(event) => event.stopPropagation()}>
       <div className={styles.backdrop} style={{ backgroundImage: item.kind === 'image' ? `url(${mediaUrl(item.id)})` : undefined }} />
 
       {(versions.done.length > 1 || versions.pending.length > 0) && (
-        <nav className={styles.versions} aria-label="Версии">
+        <nav className={styles.versions} aria-label={ui("Версии")}>
           {versions.done.map((v) => (
-            <button key={v.id} type="button" className={`${styles.version} ${v.id === item.id ? styles.versionOn : ''}`} onClick={() => setCurrent(v)} title={parentOf(v) === null ? 'Исходник' : 'Правка'}>
+            <button key={v.id} type="button" className={`${styles.version} ${v.id === item.id ? styles.versionOn : ''}`} onClick={() => setCurrent(v)} title={parentOf(v) === null ? ui("Исходник") : ui("Правка")}>
               {v.kind === 'video' ? <video src={mediaUrl(v.id)} muted playsInline preload="metadata" /> : <img src={mediaUrl(v.id)} alt="" />}
             </button>
           ))}
           {versions.pending.map((j) => (
-            <span key={j.id} className={`${styles.version} ${styles.versionPending} lab-hatch`} title={`${sourceTitleRu(j.modelId)} · ${STATUS_RU[j.status]}`}><Text variant="caption">{STATUS_RU[j.status]}</Text></span>
+            <span key={j.id} className={`${styles.version} ${styles.versionPending} lab-hatch`} title={`${sourceTitleRu(j.modelId)} · ${ui(STATUS_RU[j.status])}`}><Text variant="caption">{ui(STATUS_RU[j.status])}</Text></span>
           ))}
         </nav>
       )}
@@ -160,13 +161,13 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
       ) : (
       <div className={styles.stage} onClick={(event) => event.target === event.currentTarget && onClose()}>
         {index > 0 && (
-          <button type="button" className={`${styles.nav} ${styles.navPrev}`} onClick={() => setCurrent(siblings[index - 1] ?? item)} aria-label="Предыдущая">
+          <button type="button" className={`${styles.nav} ${styles.navPrev}`} onClick={() => setCurrent(siblings[index - 1] ?? item)} aria-label={ui("Предыдущая")}>
             <Icon name="chevron-back" size={1.25} />
           </button>
         )}
         {item.kind === 'image' ? <img className={styles.media} src={mediaUrl(item.id)} alt={item.prompt.slice(0, 80)} /> : <video className={styles.media} src={mediaUrl(item.id)} controls autoPlay loop playsInline />}
         {index >= 0 && index < siblings.length - 1 && (
-          <button type="button" className={`${styles.nav} ${styles.navNext}`} onClick={() => setCurrent(siblings[index + 1] ?? item)} aria-label="Следующая">
+          <button type="button" className={`${styles.nav} ${styles.navNext}`} onClick={() => setCurrent(siblings[index + 1] ?? item)} aria-label={ui("Следующая")}>
             <Icon name="chevron-forward" size={1.25} />
           </button>
         )}
@@ -183,13 +184,13 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
               {formatDate(item.savedAt)}
             </Text>
           </div>
-          <button ref={closeButton} type="button" className={styles.close} onClick={onClose} aria-label="Закрыть (Esc)">
+          <button ref={closeButton} type="button" className={styles.close} onClick={onClose} aria-label={ui("Закрыть (Esc)")}>
             <Icon name="close" size={1} />
           </button>
         </header>
 
         <SegmentedControl<'info' | 'edit'>
-          aria-label="Вкладка"
+          aria-label={ui("Вкладка")}
           size="s"
           value={tab}
           onChange={(next) => {
@@ -198,23 +199,23 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
             setMode(next === 'edit' && item.kind === 'image' ? 'brush' : 'view');
           }}
           options={[
-            { value: 'info', label: 'Результат' },
-            { value: 'edit', label: item.kind === 'image' ? 'Правка' : 'Апскейл' },
+            { value: 'info', label: ui("Результат") },
+            { value: 'edit', label: item.kind === 'image' ? ui("Правка") : ui("Апскейл") },
           ]}
         />
 
-        {(versions.pending.length > 0 || nextVersion !== null || jobsError !== null || libraryError !== null) && <section className={styles.jobFeedback} aria-label="Задачи правки">
-          {nextVersion !== null && <Button variant="border" size="xs" onClick={() => setCurrent(nextVersion)}>Готово — открыть новую версию</Button>}
+        {(versions.pending.length > 0 || nextVersion !== null || jobsError !== null || libraryError !== null) && <section className={styles.jobFeedback} aria-label={ui("Задачи правки")}>
+          {nextVersion !== null && <Button variant="border" size="xs" onClick={() => setCurrent(nextVersion)}>{ui("Готово — открыть новую версию")}</Button>}
           {(jobsError !== null || libraryError !== null) && <Text variant="caption" role="alert">{jobsError ?? libraryError}</Text>}
           {versions.pending.map((task) => <div key={task.id} data-job-id={task.id}>
-            <Text variant="label" medium role="status">{sourceTitleRu(task.modelId)} · {STATUS_RU[task.status]}</Text>
-            {awaitingFiles(task, library) && <Text variant="caption">Обновляется список файлов…</Text>}
+            <Text variant="label" medium role="status">{sourceTitleRu(task.modelId)} · {ui(STATUS_RU[task.status])}</Text>
+            {awaitingFiles(task, library) && <Text variant="caption">{ui("Обновляется список файлов…")}</Text>}
             {task.error !== null && <Text variant="caption">{task.error.messageRu}</Text>}
-            {retryable(task) && <Button variant="border" size="xs" onClick={() => void retry(task.id).catch((error: unknown) => setTaskError(error instanceof Error ? error.message : 'Не удалось обновить задачу.'))}>{task.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}</Button>}
+            {retryable(task) && <Button variant="border" size="xs" onClick={() => void retry(task.id).catch((error: unknown) => setTaskError(error instanceof Error ? error.message : 'Не удалось обновить задачу.'))}>{task.status === 'download_failed' ? ui("Скачать снова") : ui("Проверить снова")}</Button>}
           </div>)}
           {taskError !== null && <Text variant="caption" role="alert">{taskError}</Text>}
-          <Button variant="border" size="xs" onClick={() => { onClose(); useGen.getState().openTasks(); }}>Все задачи и результаты в «Материалах»</Button>
-          {jobsError !== null && <Button variant="ghost" size="xs" onClick={() => void loadJobs()}>Обновить статусы</Button>}
+          <Button variant="border" size="xs" onClick={() => { onClose(); useGen.getState().openTasks(); }}>{ui("Все задачи и результаты в «Материалах»")}</Button>
+          {jobsError !== null && <Button variant="ghost" size="xs" onClick={() => void loadJobs()}>{ui("Обновить статусы")}</Button>}
         </section>}
         <div className={styles.actions}>
           <DownloadMediaButton item={item} />
@@ -223,7 +224,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
             size="s"
             icon={<Icon name="layers" size={1} />}
             loading={sendingToCanvas}
-            title={canvasName === undefined ? 'Добавить файл в Canvas для дальнейшей работы' : `Добавить отдельной карточкой в Canvas «${canvasName}»`}
+            title={canvasName === undefined ? ui("Добавить файл в Canvas для дальнейшей работы") : ui("Добавить отдельной карточкой в Canvas «{0}»", canvasName)}
             onClick={() => {
               setSendingToCanvas(true);
               setCanvasError(null);
@@ -236,36 +237,31 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
                 .finally(() => setSendingToCanvas(false));
             }}
           >
-            В Canvas
-          </Button>
+            {ui("В Canvas")}</Button>
         </div>
         <Text variant="caption" tone={canvasError === null ? 'tertiary' : 'accent'}>
-          {canvasError ?? (canvasName === undefined ? 'В Canvas можно связать файл со следующим инструментом.' : `Добавится в Canvas «${canvasName}».`)}
+          {canvasError ?? (canvasName === undefined ? ui("В Canvas можно связать файл со следующим инструментом.") : ui("Добавится в Canvas «{0}».", canvasName))}
         </Text>
 
         {tab === 'info' && (
           <div className={styles.panelBody}>
             {item.kind === 'image' && onUseAsRef !== undefined && (
               <div className={styles.actions}>
-                <Button variant="border" size="s" title="Открыть генерацию изображения с этим референсом" onClick={() => onUseAsRef(item, 'image')}>
-                  Создать на основе
-                </Button>
-                <Button variant="border" size="s" title="Открыть генерацию видео с этим изображением" onClick={() => onUseAsRef(item, 'video')}>
-                  Анимировать
-                </Button>
+                <Button variant="border" size="s" title={ui("Открыть генерацию изображения с этим референсом")} onClick={() => onUseAsRef(item, 'image')}>
+                  {ui("Создать на основе")}</Button>
+                <Button variant="border" size="s" title={ui("Открыть генерацию видео с этим изображением")} onClick={() => onUseAsRef(item, 'video')}>
+                  {ui("Анимировать")}</Button>
               </div>
             )}
             <section className={styles.block}>
               <Text variant="caption" tone="tertiary" medium>
-                ОЦЕНКА
-              </Text>
+                {ui("ОЦЕНКА")}</Text>
               <VerdictBar mediaId={item.id} />
             </section>
             <section className={styles.block}>
               <div className={styles.blockHead}>
                 <Text variant="caption" tone="tertiary" medium>
-                  ПРОМПТ
-                </Text>
+                  {ui("ПРОМПТ")}</Text>
                 <button
                   type="button"
                   className={styles.linkButton}
@@ -276,7 +272,7 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
                   }}
                 >
                   <Icon name={copied ? 'checkmark' : 'copy'} size={0.875} />
-                  {copied ? 'Скопировано' : 'Копировать'}
+                  {copied ? ui("Скопировано") : ui("Копировать")}
                 </button>
               </div>
               <Text variant="label" className={styles.prompt}>
@@ -308,18 +304,17 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
                       window.location.hash = job.kind === 'image' ? '/images' : '/video';
                     }}
                   >
-                    Использовать настройки
-                  </Button>
+                    {ui("Использовать настройки")}</Button>
                   <Button variant="dark" size="s" icon={<Icon name="arrow-redo" size={1} />} onClick={() => void regenerate(job)}>
-                    Ещё раз{again === null ? '' : ` · ${formatCost(again)}`}
+                    {ui("Ещё раз")}{again === null ? '' : ` · ${formatCost(again)}`}
                   </Button>
                 </>
               )}
               <Button variant="ghost" size="s" icon={<Icon name="star" size={1} />} onClick={() => void toggleFavorite(item.id)}>
-                {favorite ? 'В избранном' : 'В избранное'}
+                {favorite ? ui("В избранном") : ui("В избранное")}
               </Button>
               <Button variant="ghost" size="s" icon={<Icon name="folder" size={1} />} onClick={() => void reveal(item.id)}>
-                {remoteStudio ? 'Скачать' : 'В Finder'}
+                {remoteStudio ? ui("Скачать") : ui("В Finder")}
               </Button>
               {/* Подтверждение — на месте кнопки: диалог встал бы под просмотр (он выше по слоям). */}
               {confirmDelete ? (
@@ -337,27 +332,22 @@ export function MediaPreview({ item: opened, onClose, onUseAsRef, list, initialT
                       });
                     }}
                   >
-                    Удалить с диска навсегда
-                  </Button>
+                    {ui("Удалить с диска навсегда")}</Button>
                   <Button variant="ghost" size="s" onClick={() => setConfirmDelete(false)}>
-                    Отмена
-                  </Button>
+                    {ui("Отмена")}</Button>
                 </span>
               ) : (
                 <Button variant="ghost" size="s" icon={<Icon name="bin" size={1} />} onClick={() => setConfirmDelete(true)}>
-                  Удалить
-                </Button>
+                  {ui("Удалить")}</Button>
               )}
               <div className={styles.folderWrap}>
                 <Button variant="ghost" size="s" icon={<Icon name="files" size={1} />} onClick={() => setFolderMenu((v) => !v)}>
-                  В папку
-                </Button>
+                  {ui("В папку")}</Button>
                 {folderMenu && (
                   <div className={styles.folderMenu} role="menu">
                     {folders.length === 0 && (
                       <Text variant="caption" tone="tertiary">
-                        Папок пока нет — создай в библиотеке.
-                      </Text>
+                        {ui("Папок пока нет — создай в библиотеке.")}</Text>
                     )}
                     {folders.map((f) => {
                       const inside = f.mediaIds.includes(item.id);

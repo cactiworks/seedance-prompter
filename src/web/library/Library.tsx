@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { remoteStudio } from '../download.ts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { sourceTitleRu } from '../../core/gen/models.ts';
@@ -99,7 +100,7 @@ export function Library() {
     }
   };
   const useAsRef = (item: MediaItem, target: 'image' | 'video'): void => {
-    addRef(target, { label: `Из библиотеки · ${sourceTitleRu(item.modelId)}`, source: { type: 'media', mediaId: item.id } });
+    addRef(target, { label: ui("Из библиотеки · {0}", sourceTitleRu(item.modelId)), source: { type: 'media', mediaId: item.id } });
     setOpen(null);
     window.location.hash = target === 'image' ? '/images' : '/video';
   };
@@ -121,20 +122,19 @@ export function Library() {
       <aside className={styles.rail}>
         <label className={styles.search}>
           <Icon name="search" size={1} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по промпту" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={ui("Поиск по промпту")} />
         </label>
-        {nav({ type: 'all' }, 'Все', 'apps', library.length)}
-        {nav({ type: 'favorites' }, 'Избранное', 'star', favorites.filter((f) => library.some((m) => m.id === f)).length)}
-        {nav({ type: 'kind', kind: 'image' }, 'Картинки', 'image', library.filter((m) => m.kind === 'image').length)}
-        {nav({ type: 'kind', kind: 'video' }, 'Видео', 'video', library.filter((m) => m.kind === 'video').length)}
+        {nav({ type: 'all' }, ui("Все"), 'apps', library.length)}
+        {nav({ type: 'favorites' }, ui("Избранное"), 'star', favorites.filter((f) => library.some((m) => m.id === f)).length)}
+        {nav({ type: 'kind', kind: 'image' }, ui("Картинки"), 'image', library.filter((m) => m.kind === 'image').length)}
+        {nav({ type: 'kind', kind: 'video' }, ui("Видео"), 'video', library.filter((m) => m.kind === 'video').length)}
         <div className={styles.railHead}>
           <Text variant="caption" tone="tertiary">
-            Папки
-          </Text>
+            {ui("Папки")}</Text>
           <button
             type="button"
             className={styles.iconButton}
-            title="Новая папка"
+            title={ui("Новая папка")}
             onClick={() =>
               void createFolder('Новая папка').then((f) => {
                 setView({ type: 'folder', id: f.id });
@@ -163,15 +163,14 @@ export function Library() {
               }}
             />
           ) : (
-            <div key={f.id} className={styles.folderRow} onDoubleClick={() => setEditing({ id: f.id, name: f.name })} title="Двойной клик — переименовать">
+            <div key={f.id} className={styles.folderRow} onDoubleClick={() => setEditing({ id: f.id, name: f.name })} title={ui("Двойной клик — переименовать")}>
               {nav({ type: 'folder', id: f.id }, f.name, 'folder', f.mediaIds.filter((id) => library.some((m) => m.id === id)).length)}
             </div>
           ),
         )}
         {folders.length === 0 && (
           <Text variant="caption" tone="tertiary" className={styles.railHint}>
-            Папки — как проекты: одна работа может лежать в нескольких.
-          </Text>
+            {ui("Папки — как проекты: одна работа может лежать в нескольких.")}</Text>
         )}
       </aside>
 
@@ -182,7 +181,7 @@ export function Library() {
               {title}
             </Text>
             <Text variant="label" tone="secondary">
-              показано {shown.length} из {library.length} · {remoteStudio ? 'файлы сохранены на общем сервере' : 'файлы сохранены на этом компьютере'}
+              {ui("показано ")}{shown.length} {ui(" из ")}{library.length} · {remoteStudio ? ui("файлы сохранены на общем сервере") : ui("файлы сохранены на этом компьютере")}
             </Text>
             {importError !== null && (
               <Text variant="caption" tone="accent">
@@ -203,28 +202,26 @@ export function Library() {
                 void importFiles(files);
               }}
             />
-            <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} loading={importing} title="Свои картинки и видео — съёмки, референсы; дальше их можно резать и отдавать в canvas" onClick={() => importer.current?.click()}>
-              Добавить файлы
-            </Button>
+            <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} loading={importing} title={ui("Свои картинки и видео — съёмки, референсы; дальше их можно резать и отдавать в canvas")} onClick={() => importer.current?.click()}>
+              {ui("Добавить файлы")}</Button>
             {folder !== undefined && (
-              <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} title="Удалить папку — файлы останутся" onClick={() => void deleteFolder(folder.id).then(() => setView({ type: 'all' }))}>
-                Удалить папку
-              </Button>
+              <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} title={ui("Удалить папку — файлы останутся")} onClick={() => void deleteFolder(folder.id).then(() => setView({ type: 'all' }))}>
+                {ui("Удалить папку")}</Button>
             )}
-            <label className={styles.size} title="Размер карточек">
+            <label className={styles.size} title={ui("Размер карточек")}>
               <Icon name="image" size={0.75} />
-              <input type="range" min={8} max={22} value={size} onChange={(event) => setCardSize(Number(event.target.value))} aria-label="Размер карточек" />
+              <input type="range" min={8} max={22} value={size} onChange={(event) => setCardSize(Number(event.target.value))} aria-label={ui("Размер карточек")} />
               <Icon name="image" size={1.125} />
             </label>
             <div className={styles.order}>
-              <Select label="Дата" value={order} onChange={(v) => setOrder(v === 'old' ? 'old' : 'new')} options={[{ value: 'new', label: 'Сначала новые' }, { value: 'old', label: 'Сначала старые' }]} />
+              <Select label={ui("Дата")} value={order} onChange={(v) => setOrder(v === 'old' ? 'old' : 'new')} options={[{ value: 'new', label: ui("Сначала новые") }, { value: 'old', label: ui("Сначала старые") }]} />
             </div>
           </div>
         </header>
 
-        {unfinished.length > 0 && <section className={styles.day} aria-label="Задачи генерации">
-          <Text as="h2" variant="title-s">В работе и требуют внимания · {unfinished.length}</Text>
-          <Text variant="caption" tone="secondary">Генерации со всех холстов и правки. Готовый файл появится ниже автоматически; ошибка останется здесь.</Text>
+        {unfinished.length > 0 && <section className={styles.day} aria-label={ui("Задачи генерации")}>
+          <Text as="h2" variant="title-s">{ui("В работе и требуют внимания · ")}{unfinished.length}</Text>
+          <Text variant="caption" tone="secondary">{ui("Генерации со всех холстов и правки. Готовый файл появится ниже автоматически; ошибка останется здесь.")}</Text>
           <div className={styles.grid} style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${size}rem, 1fr))` }}>
             {(order === 'new' ? unfinished : [...unfinished].reverse()).map((job) => <JobTile key={job.id} job={job} onOpen={(id) => setOpen(library.find((m) => m.id === id) ?? null)} />)}
           </div>
@@ -233,12 +230,11 @@ export function Library() {
         {selected.length > 0 && (
           <div className={styles.selectionBar}>
             <Text variant="label" medium>
-              Выбрано: {selected.length}
+              {ui("Выбрано: ")}{selected.length}
             </Text>
             <div className={styles.pickWrap}>
               <Button variant="border" size="xs" icon={<Icon name="files" size={0.875} />} onClick={() => setFolderPick((v) => !v)}>
-                В папку
-              </Button>
+                {ui("В папку")}</Button>
               {folderPick && (
                 <div className={styles.menu} role="menu">
                   {folders.map((f) => (
@@ -264,29 +260,26 @@ export function Library() {
                     }}
                   >
                     <Icon name="plus" size={0.875} />
-                    Новая папка
-                  </button>
+                    {ui("Новая папка")}</button>
                 </div>
               )}
             </div>
             {folder !== undefined && (
               <Button variant="ghost" size="xs" onClick={() => void fileTo(folder.id, selected, false).then(() => setSelected([]))}>
-                Убрать из папки
-              </Button>
+                {ui("Убрать из папки")}</Button>
             )}
             <Button
               variant="border"
               size="xs"
               icon={<Icon name="download" size={0.875} />}
-              title={remoteStudio ? "Скачать ZIP с понятными именами для монтажа" : "Копии с понятными именами — в папку для монтажа, откроется в Finder"}
+              title={remoteStudio ? ui("Скачать ZIP с понятными именами для монтажа") : ui("Копии с понятными именами — в папку для монтажа, откроется в Finder")}
               onClick={() =>
                 void exportMedia(selected)
                   .then((r) => setImportError(r.downloadUrl ? `Архив готов: ${r.files.length} файлов` : `Выгружено файлов: ${r.files.length} → ${r.dir}`))
                   .catch((e: unknown) => setImportError(e instanceof Error ? e.message : 'Не выгрузилось.'))
               }
             >
-              Выгрузить для монтажа
-            </Button>
+              {ui("Выгрузить для монтажа")}</Button>
             {confirmDelete ? (
               <>
                 <Button
@@ -300,16 +293,13 @@ export function Library() {
                     })
                   }
                 >
-                  Удалить {selected.length} с диска навсегда
-                </Button>
+                  {ui("Удалить ")}{selected.length} {ui(" с диска навсегда")}</Button>
                 <Button variant="ghost" size="xs" onClick={() => setConfirmDelete(false)}>
-                  Отмена
-                </Button>
+                  {ui("Отмена")}</Button>
               </>
             ) : (
               <Button variant="ghost" size="xs" icon={<Icon name="bin" size={0.875} />} onClick={() => setConfirmDelete(true)}>
-                Удалить
-              </Button>
+                {ui("Удалить")}</Button>
             )}
             <Button
               variant="ghost"
@@ -319,15 +309,14 @@ export function Library() {
                 setConfirmDelete(false);
               }}
             >
-              Снять выделение
-            </Button>
+              {ui("Снять выделение")}</Button>
           </div>
         )}
 
         {shown.length === 0 ? (
           <div className={`${styles.empty} lab-hatch`}>
             <Text variant="label" tone="tertiary">
-              {unfinished.length > 0 ? 'Готовых файлов по этому фильтру пока нет. Статусы задач показаны выше.' : library.length === 0 ? 'Здесь будут готовые изображения и видео. Свои референсы можно загрузить кнопкой «Добавить файлы».' : view.type === 'folder' ? 'Папка пуста. Выбери работы и нажми «В папку».' : 'Ничего не нашлось.'}
+              {unfinished.length > 0 ? ui("Готовых файлов по этому фильтру пока нет. Статусы задач показаны выше.") : library.length === 0 ? ui("Здесь будут готовые изображения и видео. Свои референсы можно загрузить кнопкой «Добавить файлы».") : view.type === 'folder' ? ui("Папка пуста. Выбери работы и нажми «В папку».") : ui("Ничего не нашлось.")}
             </Text>
           </div>
         ) : (
@@ -336,7 +325,7 @@ export function Library() {
             return (
               <section key={day} className={styles.day}>
                 <label className={styles.dayHead}>
-                  <input type="checkbox" checked={all} onChange={(event) => toggle(items.map((i) => i.id), event.target.checked)} aria-label={`Выбрать всё за ${day}`} />
+                  <input type="checkbox" checked={all} onChange={(event) => toggle(items.map((i) => i.id), event.target.checked)} aria-label={ui("Выбрать всё за {0}", day)} />
                   <Text variant="title-s" medium>
                     {day}
                   </Text>
@@ -347,11 +336,11 @@ export function Library() {
                     const fav = favorites.includes(item.id);
                     return (
                       <div key={item.id} className={`${styles.card} ${isSel ? styles.cardSelected : ''}`}>
-                        <button type="button" className={styles.media} onClick={() => (selected.length > 0 ? toggle([item.id], !isSel) : setOpen(item))} aria-label="Открыть">
+                        <button type="button" className={styles.media} onClick={() => (selected.length > 0 ? toggle([item.id], !isSel) : setOpen(item))} aria-label={ui("Открыть")}>
                           {item.kind === 'image' ? <img src={mediaUrl(item.id)} alt={item.prompt.slice(0, 80)} loading="lazy" /> : <video src={mediaUrl(item.id)} muted preload="metadata" />}
                         </button>
-                        <input type="checkbox" className={styles.check} checked={isSel} onChange={(event) => toggle([item.id], event.target.checked)} aria-label="Выбрать" />
-                        <button type="button" className={`${styles.cardButton} ${styles.heart} ${fav ? styles.heartOn : ''}`} onClick={() => void toggleFavorite(item.id)} aria-label={fav ? 'Убрать из избранного' : 'В избранное'}>
+                        <input type="checkbox" className={styles.check} checked={isSel} onChange={(event) => toggle([item.id], event.target.checked)} aria-label={ui("Выбрать")} />
+                        <button type="button" className={`${styles.cardButton} ${styles.heart} ${fav ? styles.heartOn : ''}`} onClick={() => void toggleFavorite(item.id)} aria-label={fav ? ui("Убрать из избранного") : ui("В избранное")}>
                           <Icon name="star" size={0.875} />
                         </button>
                         {item.kind === 'video' && (
@@ -359,25 +348,22 @@ export function Library() {
                             <Icon name="video" size={0.75} />
                           </span>
                         )}
-                        <button type="button" className={`${styles.cardButton} ${styles.more}`} onClick={() => setMenu((m) => (m === item.id ? null : item.id))} aria-label="Действия">
+                        <button type="button" className={`${styles.cardButton} ${styles.more}`} onClick={() => setMenu((m) => (m === item.id ? null : item.id))} aria-label={ui("Действия")}>
                           <Icon name="ellipsis-horizontal" size={0.875} />
                         </button>
                         {menu === item.id && (
                           <div className={`${styles.menu} ${styles.cardMenu}`} role="menu" onMouseLeave={() => setMenu(null)}>
                             <button type="button" role="menuitem" onClick={() => (setOpen(item), setMenu(null))}>
                               <Icon name="eye" size={0.875} />
-                              Открыть
-                            </button>
+                              {ui("Открыть")}</button>
                             {item.kind === 'image' && (
                               <>
                                 <button type="button" role="menuitem" onClick={() => useAsRef(item, 'image')}>
                                   <Icon name="image" size={0.875} />
-                                  Реф для картинки
-                                </button>
+                                  {ui("Реф для картинки")}</button>
                                 <button type="button" role="menuitem" onClick={() => useAsRef(item, 'video')}>
                                   <Icon name="video" size={0.875} />
-                                  Кадр / реф для видео
-                                </button>
+                                  {ui("Кадр / реф для видео")}</button>
                               </>
                             )}
                             {folders.map((f) => {
@@ -385,13 +371,13 @@ export function Library() {
                               return (
                                 <button key={f.id} type="button" role="menuitemcheckbox" aria-checked={inside} onClick={() => void fileTo(f.id, [item.id], !inside)}>
                                   <Icon name={inside ? 'checkmark' : 'folder'} size={0.875} />
-                                  {inside ? `В папке «${f.name}»` : `В папку «${f.name}»`}
+                                  {inside ? ui("В папке «{0}»", f.name) : ui("В папку «{0}»", f.name)}
                                 </button>
                               );
                             })}
                             <button type="button" role="menuitem" onClick={() => (void reveal(item.id), setMenu(null))}>
                               <Icon name="folder" size={0.875} />
-                              {remoteStudio ? 'Скачать файл' : 'Показать в Finder'}
+                              {remoteStudio ? ui("Скачать файл") : ui("Показать в Finder")}
                             </button>
                           </div>
                         )}

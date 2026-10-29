@@ -1,3 +1,4 @@
+import { ui } from './language.ts';
 import { GenerationQuote } from './gen/GenerationQuote.tsx';
 import { useEffect } from 'react';
 import { Calibration, CalibrationList } from './calibration/Calibration.tsx';
@@ -14,8 +15,10 @@ import { useStore } from './store.ts';
 import { Studio } from './studio/Studio.tsx';
 import { applyTheme, readTheme } from './theme.ts';
 import { Text } from './ui/components/index.ts';
+import { applyLanguage, useLanguage } from './language.ts';
 
 export function App() {
+  const [language] = useLanguage();
   useEffect(() => {
     const stop = useGen.getState().watchJobs();
     const refresh = (): void => { if (document.visibilityState === 'visible') void useGen.getState().loadJobs(); };
@@ -32,10 +35,12 @@ export function App() {
     void loadPack();
   }, [loadPack]);
 
+  useEffect(() => { applyLanguage(language); }, [language]);
+
   if (pack === null) {
     return (
       <main style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <Text tone="secondary">{error ?? 'Открываю студию…'}</Text>
+        <Text tone="secondary">{error ?? ui("Открываю студию…")}</Text>
       </main>
     );
   }

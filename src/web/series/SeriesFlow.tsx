@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useState } from 'react';
 import type { Flow } from '../../core/model/canvas.ts';
 import type { Project } from '../../core/model/project.ts';
@@ -20,18 +21,18 @@ export function SeriesFlow({ flow }: { flow: Flow }) {
       if (!await useCanvas.getState().flush()) throw new Error('Сначала сохрани Canvas.');
       const drafts = await Promise.all(chosen.map(n => seriesApi<Project>(`/api/projects/${n.slug}`)));
       const result = await seriesApi<{ results: { slug:string; error?:string }[] }>('/api/series-prompter/prepare', { targets:drafts.map(p => ({ slug:p.slug, rev:p.rev })), consent });
-      setMessage(`В подготовке: ${result.results.filter(r => !r.error).length}. ${result.results.filter(r => r.error).map(r => r.error).join(' ')}`);
+      setMessage(ui("В подготовке: {0}. {1}", result.results.filter(r => !r.error).length, result.results.filter(r => r.error).map(r => r.error).join(' ')));
       refreshPreparation();
     } catch(e) { setMessage(e instanceof Error ? e.message : 'Не удалось начать.'); }
     finally { setBusy(false); }
   };
   return <div className={styles.flowBar}>
-    <div className={styles.row}><Text variant="caption" medium>Из производства · {flow.production!.title}</Text><Button size="xs" variant="ghost" onClick={() => { void useProduction.getState().select(flow.production!.runId); window.location.hash = '/production'; }}>Открыть серию</Button></div>
-    <details><summary>Подготовить Prompter · выбрано {chosen.length} из {nodes.length}</summary><div className={styles.batch}>
-      <Text variant="caption" tone="secondary">Отметь партию для заполнения. Видео запускается отдельно в каждом Prompter.</Text>
+    <div className={styles.row}><Text variant="caption" medium>{ui("Из производства · ")}{flow.production!.title}</Text><Button size="xs" variant="ghost" onClick={() => { void useProduction.getState().select(flow.production!.runId); window.location.hash = '/production'; }}>{ui("Открыть серию")}</Button></div>
+    <details><summary>{ui("Подготовить Prompter · выбрано ")}{chosen.length} {ui(" из ")}{nodes.length}</summary><div className={styles.batch}>
+      <Text variant="caption" tone="secondary">{ui("Отметь партию для заполнения. Видео запускается отдельно в каждом Prompter.")}</Text>
       <div className={styles.choices}>{nodes.map(n => <label key={n.id} className={styles.choice}><input type="checkbox" checked={selected.includes(n.id)} onChange={e => setSelected(e.target.checked ? [...selected, n.id] : selected.filter(id => id !== n.id))} />{n.label}</label>)}</div>
-      <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />Передать выбранные фото и контекст серии в моё AI-подключение · до 4 вызовов на кадр</label>
-      <Button size="s" variant="primary" disabled={!chosen.length || !consent} loading={busy} onClick={() => void prepare()}>Заполнить по серии · {chosen.length}</Button>
+      <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />{ui("Передать выбранные фото и контекст серии в моё AI-подключение · до 4 вызовов на кадр")}</label>
+      <Button size="s" variant="primary" disabled={!chosen.length || !consent} loading={busy} onClick={() => void prepare()}>{ui("Заполнить по серии · ")}{chosen.length}</Button>
       {message && <Text role="status" variant="caption">{message}</Text>}
     </div></details>
   </div>;

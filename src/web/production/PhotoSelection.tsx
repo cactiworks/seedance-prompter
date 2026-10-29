@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useState } from 'react';
 import type { ProductionRun } from '../../core/production/model.ts';
 import { photoPrice } from '../../core/production/photos.ts';
@@ -32,11 +33,11 @@ export function PhotoSelection({ run, ids, onDone, onLoading }: { run: Productio
   }
   const remaining = run.shots.filter(s => !s.acceptedPhotoId).length - ids.length;
   return <div className={styles.costControls}>
-    <Text variant="label">Выбрано {ids.length}. {remaining ? `Без галочки: ${remaining} — будут созданы заново.` : 'Все оставшиеся позиции выбраны.'}</Text>
+    <Text variant="label">{ui("Выбрано ")}{ids.length}. {remaining ? ui("Без галочки: {0} — будут созданы заново.", remaining) : ui("Все оставшиеся позиции выбраны.")}</Text>
     {error && <Text role="alert">{error}</Text>}
     {current ? <>
-      <Text variant="caption" tone="secondary">Сохраним выбранные. Позиций на перегенерацию: {current.quote.count}. Кнопка подтверждает {photoPrice(current.quote.usd)}, передачу данных в Higgsfield и проверку фото с фрагментами и до шести refs в Codex / OpenAI (лимиты и оплата твоего подключения).</Text>
-      <div><Button variant="primary" disabled={busy || run.paused} onClick={() => void commit(current.quote, current.requestId)}>Пересоздать {current.quote.count} · {photoPrice(current.quote.usd)}</Button></div>
-    </> : <div><Button variant="primary" disabled={busy || loading || run.paused} loading={loading} onClick={() => void next()}>Продолжить</Button></div>}
+      <Text variant="caption" tone="secondary">{ui("Сохраним выбранные. Позиций на перегенерацию: ")}{current.quote.count}{ui(". Кнопка подтверждает ")}{photoPrice(current.quote.usd)}{ui(", передачу данных в Higgsfield и проверку фото с фрагментами и до шести refs в Codex / OpenAI (лимиты и оплата твоего подключения).")}</Text>
+      <div><Button variant="primary" disabled={busy || run.paused} onClick={() => void commit(current.quote, current.requestId)}>{ui("Пересоздать ")}{current.quote.count} · {photoPrice(current.quote.usd)}</Button></div>
+    </> : <div><Button variant="primary" disabled={busy || loading || run.paused} loading={loading} onClick={() => void next()}>{ui("Продолжить")}</Button></div>}
   </div>;
 }

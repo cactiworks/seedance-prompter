@@ -1,7 +1,9 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { fixParams } from '../../core/gen/fixes.ts';
-import { estimate, findModel, formatCost } from '../../core/gen/models.ts';
+import { estimate, findModel } from '../../core/gen/models.ts';
 import { maskToBoxes, MAX_REGIONS, regionProblems, type Box } from '../../core/gen/regionEdit.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
@@ -204,25 +206,23 @@ export function MaskEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
 
   return (
     <div className={styles.maskStage}>
-      <div className={styles.maskTools} role="toolbar" aria-label="Кисть">
-        <button type="button" className={`${styles.maskTool} ${tool === 'brush' ? styles.maskToolOn : ''}`} onClick={() => setTool('brush')} title="Кисть (B)" aria-pressed={tool === 'brush'}>
+      <div className={styles.maskTools} role="toolbar" aria-label={ui("Кисть")}>
+        <button type="button" className={`${styles.maskTool} ${tool === 'brush' ? styles.maskToolOn : ''}`} onClick={() => setTool('brush')} title={ui("Кисть (B)")} aria-pressed={tool === 'brush'}>
           <Icon name="brush" size={1} />
-          Кисть
-        </button>
-        <button type="button" className={`${styles.maskTool} ${tool === 'erase' ? styles.maskToolOn : ''}`} onClick={() => setTool('erase')} title="Ластик (E)" aria-pressed={tool === 'erase'}>
+          {ui("Кисть")}</button>
+        <button type="button" className={`${styles.maskTool} ${tool === 'erase' ? styles.maskToolOn : ''}`} onClick={() => setTool('erase')} title={ui("Ластик (E)")} aria-pressed={tool === 'erase'}>
           <Icon name="close-circle" size={1} />
-          Ластик
-        </button>
+          {ui("Ластик")}</button>
         <span className={styles.maskDivider} />
-        <label className={styles.maskSize} title="Размер кисти ( [ и ] )">
+        <label className={styles.maskSize} title={ui("Размер кисти ( [ и ] )")}>
           <span className={styles.maskSizeDot} style={{ width: `${Math.max(4, Math.min(22, brushPx / 3))}px`, height: `${Math.max(4, Math.min(22, brushPx / 3))}px` }} />
-          <input type="range" min={SIZES.min} max={SIZES.max} step={SIZES.step} value={size} onChange={(event) => setSize(Number(event.target.value))} aria-label="Размер кисти" />
+          <input type="range" min={SIZES.min} max={SIZES.max} step={SIZES.step} value={size} onChange={(event) => setSize(Number(event.target.value))} aria-label={ui("Размер кисти")} />
         </label>
         <span className={styles.maskDivider} />
-        <button type="button" className={styles.maskTool} onClick={undo} disabled={strokes.length === 0} title="Отменить (⌘Z)" aria-label="Отменить">
+        <button type="button" className={styles.maskTool} onClick={undo} disabled={strokes.length === 0} title={ui("Отменить (⌘Z)")} aria-label={ui("Отменить")}>
           <Icon name="arrow-undo" size={1} />
         </button>
-        <button type="button" className={styles.maskTool} onClick={redoLast} disabled={redo.length === 0} title="Вернуть (⇧⌘Z)" aria-label="Вернуть">
+        <button type="button" className={styles.maskTool} onClick={redoLast} disabled={redo.length === 0} title={ui("Вернуть (⇧⌘Z)")} aria-label={ui("Вернуть")}>
           <Icon name="arrow-redo" size={1} />
         </button>
         <button
@@ -233,13 +233,12 @@ export function MaskEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
             setStrokes([]);
           }}
           disabled={strokes.length === 0}
-          title="Стереть всё"
+          title={ui("Стереть всё")}
         >
           <Icon name="bin" size={1} />
-          Очистить
-        </button>
+          {ui("Очистить")}</button>
         <span className={styles.maskDivider} />
-        <button type="button" className={styles.maskTool} onClick={onExit} title="Выйти из кисти (Esc)">
+        <button type="button" className={styles.maskTool} onClick={onExit} title={ui("Выйти из кисти (Esc)")}>
           <Icon name="close" size={1} />
         </button>
       </div>
@@ -292,29 +291,29 @@ export function MaskEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
           value={instruction}
           lang="ru"
           spellCheck
-          placeholder={boxes.length === 0 ? 'Сначала закрась кистью, что изменить' : 'Что сделать с выделенным: «убери», «замени на стакан сока», «куртка тёмно-зелёная»'}
+          placeholder={boxes.length === 0 ? ui("Сначала закрась кистью, что изменить") : ui("Что сделать с выделенным: «убери», «замени на стакан сока», «куртка тёмно-зелёная»")}
           onChange={(event) => setInstruction(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.nativeEvent.isComposing) void submit();
           }}
         />
-        <SegmentedControl<string> aria-label="Разрешение" size="s" value={resolution} onChange={setResolution} options={(model?.params.find((p) => p.key === 'resolution')?.options ?? []).map((o) => ({ value: o, label: o }))} />
+        <SegmentedControl<string> aria-label={ui("Разрешение")} size="s" value={resolution} onChange={setResolution} options={(model?.params.find((p) => p.key === 'resolution')?.options ?? []).map((o) => ({ value: o, label: o }))} />
         <Button variant="primary" size="m" icon={<Icon name="sparkle" size={1} />} loading={busy} disabled={problems.length > 0 || needConsent || cost === null} onClick={() => void submit()}>
-          {state.phase === 'translating' ? 'Перевожу…' : state.phase === 'sending' ? 'Отправляю…' : `Изменить${cost === null ? '' : ` · ${formatCost(cost)}`}`}
+          {state.phase === 'translating' ? ui("Перевожу…") : state.phase === 'sending' ? ui("Отправляю…") : ui("Изменить{0}", cost === null ? '' : ` · ${formatCost(cost)}`)}
         </Button>
       </div>
       <div className={styles.maskNote}>
         {needConsent ? (
           <label className={styles.consent}>
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <Text variant="caption">Картинка уйдёт в KIE, а оттуда исполнителю Seedream. Если на ней лицо — оно тоже уйдёт.</Text>
+            <Text variant="caption">{ui("Картинка уйдёт в KIE, а оттуда исполнителю Seedream. Если на ней лицо — оно тоже уйдёт.")}</Text>
           </label>
         ) : (
           <Text variant="caption" tone="secondary">
             {state.messageRu ??
               (boxes.length === 0
-                ? 'Seedream 5 Pro · закрась, что изменить; пунктир — область, которую получит модель'
-                : `Seedream 5 Pro · выделено мест: ${boxes.length}${boxes.length > MAX_REGIONS ? ` — больше ${MAX_REGIONS}, объедини` : ''} · Enter — изменить`)}
+                ? ui("Seedream 5 Pro · закрась, что изменить; пунктир — область, которую получит модель")
+                : ui("Seedream 5 Pro · выделено мест: {0}{1} · Enter — изменить", boxes.length, boxes.length > MAX_REGIONS ? ` — больше ${MAX_REGIONS}, объедини` : ''))}
           </Text>
         )}
       </div>

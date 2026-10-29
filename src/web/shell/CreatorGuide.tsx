@@ -1,8 +1,10 @@
+import { ui } from '../language.ts';
 import { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import type { IconName } from '../ui/icons/Icon.tsx';
 import type { Route } from './route.ts';
 import styles from './CreatorGuide.module.css';
+import { useLanguage } from '../language.ts';
 
 interface Topic {
   id: string;
@@ -24,10 +26,22 @@ const TOPICS: Topic[] = [
   { id: 'seedance', title: 'Подготовить Seedance-сценарий', label: 'Кадры, персонажи, референсы и точные реплики', route: 'shots', icon: 'list', targets: ['seedance-create', 'nav-tools'], text: 'Дай ролику название, затем опиши кадры по-русски и добавь референсы. Инструмент соберёт промпт для Seedance. Он также доступен блоком внутри Canvas. Для короткой идеи без разбивки на кадры есть «Помощник промптов» в меню инструментов.' },
 ];
 
+const TOPICS_EN: Record<string, Pick<Topic, 'title' | 'label' | 'text'>> = {
+  production: { title: 'Photo series or creative B-roll', label: 'From idea to frame selection', text: 'Choose Story or Creative B-roll in a new series. Codex prepares the plan and prompts; confirm the real Soul 2 photo cost separately, review the frames, then accept the result. Video and upscale stay disabled here.' },
+  canvas: { title: 'Build a project on Canvas', label: 'References, generation and processing in one workspace', text: 'Create a canvas for a client task or open a template. Keep references, images and video next to each other so the chain stays visible.' },
+  add: { title: 'Add a tool to Canvas', label: 'Generation, Seedance, frame extraction and trimming', text: 'Click Add on an open canvas and choose a source, generator or processing block. Connect outputs to inputs to pass images, video or text. Each block runs separately.' },
+  images: { title: 'Create an image', label: 'A quick result from text or a reference', text: 'Describe the result and add a reference if needed. Choose the model and format on the right. The price is shown before launch.' },
+  video: { title: 'Create a video', label: 'Animate an image or describe a scene', text: 'Describe the movement and add a starting image when the model needs one. Set duration and format, then use Canvas for local trimming.' },
+  result: { title: 'Edit and download a result', label: 'Saved files, versions and Canvas handoff', text: 'Assets contains generated results and uploaded files. Open a file to edit, download or send it to Canvas.' },
+  seedance: { title: 'Prepare a Seedance script', label: 'Shots, characters, references and exact dialogue', text: 'Name the video, describe the shots in Russian and add references. The tool builds the Seedance prompt; the same editor is available inside Canvas.' },
+};
+
 interface Highlight { left: number; top: number; width: number; height: number }
 
 /** Справка по задачам на реальных экранах. Выбор темы ничего не создаёт и не запускает. */
 export function CreatorGuide({ route, onRoute }: { route: Route; onRoute: (route: Route) => void }) {
+  const [language] = useLanguage();
+  const english = language === 'en';
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState<Topic | null>(null);
   const [highlight, setHighlight] = useState<Highlight | null>(null);
@@ -69,23 +83,23 @@ export function CreatorGuide({ route, onRoute }: { route: Route; onRoute: (route
   }, [topic, route]);
 
   return <>
-    <span ref={helpRef}><Button variant="border" size="s" onClick={() => { setTopic(null); setOpen(true); }}>Как пользоваться</Button></span>
-    <Dialog open={open} onOpenChange={setOpen} title="Что хочешь сделать?" description="Canvas — основное рабочее место. Выбери задачу — покажем, где она решается.">
+    <span ref={helpRef}><Button variant="border" size="s" onClick={() => { setTopic(null); setOpen(true); }}>{english ? 'How to use' : ui("Как пользоваться")}</Button></span>
+    <Dialog open={open} onOpenChange={setOpen} title={english ? 'What do you want to do?' : ui("Что хочешь сделать?")} description={english ? 'Canvas is the main workspace. Pick a task and we will show where to do it.' : ui("Canvas — основное рабочее место. Выбери задачу — покажем, где она решается.")}>
       <div className={styles.topics}>
         {TOPICS.map((item) => <button type="button" className={styles.topic} key={item.id} onClick={() => { setOpen(false); onRoute(item.route); setHighlight(null); setTopic(item); }}>
           <Icon name={item.icon} size={1.25} />
-          <span className={styles.topicCopy}><Text as="span" variant="label" medium>{item.title}</Text><Text as="span" variant="caption" tone="secondary">{item.label}</Text></span>
+          <span className={styles.topicCopy}><Text as="span" variant="label" medium>{english ? TOPICS_EN[item.id]?.title ?? item.title : item.title}</Text><Text as="span" variant="caption" tone="secondary">{english ? TOPICS_EN[item.id]?.label ?? item.label : item.label}</Text></span>
           <Icon name="chevron-forward" size={1} />
         </button>)}
       </div>
-      <Text variant="caption" tone="secondary" className={styles.note}>Начать можно с любой задачи. Подсказки доступны здесь в любой момент.</Text>
+      <Text variant="caption" tone="secondary" className={styles.note}>{english ? 'Start with any task. Help is available here at any time.' : ui("Начать можно с любой задачи. Подсказки доступны здесь в любой момент.")}</Text>
     </Dialog>
     {topic !== null && route === topic.route && <>
       {highlight !== null && <div aria-hidden className={styles.highlight} style={highlight} />}
-      <aside ref={tipRef} tabIndex={-1} className={styles.tip} style={highlight !== null && highlight.top > window.innerHeight * 0.6 ? { bottom: window.innerHeight - highlight.top + 12 } : undefined} aria-label={`Подсказка: ${topic.title}`}>
-        <div className={styles.tipHead}><Text variant="label" medium>{topic.title}</Text><Button variant="ghost" size="xs" iconOnly aria-label="Закрыть подсказку" icon={<Icon name="close" size={1} />} onClick={close} /></div>
-        <Text variant="label" tone="secondary">{topic.text}</Text>
-        <div className={styles.actions}><Button variant="ghost" size="s" onClick={() => { setTopic(null); setOpen(true); }}>Другие подсказки</Button><Button variant="primary" size="s" onClick={close}>Понятно</Button></div>
+      <aside ref={tipRef} tabIndex={-1} className={styles.tip} style={highlight !== null && highlight.top > window.innerHeight * 0.6 ? { bottom: window.innerHeight - highlight.top + 12 } : undefined} aria-label={`${english ? 'Tip' : ui("Подсказка")}: ${english ? TOPICS_EN[topic.id]?.title ?? topic.title : topic.title}`}>
+        <div className={styles.tipHead}><Text variant="label" medium>{english ? TOPICS_EN[topic.id]?.title ?? topic.title : topic.title}</Text><Button variant="ghost" size="xs" iconOnly aria-label={english ? 'Close tip' : ui("Закрыть подсказку")} icon={<Icon name="close" size={1} />} onClick={close} /></div>
+        <Text variant="label" tone="secondary">{english ? TOPICS_EN[topic.id]?.text ?? topic.text : topic.text}</Text>
+        <div className={styles.actions}><Button variant="ghost" size="s" onClick={() => { setTopic(null); setOpen(true); }}>{english ? 'Other tips' : ui("Другие подсказки")}</Button><Button variant="primary" size="s" onClick={close}>{english ? 'Got it' : ui("Понятно")}</Button></div>
       </aside>
     </>}
   </>;

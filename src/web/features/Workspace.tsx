@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { SeriesPreparation } from '../series/SeriesPreparation.tsx';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { activeCritiqueFindings } from '../../core/review.ts';
@@ -13,12 +14,15 @@ import { ExportCard } from './ExportCard.tsx';
 import { Findings } from './Findings.tsx';
 import { PromptText } from './PromptText.tsx';
 import { ThemeSwitch } from './ThemeSwitch.tsx';
+import { LanguageSwitch } from './LanguageSwitch.tsx';
+import { useLanguage } from '../language.ts';
 import styles from './Workspace.module.css';
 
 const KIND_RU: Record<Ref['kind'], string> = { location: 'Локация', character: 'Герой', object: 'Предмет', gear: 'Техника', frame: 'Раскадровка', other: 'Другое' };
 const STRUCTURE_RU: Record<Structure, string> = { 'one-take': 'Один дубль', cuts: 'Шоты со склейками' };
 const BLOCK_RU: Record<string, string> = { style: 'Стиль-блок', format: 'Формат', 'role-shooting': 'Роль: снимающая техника', 'role-props': 'Роль: реквизит', camera: 'Камера', lens: 'Объектив', flare: 'Блик', imperfections: 'Дефекты и речь', 'operator-rule': 'Правило про оператора', location: 'Локация и погода', segment: 'Сценарий' };
 const SAVE_RU = { saved: 'сохранено', dirty: 'есть правки…', saving: 'сохраняю…', conflict: 'конфликт окон', error: 'не сохранено' } as const;
+const SAVE_EN = { saved: 'saved', dirty: 'unsaved changes…', saving: 'saving…', conflict: 'version conflict', error: 'not saved' } as const;
 const DURATION_PRESETS = [5, 10, 15, 20, 30];
 
 /** Длительность дубля. Черновик живёт в поле: в кадр уходит только целое 4–30, недопечатанное число промпт не ломает. */
@@ -37,7 +41,7 @@ function DurationField({ value, onCommit }: { value: number; onCommit: (duration
   };
   return (
     <div className={styles.duration}>
-      <TextField label="Длительность, с" type="number" inputMode="numeric" min={4} max={30} step={1} value={draft} onChange={(event) => set(event.target.value)} onBlur={() => !valid && setDraft(String(value))} error={valid ? undefined : `Seedance 2.5 принимает целое от 4 до 30. В промпте остаётся ${value} с.`} helper="Это же число ставится в Higgsfield. От него считаются ёмкость речи и бюджет событий." />
+      <TextField label={ui("Длительность, с")} type="number" inputMode="numeric" min={4} max={30} step={1} value={draft} onChange={(event) => set(event.target.value)} onBlur={() => !valid && setDraft(String(value))} error={valid ? undefined : ui("Seedance 2.5 принимает целое от 4 до 30. В промпте остаётся {0} с.", value)} helper={ui("Это же число ставится в Higgsfield. От него считаются ёмкость речи и бюджет событий.")} />
       <div className={styles.presets}>
         {DURATION_PRESETS.map((n) => <Button key={n} variant={value === n ? 'secondary' : 'ghost'} size="xs" onClick={() => set(String(n))}>{n}</Button>)}
       </div>
@@ -65,7 +69,7 @@ function Derived({ label, en, pending }: { label: string; en: string; pending: b
   if (en.trim() === '' && !pending) return null;
   return (
     <Text variant="caption" tone="tertiary" className={styles.derived}>
-      {pending ? 'обновится при сборке' : <>{label}: <span className={styles.derivedEn}>{en}</span></>}
+      {pending ? ui("обновится при сборке") : <>{label}: <span className={styles.derivedEn}>{en}</span></>}
     </Text>
   );
 }
@@ -79,7 +83,7 @@ function segmentStatus(segment: Segment): { tone: 'outline' | 'warning' | 'neutr
 /** Seedance-промптер из canvas: тот же редактор кадра — во весь экран поверх холста, холст под ним живой. */
 export function WorkspaceOverlay({ pack }: { pack: PackBundle }) {
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Seedance-промптер">
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-label={ui("Seedance-промптер")}>
       <Workspace pack={pack} />
     </div>
   );
@@ -87,6 +91,8 @@ export function WorkspaceOverlay({ pack }: { pack: PackBundle }) {
 
 export function Workspace({ pack }: { pack: PackBundle }) {
   const store = useStore();
+  const [language] = useLanguage();
+  const english = language === 'en';
   const project = store.project;
   const shot = useStore(currentShot);
   const inCanvas = store.host !== null;
@@ -116,7 +122,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   // Кнопка учитывает и последствия этого кадра для следующих — блокер кадра о них молчит.
   const pending = pendingLabels(project, shot, 'compose');
   const described = shot.segments.some((s) => s.beatsRu.trim() !== '');
-  const composeLabel = store.composing === 'fields' ? 'Перевожу поля…' : store.composing === 'writing' ? 'Пишу отрезки…' : pending.length > 0 ? 'Собрать промпт' : 'Переписать кадр';
+  const composeLabel = store.composing === 'fields' ? (english ? 'Translating fields…' : 'Перевожу поля…') : store.composing === 'writing' ? (english ? 'Writing segments…' : 'Пишу отрезки…') : pending.length > 0 ? (english ? 'Build prompt' : 'Собрать промпт') : (english ? 'Rewrite shot' : 'Переписать кадр');
 
   const addRef = (): void => {
     const label = newRef.label.trim();
@@ -207,24 +213,25 @@ export function Workspace({ pack }: { pack: PackBundle }) {
   return (
     <div className={styles.shell}>
       <header className={`${styles.topbar} lab-glass-thin`}>
-        <Button variant="ghost" size="xs" icon={<Icon name="chevron-back" size={1} />} onClick={() => void store.closeProject()}>{inCanvas ? 'Canvas' : 'Ролики'}</Button>
+        <Button variant="ghost" size="xs" icon={<Icon name="chevron-back" size={1} />} onClick={() => void store.closeProject()}>{inCanvas ? 'Canvas' : english ? 'Projects' : ui("Ролики")}</Button>
         {inCanvas ? (
           <>
-            <Text variant="label" medium>Seedance-промптер</Text>
-            <Tag tone="outline">нода canvas</Tag>
+            <Text variant="label" medium>{english ? 'Seedance Prompter' : ui("Seedance-промптер")}</Text>
+            <Tag tone="outline">{english ? 'canvas node' : ui("нода canvas")}</Tag>
           </>
         ) : (
           <>
             <Text variant="label" medium>{project.title}</Text>
-            <SegmentedControl aria-label="Кадры ролика" size="s" value={shot.id} onChange={store.selectShot} options={project.shots.map((s, i) => ({ value: s.id, label: `Кадр ${i + 1}` }))} />
-            <Button variant="ghost" size="xs" icon={<Icon name="plus" size={1} />} onClick={store.addShot}>кадр</Button>
+            <SegmentedControl aria-label={ui("Кадры ролика")} size="s" value={shot.id} onChange={store.selectShot} options={project.shots.map((s, i) => ({ value: s.id, label: ui("Кадр {0}", i + 1) }))} />
+            <Button variant="ghost" size="xs" icon={<Icon name="plus" size={1} />} onClick={store.addShot}>{ui("кадр")}</Button>
           </>
         )}
         <span className={styles.spacer} />
-        <Tag tone={store.save === 'saved' ? 'neutral' : store.save === 'conflict' || store.save === 'error' ? 'danger' : 'outline'}>{SAVE_RU[store.save]}</Tag>
+        <Tag tone={store.save === 'saved' ? 'neutral' : store.save === 'conflict' || store.save === 'error' ? 'danger' : 'outline'}>{(english ? SAVE_EN : SAVE_RU)[store.save]}</Tag>
+        <LanguageSwitch />
         <ThemeSwitch />
-        {store.composing !== null && <Button variant="ghost" size="s" onClick={store.cancelCompose}>Отмена</Button>}
-        <Button variant="primary" size="s" icon={<Icon name="sparkles" variant="filled" />} loading={store.composing !== null} disabled={store.composing === null && pending.length === 0 && !described} onClick={() => void store.composeShot(pending.length === 0)} title={pending.length > 0 ? `Агент перепишет в промпт: ${pending.join(', ')}` : 'Переписать все отрезки кадра заново'}>
+        {store.composing !== null && <Button variant="ghost" size="s" onClick={store.cancelCompose}>{english ? 'Cancel' : ui("Отмена")}</Button>}
+        <Button variant="primary" size="s" icon={<Icon name="sparkles" variant="filled" />} loading={store.composing !== null} disabled={store.composing === null && pending.length === 0 && !described} onClick={() => void store.composeShot(pending.length === 0)} title={pending.length > 0 ? ui("Агент перепишет в промпт: {0}", pending.join(', ')) : ui("Переписать все отрезки кадра заново")}>
           {composeLabel}
         </Button>
       </header>
@@ -233,140 +240,139 @@ export function Workspace({ pack }: { pack: PackBundle }) {
         <div className={styles.form}>
           {store.error && <Card padding="l" role="alert">
             <Text variant="label">{store.error}</Text>
-            {store.save === 'error' && <Button variant="border" size="s" onClick={() => void store.retryProjectSave()}>Повторить сохранение</Button>}
+            {store.save === 'error' && <Button variant="border" size="s" onClick={() => void store.retryProjectSave()}>{ui("Повторить сохранение")}</Button>}
             {(store.save === 'error' || store.save === 'conflict') && <Button variant="ghost" size="s" onClick={() => {
               const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type:'application/json' }));
               const link = document.createElement('a'); link.href = url; link.download = `${project.slug}-draft.json`; link.click();
               setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }}>Скачать черновик формы</Button>}
+            }}>{ui("Скачать черновик формы")}</Button>}
           </Card>}
           {project.production && <SeriesPreparation key={project.slug} project={project} />}
-          <Section n="01" title="Как снято" note="Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.">
+          <Section n="01" title={ui("Как снято")} note={ui("Сначала «как снято», потом «что снято». Комплект — одна переменная на все места промпта.")}>
             <div className={styles.aspect}>
-              <Text variant="label" tone="secondary">Формат кадра</Text>
-              <SegmentedControl<AspectRatio> aria-label="Формат кадра" size="s" value={project.aspectRatio} onChange={(aspectRatio) => store.update((p) => ({ ...p, aspectRatio }))} options={ASPECT_RATIOS.map((value) => ({ value, label: value, title: pack.dialects.aspect?.labelsRu[value] }))} />
-              <Text variant="caption" tone="tertiary">{pack.dialects.aspect?.labelsRu[project.aspectRatio] ?? ''} · общий для всех кадров ролика; это же значение выставь в Higgsfield.</Text>
+              <Text variant="label" tone="secondary">{ui("Формат кадра")}</Text>
+              <SegmentedControl<AspectRatio> aria-label={ui("Формат кадра")} size="s" value={project.aspectRatio} onChange={(aspectRatio) => store.update((p) => ({ ...p, aspectRatio }))} options={ASPECT_RATIOS.map((value) => ({ value, label: value, title: ui(pack.dialects.aspect?.labelsRu[value]) }))} />
+              <Text variant="caption" tone="tertiary">{ui(pack.dialects.aspect?.labelsRu[project.aspectRatio]) ?? ''} {ui(" · общий для всех кадров ролика; это же значение выставь в Higgsfield.")}</Text>
             </div>
             <DurationField key={shot.id} value={duration} onCommit={(durationSec) => store.updateShot((s) => ({ ...s, durationSec }))} />
             {modes.length > 0 && (
               <div className={styles.group}>
-                <Text variant="label" tone="secondary">Съёмка — как работает камера</Text>
+                <Text variant="label" tone="secondary">{ui("Съёмка — как работает камера")}</Text>
                 <div className={styles.kits}>
                   {modes.map((mode) => (
                     <button key={mode.id} type="button" className={`${styles.kit} ${shooting.mode === mode.id ? styles.kitOn : ''}`} onClick={() => setShooting({ mode: mode.id })} aria-pressed={shooting.mode === mode.id}>
-                      <Text variant="label" medium>{mode.titleRu}</Text>
-                      {mode.source === 'guide' ? <Tag tone="neutral">метод гайда</Tag> : <Tag tone="outline">не из гайда</Tag>}
+                      <Text variant="label" medium>{ui(mode.titleRu)}</Text>
+                      {mode.source === 'guide' ? <Tag tone="neutral">{ui("метод гайда")}</Tag> : <Tag tone="outline">{ui("не из гайда")}</Tag>}
                     </button>
                   ))}
                 </div>
                 {resolvedShooting.mode !== undefined && (
                   <div className={styles.report}>
-                    <Text variant="label" tone="secondary">{resolvedShooting.mode.noteRu}</Text>
+                    <Text variant="label" tone="secondary">{ui(resolvedShooting.mode.noteRu ?? "")}</Text>
                   </div>
                 )}
                 {shooting.mode === CUSTOM_SHOOTING && (
                   <div className={styles.customKit}>
                     <TextField
                       multiline
-                      label="Как работает камера — своими словами"
-                      placeholder="Камера на скейте в сантиметрах от асфальта, летит за героем, на поворотах заносит вбок"
+                      label={ui("Как работает камера — своими словами")}
+                      placeholder={ui("Камера на скейте в сантиметрах от асфальта, летит за героем, на поворотах заносит вбок")}
                       value={shooting.ru ?? ''}
                       onChange={(event) => setShooting({ ru: event.target.value })}
-                      helper="На чём стоит камера или кто её несёт, как двигается, как ведёт героя. Модель камеры — ниже, в «Камера». Агент перепишет это в стиль-блок и в язык камеры для писателя."
+                      helper={ui("На чём стоит камера или кто её несёт, как двигается, как ведёт героя. Модель камеры — ниже, в «Камера». Агент перепишет это в стиль-блок и в язык камеры для писателя.")}
                     />
-                    <Derived label="в промпте" en={shooting.operation} pending={shootingPending} />
-                    {!shootingPending && shooting.language.trim() !== '' && <Derived label="писателю" en={shooting.language} pending={false} />}
+                    <Derived label={ui("в промпте")} en={shooting.operation} pending={shootingPending} />
+                    {!shootingPending && shooting.language.trim() !== '' && <Derived label={ui("писателю")} en={shooting.language} pending={false} />}
                   </div>
                 )}
                 <div className={styles.aspect}>
-                  <Text variant="label" tone="secondary">Монтаж</Text>
-                  <SegmentedControl<Structure> aria-label="Монтаж" size="s" value={shooting.structure} onChange={(structure) => setShooting({ structure })} options={(['one-take', 'cuts'] as const).map((value) => ({ value, label: STRUCTURE_RU[value] }))} />
+                  <Text variant="label" tone="secondary">{ui("Монтаж")}</Text>
+                  <SegmentedControl<Structure> aria-label={ui("Монтаж")} size="s" value={shooting.structure} onChange={(structure) => setShooting({ structure })} options={(['one-take', 'cuts'] as const).map((value) => ({ value, label: ui(STRUCTURE_RU[value]) }))} />
                   <Text variant="caption" tone="tertiary">
                     {cuts
-                      ? 'Каждый отрезок сценария — отдельный шот, между шотами склейки; всё — одна генерация. Мультишот в Seedance 2.5 заявлен официально, формула склеек не из гайда — проверяется прогоном.'
-                      : 'Один непрерывный дубль без склеек — как в гайде.'}
+                      ? ui("Каждый отрезок сценария — отдельный шот, между шотами склейки; всё — одна генерация. Мультишот в Seedance 2.5 заявлен официально, формула склеек не из гайда — проверяется прогоном.")
+                      : ui("Один непрерывный дубль без склеек — как в гайде.")}
                   </Text>
                 </div>
               </div>
             )}
-            <Text variant="label" tone="secondary">Камера</Text>
+            <Text variant="label" tone="secondary">{ui("Камера")}</Text>
             <div className={styles.kits}>
               {kits.map((item) => (
                 <button key={item.id} type="button" className={`${styles.kit} ${shot.kitId === item.id ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: item.id, defects: null, roleSplit: item.layout === 'split' ? s.roleSplit : null }))} aria-pressed={shot.kitId === item.id}>
-                  <Text variant="label" medium>{item.titleRu.split(' — ')[0]}</Text>
-                  <Text variant="caption" tone="secondary">{item.titleRu.split(' — ')[1] ?? ''}</Text>
-                  {item.source !== undefined && item.source !== 'guide' && <Tag tone="outline">не из гайда</Tag>}
+                  <Text variant="label" medium>{ui(item.titleRu.split(' — ')[0]!)}</Text>
+                  <Text variant="caption" tone="secondary">{ui(item.titleRu.split(' — ')[1] ?? '')}</Text>
+                  {item.source !== undefined && item.source !== 'guide' && <Tag tone="outline">{ui("не из гайда")}</Tag>}
                 </button>
               ))}
               <button type="button" className={`${styles.kit} ${isCustom ? styles.kitOn : ''}`} onClick={() => store.updateShot((s) => ({ ...s, kitId: CUSTOM_KIT, defects: null, roleSplit: null }))} aria-pressed={isCustom}>
-                <Text variant="label" medium>Своя камера</Text>
-                <Text variant="caption" tone="secondary">любая техника — описываешь своими словами</Text>
-                <Tag tone="outline">не из гайда</Tag>
+                <Text variant="label" medium>{ui("Своя камера")}</Text>
+                <Text variant="caption" tone="secondary">{ui("любая техника — описываешь своими словами")}</Text>
+                <Tag tone="outline">{ui("не из гайда")}</Tag>
               </button>
             </div>
             {kit?.noteRu !== undefined && kit.noteRu !== '' && (
               <div className={styles.report}>
-                <Text variant="label" tone="secondary">{kit.noteRu}</Text>
+                <Text variant="label" tone="secondary">{ui(kit.noteRu ?? "")}</Text>
               </div>
             )}
             {isCustom && (
               <div className={styles.customKit}>
                 <TextField
                   multiline
-                  label="Камера и картинка — своими словами"
-                  placeholder="Fujifilm X100V со встроенным 23 мм. Мелкое цифровое зерно, приглушённые цвета с зеленцой, мягкий контраст, углы чуть мягче центра"
+                  label={ui("Камера и картинка — своими словами")}
+                  placeholder={ui("Fujifilm X100V со встроенным 23 мм. Мелкое цифровое зерно, приглушённые цвета с зеленцой, мягкий контраст, углы чуть мягче центра")}
                   value={shot.customKit.ru ?? ''}
                   onChange={(event) => store.updateShot((s) => ({ ...s, customKit: { ...s.customKit, ru: event.target.value } }))}
-                  helper="Нужна реальная модель — «кинокамера» не якорь, модель выберет усреднённую картинку. Зерно, цвет, контраст, блики — тезисно. Агент перепишет это в формулу гайда «shot on … with …»."
+                  helper={ui("Нужна реальная модель — «кинокамера» не якорь, модель выберет усреднённую картинку. Зерно, цвет, контраст, блики — тезисно. Агент перепишет это в формулу гайда «shot on … with …».")}
                 />
-                <Derived label="в промпте" en={shot.customKit.camera.trim() === '' ? '' : `shot on ${shot.customKit.camera}${shot.customKit.lens.trim() !== '' ? ` with ${shot.customKit.lens}` : ''}, ${shot.customKit.look}.${shot.customKit.lensNote.trim() !== '' ? ` ${shot.customKit.lensNote}.` : ''}`} pending={kitPending} />
+                <Derived label={ui("в промпте")} en={shot.customKit.camera.trim() === '' ? '' : `shot on ${shot.customKit.camera}${shot.customKit.lens.trim() !== '' ? ` with ${shot.customKit.lens}` : ''}, ${shot.customKit.look}.${shot.customKit.lensNote.trim() !== '' ? ` ${shot.customKit.lensNote}.` : ''}`} pending={kitPending} />
               </div>
             )}
             {kit?.layout === 'split' && (
               <div className={styles.customKit}>
-                <Switch checked={shot.roleSplit !== null} onChange={(on) => store.updateShot((s) => ({ ...s, roleSplit: on ? { cameraRef: gearRefs[0]?.key ?? '', lensRef: gearRefs[1]?.key ?? gearRefs[0]?.key ?? '', cameraHolderKey: characters[0]?.key, lensHolderKey: characters[1]?.key ?? characters[0]?.key, cameraHolder: '', lensHolder: '', propsRu: '', propsEn: '' } : null }))} label="В кадре есть такая же камера или объектив как реквизит" disabled={shot.roleSplit === null && gearRefs.length === 0} />
+                <Switch checked={shot.roleSplit !== null} onChange={(on) => store.updateShot((s) => ({ ...s, roleSplit: on ? { cameraRef: gearRefs[0]?.key ?? '', lensRef: gearRefs[1]?.key ?? gearRefs[0]?.key ?? '', cameraHolderKey: characters[0]?.key, lensHolderKey: characters[1]?.key ?? characters[0]?.key, cameraHolder: '', lensHolder: '', propsRu: '', propsEn: '' } : null }))} label={ui("В кадре есть такая же камера или объектив как реквизит")} disabled={shot.roleSplit === null && gearRefs.length === 0} />
                 <Text variant="caption" tone="tertiary">
                   {shot.roleSplit === null
-                    ? gearRefs.length === 0 ? 'Приём 06 «один объект — одна роль». Нужен, только когда герои держат эту же технику в руках; для него добавь в панель референсы камеры и объектива (тип «Техника»).' : 'Приём 06 «один объект — одна роль». Без реквизита разделение не нужно — кадр собирается как есть.'
-                    : 'Промпт разведёт снимающую технику и реквизит: блики и боке — только «on the image itself», на предметах в руках их не будет.'}
+                    ? gearRefs.length === 0 ? ui("Приём 06 «один объект — одна роль». Нужен, только когда герои держат эту же технику в руках; для него добавь в панель референсы камеры и объектива (тип «Техника»).") : ui("Приём 06 «один объект — одна роль». Без реквизита разделение не нужно — кадр собирается как есть.")
+                    : ui("Промпт разведёт снимающую технику и реквизит: блики и боке — только «on the image itself», на предметах в руках их не будет.")}
                 </Text>
                 {shot.roleSplit !== null && (
                   <>
                     <div className={styles.twoCols}>
-                      <Select label="Референс камеры" value={shot.roleSplit.cameraRef} onChange={(cameraRef) => setRole({ cameraRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
-                      <Select label="Референс объектива" value={shot.roleSplit.lensRef} onChange={(lensRef) => setRole({ lensRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
+                      <Select label={ui("Референс камеры")} value={shot.roleSplit.cameraRef} onChange={(cameraRef) => setRole({ cameraRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
+                      <Select label={ui("Референс объектива")} value={shot.roleSplit.lensRef} onChange={(lensRef) => setRole({ lensRef })} options={gearRefs.map((r) => ({ value: r.key, label: r.label }))} />
                     </div>
                     <div className={styles.twoCols}>
-                      <Select label="Кто держит камеру" value={shot.roleSplit.cameraHolderKey ?? ''} onChange={(cameraHolderKey) => setRole({ cameraHolderKey })} options={[{ value: '', label: characters.length === 0 ? 'сначала добавь героя в секции 04' : 'не выбран' }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
-                      <Select label="Кто показывает объектив" value={shot.roleSplit.lensHolderKey ?? ''} onChange={(lensHolderKey) => setRole({ lensHolderKey })} options={[{ value: '', label: characters.length === 0 ? 'сначала добавь героя в секции 04' : 'не выбран' }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
+                      <Select label={ui("Кто держит камеру")} value={shot.roleSplit.cameraHolderKey ?? ''} onChange={(cameraHolderKey) => setRole({ cameraHolderKey })} options={[{ value: '', label: characters.length === 0 ? ui("сначала добавь героя в секции 04") : ui("не выбран") }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
+                      <Select label={ui("Кто показывает объектив")} value={shot.roleSplit.lensHolderKey ?? ''} onChange={(lensHolderKey) => setRole({ lensHolderKey })} options={[{ value: '', label: characters.length === 0 ? ui("сначала добавь героя в секции 04") : ui("не выбран") }, ...characters.map((e) => ({ value: e.key, label: e.nameRu?.trim() || e.name }))]} />
                     </div>
-                    {(shot.roleSplit.cameraHolderKey === undefined || shot.roleSplit.cameraHolderKey === '') && shot.roleSplit.cameraHolder !== '' && <Text variant="caption" tone="tertiary">Из старой версии: камеру держит {holderName(project, undefined, shot.roleSplit.cameraHolder)}, объектив — {shot.roleSplit.lensHolder}.</Text>}
-                    <TextField multiline label="Реквизит — кто что держит" placeholder="Саша держит в руках RED V-RAPTOR, Женя — открытый кейс с объективами Laowa Proteus" value={shot.roleSplit.propsRu ?? ''} onChange={(event) => setRole({ propsRu: event.target.value })} />
-                    <Derived label="в промпте" en={shot.roleSplit.propsEn === '' ? '' : `Separately, ${shot.roleSplit.propsEn}.`} pending={propsPending} />
+                    {(shot.roleSplit.cameraHolderKey === undefined || shot.roleSplit.cameraHolderKey === '') && shot.roleSplit.cameraHolder !== '' && <Text variant="caption" tone="tertiary">{ui("Из старой версии: камеру держит ")}{holderName(project, undefined, shot.roleSplit.cameraHolder)}{ui(", объектив — ")}{shot.roleSplit.lensHolder}.</Text>}
+                    <TextField multiline label={ui("Реквизит — кто что держит")} placeholder={ui("Саша держит в руках RED V-RAPTOR, Женя — открытый кейс с объективами Laowa Proteus")} value={shot.roleSplit.propsRu ?? ''} onChange={(event) => setRole({ propsRu: event.target.value })} />
+                    <Derived label={ui("в промпте")} en={shot.roleSplit.propsEn === '' ? '' : `Separately, ${shot.roleSplit.propsEn}.`} pending={propsPending} />
                   </>
                 )}
               </div>
             )}
             <details className={styles.more}>
-              <summary><Text as="span" variant="label" tone="secondary">Формулы гайда — обычно не трогать</Text></summary>
+              <summary><Text as="span" variant="label" tone="secondary">{ui("Формулы гайда — обычно не трогать")}</Text></summary>
               <div className={styles.moreBody}>
                 <div className={styles.row}>
-                  <Text variant="label" tone="secondary">{resolvedShooting.guide ? 'Правило «оператор не виден»' : 'Правило «съёмочная группа не видна»'}</Text>
-                  <SegmentedControl aria-label="Правило про оператора" size="s" value={shot.operatorRule} onChange={(operatorRule) => store.updateShot((s) => ({ ...s, operatorRule }))} options={[{ value: 'long', label: 'Полное' }, { value: 'short', label: 'Краткое' }, { value: 'off', label: 'Нет' }]} />
+                  <Text variant="label" tone="secondary">{resolvedShooting.guide ? ui("Правило «оператор не виден»") : ui("Правило «съёмочная группа не видна»")}</Text>
+                  <SegmentedControl aria-label={ui("Правило про оператора")} size="s" value={shot.operatorRule} onChange={(operatorRule) => store.updateShot((s) => ({ ...s, operatorRule }))} options={[{ value: 'long', label: ui("Полное") }, { value: 'short', label: ui("Краткое") }, { value: 'off', label: ui("Нет") }]} />
                 </div>
                 <div className={styles.row}>
-                  <Text variant="label" tone="secondary">Формула референса локации</Text>
-                  <SegmentedControl aria-label="Формула локации" size="s" value={shot.locationRule} onChange={(locationRule) => store.updateShot((s) => ({ ...s, locationRule }))} options={[{ value: 'short', label: 'Краткая' }, { value: 'long', label: 'С повтором номеров' }]} />
+                  <Text variant="label" tone="secondary">{ui("Формула референса локации")}</Text>
+                  <SegmentedControl aria-label={ui("Формула локации")} size="s" value={shot.locationRule} onChange={(locationRule) => store.updateShot((s) => ({ ...s, locationRule }))} options={[{ value: 'short', label: ui("Краткая") }, { value: 'long', label: ui("С повтором номеров") }]} />
                 </div>
               </div>
             </details>
           </Section>
 
-          <Section n="02" title="Панель референсов" note="Порядок картинок — это нумерация в тексте. Загружай в Higgsfield в том же порядке.">
+          <Section n="02" title={ui("Панель референсов")} note={ui("Порядок картинок — это нумерация в тексте. Загружай в Higgsfield в том же порядке.")}>
             {inCanvas && (
               <Text variant="caption" tone="tertiary">
-                Картинки, подключённые к ноде проводками в canvas, приходят сюда сами при каждом открытии; проводок снят — картинка уходит из панели. Тип и порядок задаёшь здесь: сгенерированные кадры по умолчанию — «Кадр раскадровки».
-              </Text>
+                {ui("Картинки, подключённые к ноде проводками в canvas, приходят сюда сами при каждом открытии; проводок снят — картинка уходит из панели. Тип и порядок задаёшь здесь: сгенерированные кадры по умолчанию — «Кадр раскадровки».")}</Text>
             )}
             <div className={styles.strip}>
               {shot.panel.map((key, index) => {
@@ -374,7 +380,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 if (ref === undefined) return null;
                 return (
                   <div key={key} className={styles.ref}>
-                    <button type="button" className={`${styles.thumb} ${ref.file === null ? 'lab-hatch' : ''}`} onClick={() => fileInputs.current.get(key)?.click()} title="Загрузить картинку">
+                    <button type="button" className={`${styles.thumb} ${ref.file === null ? 'lab-hatch' : ''}`} onClick={() => fileInputs.current.get(key)?.click()} title={ui("Загрузить картинку")}>
                       {ref.file !== null && <img src={`/api/projects/${project.slug}/refs/${ref.file}`} alt={ref.label} />}
                       <span className={styles.number}>{index + 1}</span>
                     </button>
@@ -382,37 +388,36 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                     <span title={ref.note}>
                       <Text variant="caption" medium>{ref.label}</Text>
                     </span>
-                    <select className={styles.kindSelect} value={ref.kind} aria-label={`Что это: ${ref.label}`} onChange={(event) => setRefKind(key, event.target.value as Ref['kind'])}>
+                    <select className={styles.kindSelect} value={ref.kind} aria-label={ui("Что это: {0}", ref.label)} onChange={(event) => setRefKind(key, event.target.value as Ref['kind'])}>
                       {REF_KINDS.map((kind) => (
-                        <option key={kind} value={kind}>{KIND_RU[kind]}</option>
+                        <option key={kind} value={kind}>{ui(KIND_RU[kind])}</option>
                       ))}
                     </select>
                     {isCanvasRefKey(key) && (
                       <span className={styles.refTag}>
-                        <Tag tone="outline">из canvas</Tag>
+                        <Tag tone="outline">{ui("из canvas")}</Tag>
                       </span>
                     )}
                     <div className={styles.refActions}>
-                      <Button variant="ghost" size="xs" iconOnly aria-label="Левее" icon={<Icon name="chevron-back" size={1} />} disabled={index === 0} onClick={() => moveRef(key, -1)} />
-                      <Button variant="ghost" size="xs" iconOnly aria-label="Правее" icon={<Icon name="chevron-forward" size={1} />} disabled={index === shot.panel.length - 1} onClick={() => moveRef(key, 1)} />
-                      <Button variant="ghost" size="xs" iconOnly aria-label="Убрать из панели" icon={<Icon name="close" size={1} />} onClick={() => removeFromPanel(key)} />
+                      <Button variant="ghost" size="xs" iconOnly aria-label={ui("Левее")} icon={<Icon name="chevron-back" size={1} />} disabled={index === 0} onClick={() => moveRef(key, -1)} />
+                      <Button variant="ghost" size="xs" iconOnly aria-label={ui("Правее")} icon={<Icon name="chevron-forward" size={1} />} disabled={index === shot.panel.length - 1} onClick={() => moveRef(key, 1)} />
+                      <Button variant="ghost" size="xs" iconOnly aria-label={ui("Убрать из панели")} icon={<Icon name="close" size={1} />} onClick={() => removeFromPanel(key)} />
                     </div>
                     {ref.file !== null && (
                       <Button variant="soft" size="xs" icon={<Icon name="eye" size={0.875} />} loading={store.analyzing === key} disabled={store.analyzing !== null && store.analyzing !== key} onClick={() => confirmVision(key)}>
-                        Анализ
-                      </Button>
+                        {ui("Анализ")}</Button>
                     )}
                     {(ref.flags.hasPeople || ref.flags.hasText || ref.flags.studioBackdrop) && (
                       <div className={styles.flags}>
-                        {ref.flags.hasPeople && <Tag tone="warning">люди</Tag>}
-                        {ref.flags.hasText && <Tag tone="warning">текст</Tag>}
-                        {ref.flags.studioBackdrop && <Tag tone="info">студия</Tag>}
+                        {ref.flags.hasPeople && <Tag tone="warning">{ui("люди")}</Tag>}
+                        {ref.flags.hasText && <Tag tone="warning">{ui("текст")}</Tag>}
+                        {ref.flags.studioBackdrop && <Tag tone="info">{ui("студия")}</Tag>}
                       </div>
                     )}
                   </div>
                 );
               })}
-              {shot.panel.length === 0 && <div className={`${styles.stripEmpty} lab-hatch`}><Text variant="label" tone="tertiary">Панель пуста. Добавь референс локации — без него промпт не соберётся.</Text></div>}
+              {shot.panel.length === 0 && <div className={`${styles.stripEmpty} lab-hatch`}><Text variant="label" tone="tertiary">{ui("Панель пуста. Добавь референс локации — без него промпт не соберётся.")}</Text></div>}
             </div>
             {shot.panel.filter((key) => store.visionReports[key] !== undefined).map((key) => {
               const report = store.visionReports[key];
@@ -424,81 +429,80 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                   {report.clothingEn !== '' && <Text variant="caption" tone="tertiary" mono>{report.clothingEn}</Text>}
                   {report.flags !== null && (
                     <div className={styles.row}>
-                      <Text variant="caption" tone="tertiary">Флаги кормят линтер и клаузу «do not take the background». Ничего не применяется само.</Text>
-                      <Button variant="secondary" size="xs" onClick={() => store.applyVisionFlags(key)}>Применить флаги</Button>
+                      <Text variant="caption" tone="tertiary">{ui("Флаги кормят линтер и клаузу «do not take the background». Ничего не применяется само.")}</Text>
+                      <Button variant="secondary" size="xs" onClick={() => store.applyVisionFlags(key)}>{ui("Применить флаги")}</Button>
                     </div>
                   )}
                 </div>
               );
             })}
             <div className={styles.addRow}>
-              <TextField label="Новый референс" placeholder="Набережная, Саша, пикап…" value={newRef.label} onChange={(event) => setNewRef({ ...newRef, label: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && addRef()} />
-              <Select label="Что это" value={newRef.kind} onChange={(kind) => setNewRef({ ...newRef, kind: kind as Ref['kind'] })} options={Object.entries(KIND_RU).map(([value, label]) => ({ value, label }))} />
-              <Button variant="secondary" size="m" icon={<Icon name="plus" />} onClick={addRef} disabled={newRef.label.trim() === ''}>В панель</Button>
+              <TextField label={ui("Новый референс")} placeholder={ui("Набережная, Саша, пикап…")} value={newRef.label} onChange={(event) => setNewRef({ ...newRef, label: event.target.value })} onKeyDown={(event) => event.key === 'Enter' && addRef()} />
+              <Select label={ui("Что это")} value={newRef.kind} onChange={(kind) => setNewRef({ ...newRef, kind: kind as Ref['kind'] })} options={Object.entries(KIND_RU).map(([value, label]) => ({ value, label: ui(label) }))} />
+              <Button variant="secondary" size="m" icon={<Icon name="plus" />} onClick={addRef} disabled={newRef.label.trim() === ''}>{ui("В панель")}</Button>
             </div>
           </Section>
 
-          <Section n="03" title="Локация и погода" note="Тезисно, как думаешь. Агент допишет физику, которую модель умеет рисовать: мокрый асфальт, отражения, пар, ветер.">
-            <TextField label="Место" placeholder="Набережная Москвы-реки у парковки, вдали высотка МГУ" value={place.ru} onChange={(event) => setWorld('place', event.target.value)} helper="Что это за место и что в нём видно. Как оно выглядит, модель возьмёт с референса локации." />
-            <TextField multiline label="Погода и свет" placeholder="Дождь только закончился, выходит солнце. Мокрый асфальт, лужи, лёгкий ветер." value={weather.ru} onChange={(event) => setWorld('weather', event.target.value)} helper="Базовое состояние на весь дубль. Если свет меняется по ходу — это событие, пиши его в сценарий." />
-            {place.ru.trim() === '' && place.en.trim() !== '' && <Derived label="место в промпте (из старой версии)" en={place.en} pending={false} />}
-            {weather.ru.trim() === '' && weather.en.trim() !== '' && <Derived label="погода в промпте (из старой версии)" en={weather.en} pending={false} />}
+          <Section n="03" title={ui("Локация и погода")} note={ui("Тезисно, как думаешь. Агент допишет физику, которую модель умеет рисовать: мокрый асфальт, отражения, пар, ветер.")}>
+            <TextField label={ui("Место")} placeholder={ui("Набережная Москвы-реки у парковки, вдали высотка МГУ")} value={place.ru} onChange={(event) => setWorld('place', event.target.value)} helper={ui("Что это за место и что в нём видно. Как оно выглядит, модель возьмёт с референса локации.")} />
+            <TextField multiline label={ui("Погода и свет")} placeholder={ui("Дождь только закончился, выходит солнце. Мокрый асфальт, лужи, лёгкий ветер.")} value={weather.ru} onChange={(event) => setWorld('weather', event.target.value)} helper={ui("Базовое состояние на весь дубль. Если свет меняется по ходу — это событие, пиши его в сценарий.")} />
+            {place.ru.trim() === '' && place.en.trim() !== '' && <Derived label={ui("место в промпте (из старой версии)")} en={place.en} pending={false} />}
+            {weather.ru.trim() === '' && weather.en.trim() !== '' && <Derived label={ui("погода в промпте (из старой версии)")} en={weather.en} pending={false} />}
           </Section>
 
-          <Section n="04" title="Герои и предметы" note="Внешность берётся с character sheet, а не из текста. Здесь — как ты их называешь; имя для промпта агент сделает сам.">
+          <Section n="04" title={ui("Герои и предметы")} note={ui("Внешность берётся с character sheet, а не из текста. Здесь — как ты их называешь; имя для промпта агент сделает сам.")}>
             {project.entities.map((entity) => (
               <div key={entity.key} className={styles.entity}>
                 <div className={styles.entityRow}>
-                  <TextField label={entity.kind === 'character' ? 'Кто это' : 'Что это'} placeholder={entity.kind === 'character' ? 'Саша' : 'пикап'} value={entity.nameRu ?? ''} onChange={(event) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, nameRu: event.target.value } : e)) }))} />
-                  <Select label="Референс" value={entity.refKey ?? ''} onChange={(refKey) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, refKey: refKey === '' ? null : refKey } : e)) }))} options={[{ value: '', label: 'без референса' }, ...project.refs.filter((r) => r.kind !== 'location').map((r) => ({ value: r.key, label: r.label }))]} />
-                  <Button variant="ghost" size="m" iconOnly aria-label="Удалить" icon={<Icon name="bin" />} onClick={() => store.update((p) => ({ ...p, entities: p.entities.filter((e) => e.key !== entity.key) }))} />
+                  <TextField label={entity.kind === 'character' ? ui("Кто это") : ui("Что это")} placeholder={entity.kind === 'character' ? ui("Саша") : ui("пикап")} value={entity.nameRu ?? ''} onChange={(event) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, nameRu: event.target.value } : e)) }))} />
+                  <Select label={ui("Референс")} value={entity.refKey ?? ''} onChange={(refKey) => store.update((p) => ({ ...p, entities: p.entities.map((e) => (e.key === entity.key ? { ...e, refKey: refKey === '' ? null : refKey } : e)) }))} options={[{ value: '', label: ui("без референса") }, ...project.refs.filter((r) => r.kind !== 'location').map((r) => ({ value: r.key, label: r.label }))]} />
+                  <Button variant="ghost" size="m" iconOnly aria-label={ui("Удалить")} icon={<Icon name="bin" />} onClick={() => store.update((p) => ({ ...p, entities: p.entities.filter((e) => e.key !== entity.key) }))} />
                 </div>
-                <Derived label="в промпте" en={entity.name} pending={needsAgent((entity.nameRu ?? '').trim(), entity.name, entity.nameFor, false)} />
+                <Derived label={ui("в промпте")} en={entity.name} pending={needsAgent((entity.nameRu ?? '').trim(), entity.name, entity.nameFor, false)} />
               </div>
             ))}
             <div className={styles.row}>
-              <Button variant="secondary" size="s" icon={<Icon name="person" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `hero-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'character', refKey: null }] }))}>Герой</Button>
-              <Button variant="secondary" size="s" icon={<Icon name="component" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `prop-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'object', refKey: null }] }))}>Предмет</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="person" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `hero-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'character', refKey: null }] }))}>{ui("Герой")}</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="component" />} onClick={() => store.update((p) => ({ ...p, entities: [...p.entities, { key: `prop-${p.entities.length + 1}-${Date.now().toString(36)}`, nameRu: '', name: '', kind: 'object', refKey: null }] }))}>{ui("Предмет")}</Button>
             </div>
           </Section>
 
-          <Section n="05" title="Реплики" note="Текст в «ёлочках» модель озвучит буква в букву. Вычитай каждую — галочка сбросится при правке.">
+          <Section n="05" title={ui("Реплики")} note={ui("Текст в «ёлочках» модель озвучит буква в букву. Вычитай каждую — галочка сбросится при правке.")}>
             {project.lines.map((line) => (
               <div key={line.id} className={styles.lineRow}>
                 <Tag tone="accent">{line.id}</Tag>
-                <TextField label="Реплика по-русски" value={line.ru} lang="ru" spellCheck onChange={(event) => store.update((p) => ({ ...p, lines: p.lines.map((l) => (l.id === line.id ? { ...l, ru: event.target.value, proofread: false } : l)) }))} helper={`${line.ru.split(/\s+/).filter(Boolean).length} слов`} />
-                <Switch checked={line.proofread} onChange={(proofread) => store.update((p) => ({ ...p, lines: p.lines.map((l) => (l.id === line.id ? { ...l, proofread } : l)) }))} label="вычитана" />
+                <TextField label={ui("Реплика по-русски")} value={line.ru} lang="ru" spellCheck onChange={(event) => store.update((p) => ({ ...p, lines: p.lines.map((l) => (l.id === line.id ? { ...l, ru: event.target.value, proofread: false } : l)) }))} helper={ui("{0} слов", line.ru.split(/\s+/).filter(Boolean).length)} />
+                <Switch checked={line.proofread} onChange={(proofread) => store.update((p) => ({ ...p, lines: p.lines.map((l) => (l.id === line.id ? { ...l, proofread } : l)) }))} label={ui("вычитана")} />
               </div>
             ))}
             <div className={styles.row}>
-              <Button variant="secondary" size="s" icon={<Icon name="mic" />} onClick={() => store.update((p) => ({ ...p, lines: [...p.lines, { id: nextLineId, speakerKey: null, ru: '', proofread: false }] }))}>Реплика</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="mic" />} onClick={() => store.update((p) => ({ ...p, lines: [...p.lines, { id: nextLineId, speakerKey: null, ru: '', proofread: false }] }))}>{ui("Реплика")}</Button>
             </div>
           </Section>
 
           <Section
             n="06"
-            title={cuts ? 'Сценарий по шотам' : 'Сценарий по таймлайну'}
-            note={`${cuts ? 'Абзац = шот: своя крупность и ракурс, одно главное действие, между шотами склейка.' : 'Абзац = отрезок времени. Одно главное действие в отрезке;'} На ${duration} с — ${budget.min === budget.max ? budget.min : `${budget.min}–${budget.max}`} крупных событий (гайд: 4–6 на 30 секунд).`}
+            title={cuts ? ui("Сценарий по шотам") : ui("Сценарий по таймлайну")}
+            note={ui("{0} На {1} с — {2} крупных событий (гайд: 4–6 на 30 секунд).", cuts ? ui("Абзац = шот: своя крупность и ракурс, одно главное действие, между шотами склейка.") : ui("Абзац = отрезок времени. Одно главное действие в отрезке;"), duration, budget.min === budget.max ? budget.min : `${budget.min}–${budget.max}`)}
           >
             {frames.length > 0 && (
               <div className={styles.report}>
                 <Text variant="label" tone="secondary">
-                  Кадров раскадровки в панели: {frames.length}. {unitLabel} N открывается на кадре N — фразу-привязку пишет компилятор, писатель продолжает с этого момента. «{cuts ? 'Разложить по шотам' : 'Разложить по отрезкам'}» сделает ровно {frames.length} {cuts ? plural(frames.length, 'шот', 'шота', 'шотов') : plural(frames.length, 'отрезок', 'отрезка', 'отрезков')}.
+                  {ui("Кадров раскадровки в панели: ")}{frames.length}. {unitLabel} {ui(" N открывается на кадре N — фразу-привязку пишет компилятор, писатель продолжает с этого момента. «")}{cuts ? ui("Разложить по шотам") : ui("Разложить по отрезкам")}{ui("» сделает ровно ")}{frames.length} {cuts ? plural(frames.length, ui("шот"), ui("шота"), ui("шотов")) : plural(frames.length, ui("отрезок"), ui("отрезка"), ui("отрезков"))}.
                 </Text>
                 <div className={styles.row}>
-                  <Text variant="caption" tone="tertiary">Уже есть отрезки — им проставятся кадры по порядку, текст не тронется.</Text>
+                  <Text variant="caption" tone="tertiary">{ui("Уже есть отрезки — им проставятся кадры по порядку, текст не тронется.")}</Text>
                   <Button variant="secondary" size="s" icon={<Icon name="layers" />} onClick={bindFrames}>
-                    Привязать кадры по порядку
-                  </Button>
+                    {ui("Привязать кадры по порядку")}</Button>
                 </div>
               </div>
             )}
             <div className={styles.synopsis}>
-              <TextField multiline label="Кадр своими словами" placeholder="Саша стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, Женя встаёт в стойку, начинается спарринг…" value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper="Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий." />
+              <TextField multiline label={ui("Кадр своими словами")} placeholder={ui("Саша стоит у пикапа с камерой и говорит в объектив: «Сейчас мы снимаем на Sony VENICE 2.» Потом бросает камеру за кадр, Женя встаёт в стойку, начинается спарринг…")} value={shot.synopsisRu} onChange={(event) => store.updateShot((s) => ({ ...s, synopsisRu: event.target.value }))} helper={ui("Реплики пиши в «ёлочках» — они уйдут в список реплик буква в букву. Агент разложит кадр по времени в пределах бюджета событий.")} />
               <div className={styles.row}>
-                <Text variant="caption" tone="tertiary">{shot.segments.some((s) => s.beatsRu.trim() !== '' || s.text.en.trim() !== '') ? 'Текущие отрезки будут заменены.' : ''}</Text>
+                <Text variant="caption" tone="tertiary">{shot.segments.some((s) => s.beatsRu.trim() !== '' || s.text.en.trim() !== '') ? ui("Текущие отрезки будут заменены.") : ''}</Text>
                 <Button variant="soft" size="s" icon={<Icon name="layers" />} loading={store.planning} disabled={shot.synopsisRu.trim() === ''} onClick={() => void store.planShot()}>
-                  {store.planning ? 'Раскладываю…' : cuts ? 'Разложить по шотам' : 'Разложить по отрезкам'}
+                  {store.planning ? ui("Раскладываю…") : cuts ? ui("Разложить по шотам") : ui("Разложить по отрезкам")}
                 </Button>
               </div>
               {store.planReport !== null && (
@@ -516,8 +520,8 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                     <Text variant="label" medium>{unitLabel} {index + 1}</Text>
                     <Tag tone={status.tone}>{status.label}</Tag>
                     <span className={styles.spacer} />
-                    {segment.text.en.trim() !== '' && <Button variant="ghost" size="xs" icon={<Icon name="arrow-forward" size={0.875} />} onClick={() => scrollToParagraph(segment.id)}>в промпте</Button>}
-                    <Button variant="ghost" size="xs" iconOnly aria-label="Удалить отрезок" icon={<Icon name="bin" size={1} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.filter((x) => x.id !== segment.id) }))} />
+                    {segment.text.en.trim() !== '' && <Button variant="ghost" size="xs" icon={<Icon name="arrow-forward" size={0.875} />} onClick={() => scrollToParagraph(segment.id)}>{ui("в промпте")}</Button>}
+                    <Button variant="ghost" size="xs" iconOnly aria-label={ui("Удалить отрезок")} icon={<Icon name="bin" size={1} />} onClick={() => store.updateShot((s) => ({ ...s, segments: s.segments.filter((x) => x.id !== segment.id) }))} />
                   </div>
                   {frames.length > 0 && (
                     <div className={styles.frameRow}>
@@ -526,14 +530,14 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                         return frame?.file !== null && frame?.file !== undefined ? <img className={styles.frameThumb} src={`/api/projects/${project.slug}/refs/${frame.file}`} alt={frame.label} /> : <span className={`${styles.frameThumb} lab-hatch`} />;
                       })()}
                       <Select
-                        label="Открывается на кадре раскадровки"
+                        label={ui("Открывается на кадре раскадровки")}
                         value={segment.frameRef ?? ''}
                         onChange={(frameRef) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, frameRef: frameRef === '' ? null : frameRef } : x)) }))}
-                        options={[{ value: '', label: 'без кадра' }, ...frames.map((f) => ({ value: f.key, label: `№${shot.panel.indexOf(f.key) + 1} · ${f.label}` }))]}
+                        options={[{ value: '', label: ui("без кадра") }, ...frames.map((f) => ({ value: f.key, label: `№${shot.panel.indexOf(f.key) + 1} · ${f.label}` }))]}
                       />
                     </div>
                   )}
-                  <TextField multiline label="Что происходит" value={segment.beatsRu} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, beatsRu: event.target.value } : x)) }))} />
+                  <TextField multiline label={ui("Что происходит")} value={segment.beatsRu} onChange={(event) => store.updateShot((s) => ({ ...s, segments: s.segments.map((x) => (x.id === segment.id ? { ...x, beatsRu: event.target.value } : x)) }))} />
                   {note !== undefined && note !== '' && (
                     <div className={styles.agentNote}>
                       <Icon name="sparkles" size={1} />
@@ -546,13 +550,13 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             <div className={styles.row}>
               <Button variant="secondary" size="s" icon={<Icon name="plus" />} onClick={() => store.updateShot((s) => ({ ...s, segments: [...s.segments, { id: `seg-${Date.now().toString(36)}`, titleRu: '', beatsRu: '', text: emptyUnit() }] }))}>{unitLabel}</Button>
             </div>
-            <Text variant="caption" tone="tertiary">Реплики упоминай в отрезке как L1, L2 — агент поставит их в этом порядке. Номера картинок, реплики и последствия прошлых кадров он вставит сам; английский текст — в превью справа.</Text>
+            <Text variant="caption" tone="tertiary">{ui("Реплики упоминай в отрезке как L1, L2 — агент поставит их в этом порядке. Номера картинок, реплики и последствия прошлых кадров он вставит сам; английский текст — в превью справа.")}</Text>
           </Section>
 
-          <Section n="07" title="Память между кадрами" note="Что случилось в этом кадре, должно быть видно в следующих. Агент вставит это в них сам.">
+          <Section n="07" title={ui("Память между кадрами")} note={ui("Что случилось в этом кадре, должно быть видно в следующих. Агент вставит это в них сам.")}>
             {incoming.length > 0 && (
               <div className={styles.incoming}>
-                <Text variant="caption" tone="secondary">Пришло из прошлых кадров — агент обязан показать это здесь</Text>
+                <Text variant="caption" tone="secondary">{ui("Пришло из прошлых кадров — агент обязан показать это здесь")}</Text>
                 {incoming.map((state) => (
                   <div key={state.id} className={styles.stateRow}>
                     <Tag tone={shot.segments.some((s) => s.text.en.includes(`{{state:${state.id}}}`)) ? 'success' : 'danger'} dot>{state.id}</Tag>
@@ -565,16 +569,16 @@ export function Workspace({ pack }: { pack: PackBundle }) {
               <div key={state.id} className={styles.segment}>
                 <div className={styles.segmentHead}>
                   <Tag tone="danger">{state.id}</Tag>
-                  <Text variant="label" medium>Последствие этого кадра</Text>
+                  <Text variant="label" medium>{ui("Последствие этого кадра")}</Text>
                   <span className={styles.spacer} />
-                  <Button variant="ghost" size="xs" iconOnly aria-label="Удалить последствие" icon={<Icon name="bin" size={1} />} onClick={() => store.update((p) => ({ ...p, states: p.states.filter((s) => s.id !== state.id) }))} />
+                  <Button variant="ghost" size="xs" iconOnly aria-label={ui("Удалить последствие")} icon={<Icon name="bin" size={1} />} onClick={() => store.update((p) => ({ ...p, states: p.states.filter((s) => s.id !== state.id) }))} />
                 </div>
-                <TextField multiline label="Что осталось после кадра" placeholder="Лёгкий синяк на правой щеке у Саши, без крови и порезов" value={state.titleRu} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, titleRu: event.target.value } : s)) }))} helper="Сторона, насколько сильно и чего нет — иначе модель нарисует разбитое лицо не с той стороны." />
-                <Derived label="в следующих кадрах" en={state.en} pending={needsAgent(state.titleRu, state.en, state.enFor)} />
+                <TextField multiline label={ui("Что осталось после кадра")} placeholder={ui("Лёгкий синяк на правой щеке у Саши, без крови и порезов")} value={state.titleRu} onChange={(event) => store.update((p) => ({ ...p, states: p.states.map((s) => (s.id === state.id ? { ...s, titleRu: event.target.value } : s)) }))} helper={ui("Сторона, насколько сильно и чего нет — иначе модель нарисует разбитое лицо не с той стороны.")} />
+                <Derived label={ui("в следующих кадрах")} en={state.en} pending={needsAgent(state.titleRu, state.en, state.enFor)} />
               </div>
             ))}
             <div className={styles.row}>
-              <Button variant="secondary" size="s" icon={<Icon name="pin" />} onClick={() => store.update((p) => ({ ...p, states: [...p.states, { id: nextStateId, titleRu: '', en: '', originShotId: shot.id, resolvedInShotId: null }] }))}>Последствие кадра</Button>
+              <Button variant="secondary" size="s" icon={<Icon name="pin" />} onClick={() => store.update((p) => ({ ...p, states: [...p.states, { id: nextStateId, titleRu: '', en: '', originShotId: shot.id, resolvedInShotId: null }] }))}>{ui("Последствие кадра")}</Button>
             </div>
           </Section>
         </div>
@@ -582,22 +586,21 @@ export function Workspace({ pack }: { pack: PackBundle }) {
         <aside className={styles.preview}>
           <Card padding="l" elevation="raised" className={styles.previewCard}>
             <div className={styles.meters}>
-              <Meter label="Длина" value={build.metrics.chars} max={10000} unit="знаков" />
-              <Meter label="Речь" value={build.metrics.speechWords} max={build.metrics.speechCapacity} unit={`/ ${build.metrics.speechCapacity} слов`} tone={speechTone} />
-              <Meter label="Референсы" value={build.metrics.refsUsed} max={Math.max(1, build.metrics.refsInPanel)} unit={`/ ${build.metrics.refsInPanel} в панели`} tone={build.metrics.refsUsed < build.metrics.refsInPanel ? 'warning' : 'success'} />
+              <Meter label={ui("Длина")} value={build.metrics.chars} max={10000} unit={ui("знаков")} />
+              <Meter label={ui("Речь")} value={build.metrics.speechWords} max={build.metrics.speechCapacity} unit={ui("/ {0} слов", build.metrics.speechCapacity)} tone={speechTone} />
+              <Meter label={ui("Референсы")} value={build.metrics.refsUsed} max={Math.max(1, build.metrics.refsInPanel)} unit={ui("/ {0} в панели", build.metrics.refsInPanel)} tone={build.metrics.refsUsed < build.metrics.refsInPanel ? 'warning' : 'success'} />
             </div>
 
             <div className={styles.copyRow}>
               <Button variant="dark" size="m" icon={<Icon name="push" />} disabled={!canCopy} onClick={() => setExportOpen(true)}>
-                Забрать в Higgsfield
-              </Button>
+                {ui("Забрать в Higgsfield")}</Button>
               {!canCopy ? (
                 <button type="button" className={styles.linkButton} onClick={() => document.getElementById('findings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-                  <Text variant="caption" tone="secondary">Не готово к генерации: {blocking} — список ниже</Text>
+                  <Text variant="caption" tone="secondary">{ui("Не готово к генерации: ")}{blocking} {ui(" — список ниже")}</Text>
                 </button>
               ) : (
                 <Text variant="caption" tone="secondary">
-                  {shot.critique?.prompt === build.prompt ? `Критик: замечаний осталось ${activeCritiqueFindings(shot, build.prompt).length}.` : 'Собран. Настройки, картинки по номерам и промпт — в одном окне.'}
+                  {shot.critique?.prompt === build.prompt ? ui("Критик: замечаний осталось {0}.", activeCritiqueFindings(shot, build.prompt).length) : ui("Собран. Настройки, картинки по номерам и промпт — в одном окне.")}
                 </Text>
               )}
             </div>
@@ -607,7 +610,7 @@ export function Workspace({ pack }: { pack: PackBundle }) {
                 <Text variant="label" medium>{store.writeReport.messageRu}</Text>
                 {store.writeReport.fieldsNoteRu !== '' && <Text variant="label" tone="secondary">{store.writeReport.fieldsNoteRu}</Text>}
                 {store.writeReport.warningsRu.map((w, i) => <Text key={`w${i}`} variant="label" tone="secondary">{w}</Text>)}
-                {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">Осталось после ремонта: {store.writeReport.remainingRu.join(' · ')}</Text>}
+                {store.writeReport.remainingRu.length > 0 && <Text variant="caption" tone="secondary">{ui("Осталось после ремонта: ")}{store.writeReport.remainingRu.join(' · ')}</Text>}
               </div>
             )}
           </Card>
@@ -619,9 +622,9 @@ export function Workspace({ pack }: { pack: PackBundle }) {
             shot={shot}
             blockLabel={(index) => {
               const paragraph = build.paragraphs[index];
-              if (paragraph === undefined) return `абзац ${index + 1}`;
+              if (paragraph === undefined) return ui("абзац {0}", index + 1);
               const segment = paragraph.segmentId === undefined ? -1 : shot.segments.findIndex((s) => s.id === paragraph.segmentId);
-              return segment === -1 ? `абзац ${index + 1} · ${BLOCK_RU[paragraph.kind] ?? paragraph.kind}` : `абзац ${index + 1} · отрезок ${segment + 1}`;
+              return segment === -1 ? ui("абзац {0} · {1}", index + 1, BLOCK_RU[paragraph.kind] ?? paragraph.kind) : ui("абзац {0} · отрезок {1}", index + 1, segment + 1);
             }}
             onSuppress={(fingerprint, reasonRu, messageRu) => store.updateShot((s) => ({ ...s, suppressed: [...s.suppressed.filter((x) => x.fingerprint !== fingerprint), { fingerprint, reasonRu, messageRu }] }))}
             onRestore={(fingerprint) => store.updateShot((s) => ({ ...s, suppressed: s.suppressed.filter((x) => x.fingerprint !== fingerprint) }))}
@@ -629,13 +632,13 @@ export function Workspace({ pack }: { pack: PackBundle }) {
           />
 
           <Card padding="l" className={styles.previewCard}>
-            <Text variant="caption" tone="secondary">Промпт — его пишут агенты из твоих полей</Text>
+            <Text variant="caption" tone="secondary">{ui("Промпт — его пишут агенты из твоих полей")}</Text>
             {build.paragraphs.map((paragraph, i) => (
               <div key={i} id={`p-${i}`} className={styles.paragraph}>
                 <div className={styles.paragraphHead}>
                   <Text variant="caption" tone="tertiary" mono>{String(i + 1).padStart(2, '0')}</Text>
-                  <Text variant="caption" tone="secondary">{BLOCK_RU[paragraph.kind] ?? paragraph.kind}</Text>
-                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : paragraph.origin === 'derived' ? 'warning' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? 'формула гайда · техника не из гайда' : 'дословно из гайда') : paragraph.origin === 'derived' ? `режим «${resolvedShooting.mode?.titleRu ?? shooting.mode}» · не из гайда` : paragraph.origin === 'template' ? 'формула гайда + твои поля' : 'агент по твоим битам'}</Tag>
+                  <Text variant="caption" tone="secondary">{ui(BLOCK_RU[paragraph.kind]) ?? paragraph.kind}</Text>
+                  <Tag tone={paragraph.origin === 'textUnit' ? 'neutral' : paragraph.origin === 'derived' ? 'warning' : 'outline'}>{paragraph.origin === 'verbatim' ? (paragraph.kind === 'style' && (isCustom || (kit?.source !== undefined && kit.source !== 'guide')) ? ui("формула гайда · техника не из гайда") : ui("дословно из гайда")) : paragraph.origin === 'derived' ? ui("режим «{0}» · не из гайда", resolvedShooting.mode?.titleRu ?? shooting.mode) : paragraph.origin === 'template' ? ui("формула гайда + твои поля") : ui("агент по твоим битам")}</Tag>
                 </div>
                 <PromptText text={build.resolvedParagraphs[i] ?? ''} />
               </div>

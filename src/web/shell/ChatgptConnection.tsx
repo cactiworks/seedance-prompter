@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChatgptAccount } from '../../core/chatgpt.ts';
 import { Button, Dialog, SegmentedControl, Text, TextField } from '../ui/components/index.ts';
@@ -48,43 +49,43 @@ export function ChatgptConnection() {
   const viaApi = account?.method === 'api';
   const close = (next: boolean) => { setOpen(next); if (!next) { setApiKey(''); setError(''); } };
   return <>
-    <Button variant="border" size="s" onClick={() => setOpen(true)} title={connected ? viaApi ? 'Твой API key подключён' : `Твой ChatGPT: ${account.email ?? 'подключён'}` : 'Подключить ChatGPT или API key'}>
-      {connected ? viaApi ? 'Мой API' : 'Мой ChatGPT' : 'Подключить AI'}
+    <Button variant="border" size="s" onClick={() => setOpen(true)} title={connected ? viaApi ? ui("Твой API key подключён") : ui("Твой ChatGPT: {0}", account.email ?? ui("подключён")) : ui("Подключить ChatGPT или API key")}>
+      {connected ? viaApi ? ui("Мой API") : ui("Мой ChatGPT") : ui("Подключить AI")}
     </Button>
-    <Dialog open={open} onOpenChange={close} title="Твоё AI-подключение" description="ChatGPT или API key для этого браузера. Материалы студии общие."
+    <Dialog open={open} onOpenChange={close} title={ui("Твоё AI-подключение")} description={ui("ChatGPT или API key для этого браузера. Материалы студии общие.")}
       footer={connected
-        ? <Button variant="border" loading={busy} onClick={() => void change('logout')}>Отключить {viaApi ? 'API key' : 'аккаунт'}</Button>
+        ? <Button variant="border" loading={busy} onClick={() => void change('logout')}>{ui("Отключить ")}{viaApi ? 'API key' : ui("аккаунт")}</Button>
         : connecting
-          ? <Button variant="border" loading={busy} onClick={() => void change('logout')}>Отменить вход</Button>
-          : <Button variant="primary" loading={busy} disabled={method === 'api' && !apiKey.trim()} onClick={() => void change(method === 'api' ? 'api-key' : 'login')}>{method === 'api' ? 'Подключить API key' : 'Подключить ChatGPT'}</Button>}>
+          ? <Button variant="border" loading={busy} onClick={() => void change('logout')}>{ui("Отменить вход")}</Button>
+          : <Button variant="primary" loading={busy} disabled={method === 'api' && !apiKey.trim()} onClick={() => void change(method === 'api' ? 'api-key' : 'login')}>{method === 'api' ? ui("Подключить API key") : ui("Подключить ChatGPT")}</Button>}>
       <div className={styles.body}>
         {connected ? <>
-          <div className={styles.account}><Text variant="caption" tone="secondary">Подключён</Text><Text medium>{viaApi ? 'API key' : account.email ?? 'Твой аккаунт ChatGPT'}</Text>{account.plan && <Text variant="caption" tone="secondary">План: {account.plan}</Text>}</div>
-          <Text tone="secondary">{viaApi ? 'Режиссёр, prompts и критик оплачиваются через твой API-сервис. Подписка ChatGPT для этого подключения не нужна.' : 'Режиссёр, prompts и критик используют квоту этого аккаунта.'} Фоновые этапы сохраняют подключение, с которого ты подтвердил запуск.</Text>
-          {viaApi && <Text variant="caption" tone="secondary">Сервис: {account.baseUrl}. Ключ сохранён. Доступ к модели и API-балансу проверится при первом запуске агента.</Text>}
+          <div className={styles.account}><Text variant="caption" tone="secondary">{ui("Подключён")}</Text><Text medium>{viaApi ? 'API key' : account.email ?? ui("Твой аккаунт ChatGPT")}</Text>{account.plan && <Text variant="caption" tone="secondary">{ui("План: ")}{account.plan}</Text>}</div>
+          <Text tone="secondary">{viaApi ? ui("Режиссёр, prompts и критик оплачиваются через твой API-сервис. Подписка ChatGPT для этого подключения не нужна.") : ui("Режиссёр, prompts и критик используют квоту этого аккаунта.")} {ui(" Фоновые этапы сохраняют подключение, с которого ты подтвердил запуск.")}</Text>
+          {viaApi && <Text variant="caption" tone="secondary">{ui("Сервис: ")}{account.baseUrl}{ui(". Ключ сохранён. Доступ к модели и API-балансу проверится при первом запуске агента.")}</Text>}
         </> : connecting ? <>
           {account.login ? <>
-            <Text>Открой страницу OpenAI, войди в свой аккаунт и введи этот код:</Text>
-            <div className={styles.code}><Text as="code" variant="title-m" mono>{account.login.code}</Text><Button variant="soft" onClick={() => { void navigator.clipboard.writeText(account.login!.code).then(() => setCopied(true)).catch(() => setError('Выдели и скопируй код вручную.')); }}>{copied ? 'Скопировано' : 'Копировать код'}</Button></div>
-            <a className={styles.link} href={account.login.url} target="_blank" rel="noopener noreferrer">Открыть вход OpenAI ↗</a>
-            <Text variant="caption" tone="secondary">Проверь аккаунт на странице OpenAI перед подтверждением. Код действует до {new Date(account.login.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.</Text>
-          </> : <Text>Получаем код для входа…</Text>}
-          <Text role="status" tone="secondary">Ожидаем подтверждение. Это окно обновится автоматически.</Text>
+            <Text>{ui("Открой страницу OpenAI, войди в свой аккаунт и введи этот код:")}</Text>
+            <div className={styles.code}><Text as="code" variant="title-m" mono>{account.login.code}</Text><Button variant="soft" onClick={() => { void navigator.clipboard.writeText(account.login!.code).then(() => setCopied(true)).catch(() => setError('Выдели и скопируй код вручную.')); }}>{copied ? ui("Скопировано") : ui("Копировать код")}</Button></div>
+            <a className={styles.link} href={account.login.url} target="_blank" rel="noopener noreferrer">{ui("Открыть вход OpenAI ↗")}</a>
+            <Text variant="caption" tone="secondary">{ui("Проверь аккаунт на странице OpenAI перед подтверждением. Код действует до ")}{new Date(account.login.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.</Text>
+          </> : <Text>{ui("Получаем код для входа…")}</Text>}
+          <Text role="status" tone="secondary">{ui("Ожидаем подтверждение. Это окно обновится автоматически.")}</Text>
         </> : <>
-          <SegmentedControl aria-label="Способ подключения" value={method} onChange={value => { setMethod(value); setError(''); setApiKey(''); }} options={[{ value:'chatgpt', label:'ChatGPT' }, { value:'api', label:'API key' }]} />
+          <SegmentedControl aria-label={ui("Способ подключения")} value={method} onChange={value => { setMethod(value); setError(''); setApiKey(''); }} options={[{ value:'chatgpt', label:'ChatGPT' }, { value:'api', label:'API key' }]} />
           {method === 'api' ? <>
-            <Text>Укажи API-сервис и вставь свой ключ. Вызовы агентов оплачиваются на его стороне.</Text>
-            <TextField label="Base URL" type="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={baseUrl} disabled={busy} onChange={e => setBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" maxLength={1024} helper="Адрес из настроек твоего Codex. Нужен совместимый Responses API." />
-            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={apiKey} disabled={busy} onChange={e => setApiKey(e.target.value)} placeholder="sk-…" maxLength={1024} helper="Ключ хранится на сервере отдельно от материалов и привязан к этому браузеру. После сохранения он не показывается." />
-            <Text variant="caption" tone="secondary">Подключение сохраняет ключ без платного запроса. Доступ к модели проверится при первом запуске. <a className={styles.link} href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Ключи OpenAI ↗</a></Text>
+            <Text>{ui("Укажи API-сервис и вставь свой ключ. Вызовы агентов оплачиваются на его стороне.")}</Text>
+            <TextField label="Base URL" type="url" autoComplete="off" spellCheck={false} autoCapitalize="none" value={baseUrl} disabled={busy} onChange={e => setBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" maxLength={1024} helper={ui("Адрес из настроек твоего Codex. Нужен совместимый Responses API.")} />
+            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={apiKey} disabled={busy} onChange={e => setApiKey(e.target.value)} placeholder="sk-…" maxLength={1024} helper={ui("Ключ хранится на сервере отдельно от материалов и привязан к этому браузеру. После сохранения он не показывается.")} />
+            <Text variant="caption" tone="secondary">{ui("Подключение сохраняет ключ без платного запроса. Доступ к модели проверится при первом запуске. ")}<a className={styles.link} href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">{ui("Ключи OpenAI ↗")}</a></Text>
           </> : <>
-            <Text>Подключи свой ChatGPT, чтобы запускать режиссёра и другие AI-инструменты за счёт своей подписки.</Text>
-            <Text tone="secondary">Вход подтверждается на странице OpenAI. Пароль в студию вводить не нужно.</Text>
+            <Text>{ui("Подключи свой ChatGPT, чтобы запускать режиссёра и другие AI-инструменты за счёт своей подписки.")}</Text>
+            <Text tone="secondary">{ui("Вход подтверждается на странице OpenAI. Пароль в студию вводить не нужно.")}</Text>
           </>}
           {account?.message && <Text role="status">{account.message}</Text>}
         </>}
         {(error || loadError) && <Text role="alert">{error || loadError}</Text>}
-        {!connected && (method === 'chatgpt' || connecting) && <Text variant="caption" tone="secondary">Если OpenAI отклоняет вход по коду, включи device code login в настройках безопасности ChatGPT. <a className={styles.link} href="https://learn.chatgpt.com/docs/auth" target="_blank" rel="noopener noreferrer">Помощь со входом</a></Text>}
+        {!connected && (method === 'chatgpt' || connecting) && <Text variant="caption" tone="secondary">{ui("Если OpenAI отклоняет вход по коду, включи device code login в настройках безопасности ChatGPT. ")}<a className={styles.link} href="https://learn.chatgpt.com/docs/auth" target="_blank" rel="noopener noreferrer">{ui("Помощь со входом")}</a></Text>}
       </div>
     </Dialog>
   </>;

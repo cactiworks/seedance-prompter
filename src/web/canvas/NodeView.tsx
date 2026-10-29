@@ -1,9 +1,12 @@
+import { formatCost } from '../formatCost.ts';
+import { nodeTitle } from './nodeTitle.ts';
+import { ui } from '../language.ts';
 import { SeriesNodeStatus } from '../series/SeriesPreparation.tsx';
 import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { frameInput, mediaInput, planRun, nodeTitle, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
+import { frameInput, mediaInput, planRun, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
 import { seedanceInputs } from '../../core/canvas/seedance.ts';
-import { findModel, formatCost, modelsOf, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
+import { findModel, modelsOf, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import { inputsOf, RESIZE_PRESETS, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { extractFrame, hasRefsConsent, importMedia, isActive, measureInput, mediaUrl, resizeMedia, savedMediaOf, thumbOf, trimVideo, uploadImage, useGen, type MeasuredInput } from '../gen/genStore.ts';
@@ -35,8 +38,7 @@ function SavedResultActions({ mediaId }: { mediaId: string }) {
     <>
       <div className={styles.nodeRow} data-guide="canvas-result" onPointerDown={(event) => event.stopPropagation()}>
         <Button variant="border" size="xs" onClick={() => setOpen(item)}>
-          Открыть и править
-        </Button>
+          {ui("Открыть и править")}</Button>
         <DownloadMediaButton item={item} size="xs" />
       </div>
       <MediaPreview
@@ -88,7 +90,7 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
     return (
       <div className={`${styles.nodeDrop} lab-hatch`}>
         <Text variant="caption" tone="tertiary">
-          {problemRu ?? 'Подключи ко входу «Видео» генератор видео.'}
+          {problemRu ?? ui("Подключи ко входу «Видео» генератор видео.")}
         </Text>
       </div>
     );
@@ -99,25 +101,23 @@ function TrimBody({ node, sourceId, problemRu }: { node: CanvasNode; sourceId: s
       {(['start', 'end'] as const).map((key) => (
         <div key={key} className={styles.trimRow}>
           <Text as="span" variant="caption" tone="secondary" className={styles.trimLabel}>
-            {key === 'start' ? 'Начало, с' : 'Конец, с'}
+            {key === 'start' ? ui("Начало, с") : ui("Конец, с")}
           </Text>
-          <input className={styles.trimInput} type="number" min={0} step={0.1} value={node[key]} aria-label={key === 'start' ? 'Начало, секунды' : 'Конец, секунды (0 — до конца)'} onChange={(event) => setRange({ [key]: Math.max(0, Number(event.target.value) || 0) })} />
-          <Button variant="ghost" size="xs" title="Взять текущую позицию плеера" onClick={() => setRange({ [key]: round1(player.current?.currentTime ?? 0) })}>
-            сейчас
-          </Button>
+          <input className={styles.trimInput} type="number" min={0} step={0.1} value={node[key]} aria-label={key === 'start' ? ui("Начало, секунды") : ui("Конец, секунды (0 — до конца)")} onChange={(event) => setRange({ [key]: Math.max(0, Number(event.target.value) || 0) })} />
+          <Button variant="ghost" size="xs" title={ui("Взять текущую позицию плеера")} onClick={() => setRange({ [key]: round1(player.current?.currentTime ?? 0) })}>
+            {ui("сейчас")}</Button>
         </div>
       ))}
       <Text variant="caption" tone={problems.length > 0 ? 'accent' : 'tertiary'}>
-        {problems[0] ?? `${node.end === 0 ? 'Конец 0 — до конца видео. ' : ''}${length === null ? '' : `Отрезок: ${length.toFixed(1)} с`}`}
+        {problems[0] ?? `${node.end === 0 ? ui("Конец 0 — до конца видео. ") : ''}${length === null ? '' : ui("Отрезок: {0} с", length.toFixed(1))}`}
       </Text>
       {node.mediaId !== null && <video className={styles.nodeVideo} src={mediaUrl(node.mediaId)} controls muted playsInline loop />}
       {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <Button variant="border" size="s" icon={<Icon name="time" size={0.875} />} loading={busy} disabled={problems.length > 0} onClick={() => void cut()}>
-        {node.mediaId === null ? 'Обрезать · бесплатно' : 'Обрезать заново'}
+        {node.mediaId === null ? ui("Обрезать · бесплатно") : ui("Обрезать заново")}
       </Button>
       <Text variant="caption" tone="tertiary">
-        Выход — видео: тяни в «Кадр из видео» или в следующую обрезку.
-      </Text>
+        {ui("Выход — видео: тяни в «Кадр из видео» или в следующую обрезку.")}</Text>
       {error !== null && (
         <Text variant="caption" tone="accent">
           {error}
@@ -154,7 +154,7 @@ function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
       ) : (
         <div className={`${styles.nodeDrop} lab-hatch`}>
           <Text variant="caption" tone="tertiary">
-            {busy ? 'Загружаю…' : 'Перетащи видео сюда'}
+            {busy ? ui("Загружаю…") : ui("Перетащи видео сюда")}
           </Text>
         </div>
       )}
@@ -172,15 +172,12 @@ function VideoBody({ node, onPick }: { node: CanvasNode; onPick: () => void }) {
           }}
         />
         <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} loading={busy} onClick={() => file.current?.click()}>
-          С диска
-        </Button>
+          {ui("С диска")}</Button>
         <Button variant="border" size="xs" icon={<Icon name="images" size={0.875} />} onClick={onPick}>
-          Из библиотеки
-        </Button>
+          {ui("Из библиотеки")}</Button>
       </div>
       <Text variant="caption" tone="tertiary">
-        Выход — видео: тяни в «Кадр из видео» или «Обрезку». Файл с диска остаётся в библиотеке.
-      </Text>
+        {ui("Выход — видео: тяни в «Кадр из видео» или «Обрезку». Файл с диска остаётся в библиотеке.")}</Text>
       {error !== null && (
         <Text variant="caption" tone="accent">
           {error}
@@ -219,32 +216,31 @@ function ResizeBody({ node }: { node: CanvasNode }) {
 
   return (
     <>
-      <select className={styles.nodeSelect} value={preset < 0 ? 'custom' : String(preset)} aria-label="Размер площадки" onChange={(event) => event.target.value !== 'custom' && setSize({ width: RESIZE_PRESETS[Number(event.target.value)]?.width, height: RESIZE_PRESETS[Number(event.target.value)]?.height })}>
+      <select className={styles.nodeSelect} value={preset < 0 ? 'custom' : String(preset)} aria-label={ui("Размер площадки")} onChange={(event) => event.target.value !== 'custom' && setSize({ width: RESIZE_PRESETS[Number(event.target.value)]?.width, height: RESIZE_PRESETS[Number(event.target.value)]?.height })}>
         {RESIZE_PRESETS.map((p, i) => (
           <option key={p.labelRu} value={String(i)}>
             {p.labelRu} · {p.width}×{p.height}
           </option>
         ))}
-        <option value="custom">Свой размер</option>
+        <option value="custom">{ui("Свой размер")}</option>
       </select>
       <div className={styles.trimRow}>
         <Text as="span" variant="caption" tone="secondary" className={styles.trimLabel}>
-          Ш × В, px
-        </Text>
+          {ui("Ш × В, px")}</Text>
         <span className={styles.sizePair}>
-          <input className={styles.trimInput} type="number" min={16} max={8192} step={2} value={node.width} aria-label="Ширина" onChange={(event) => setSize({ width: Math.min(8192, Math.max(16, Math.round(Number(event.target.value) || 16))) })} />
-          <input className={styles.trimInput} type="number" min={16} max={8192} step={2} value={node.height} aria-label="Высота" onChange={(event) => setSize({ height: Math.min(8192, Math.max(16, Math.round(Number(event.target.value) || 16))) })} />
+          <input className={styles.trimInput} type="number" min={16} max={8192} step={2} value={node.width} aria-label={ui("Ширина")} onChange={(event) => setSize({ width: Math.min(8192, Math.max(16, Math.round(Number(event.target.value) || 16))) })} />
+          <input className={styles.trimInput} type="number" min={16} max={8192} step={2} value={node.height} aria-label={ui("Высота")} onChange={(event) => setSize({ height: Math.min(8192, Math.max(16, Math.round(Number(event.target.value) || 16))) })} />
         </span>
       </div>
-      {(node.width % 2 !== 0 || node.height % 2 !== 0) && <Text variant="caption" tone="accent">Ширина и высота должны быть чётными.</Text>}
+      {(node.width % 2 !== 0 || node.height % 2 !== 0) && <Text variant="caption" tone="accent">{ui("Ширина и высота должны быть чётными.")}</Text>}
       <SegmentedControl<'cover' | 'contain'>
-        aria-label="Как вписать"
+        aria-label={ui("Как вписать")}
         size="s"
         value={node.fit}
         onChange={(fit) => setSize({ fit })}
         options={[
-          { value: 'cover', label: 'Заполнить', title: 'Заполнить кадр, лишнее по краям обрезать' },
-          { value: 'contain', label: 'Вписать', title: 'Вписать целиком, пустое — чёрными полями' },
+          { value: 'cover', label: ui("Заполнить"), title: ui("Заполнить кадр, лишнее по краям обрезать") },
+          { value: 'contain', label: ui("Вписать"), title: ui("Вписать целиком, пустое — чёрными полями") },
         ]}
       />
       {node.mediaId !== null ? (
@@ -252,13 +248,13 @@ function ResizeBody({ node }: { node: CanvasNode }) {
       ) : (
         <div className={`${styles.nodeDrop} lab-hatch`}>
           <Text variant="caption" tone="tertiary">
-            {input?.problemRu ?? `Будет ${input?.kind === 'video' ? 'видео' : 'картинка'} ${node.width}×${node.height}`}
+            {input?.problemRu ?? ui("Будет {0} {1}×{2}", input?.kind === 'video' ? ui("видео") : ui("картинка"), node.width, node.height)}
           </Text>
         </div>
       )}
       {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
       <Button variant="border" size="s" icon={<Icon name="apps" size={0.875} />} loading={busy} disabled={input?.source == null || node.width % 2 !== 0 || node.height % 2 !== 0} onClick={() => void run()}>
-        {node.mediaId === null ? 'Подогнать · бесплатно' : 'Подогнать заново'}
+        {node.mediaId === null ? ui("Подогнать · бесплатно") : ui("Подогнать заново")}
       </Button>
       {error !== null && (
         <Text variant="caption" tone="accent">
@@ -303,10 +299,10 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
     <>
       {node.production && <SeriesNodeStatus slug={node.slug} />}
       <Text variant="caption" tone={node.text === '' ? 'tertiary' : 'secondary'} className={styles.seedanceSummary}>
-        {node.text === '' ? 'Полный конструктор кадра: съёмка, камера, референсы по номерам, сценарий по шотам, агенты, проверка и генерация Seedance 2.5.' : node.text}
+        {node.text === '' ? ui("Полный конструктор кадра: съёмка, камера, референсы по номерам, сценарий по шотам, агенты, проверка и генерация Seedance 2.5.") : node.text}
       </Text>
       <Text variant="caption" tone="tertiary">
-        {inputs === null || inputs.inputs.length === 0 ? 'Подключи картинки ко входу «Рефы» — они встанут в панель кадра.' : `На входе картинок: ${inputs.inputs.length} → панель кадра`}
+        {inputs === null || inputs.inputs.length === 0 ? ui("Подключи картинки ко входу «Рефы» — они встанут в панель кадра.") : ui("На входе картинок: {0} → панель кадра", inputs.inputs.length)}
       </Text>
       {inputs !== null && inputs.problems.length > 0 && (
         <Text variant="caption" tone="secondary" className={styles.nodeProblems}>
@@ -314,11 +310,10 @@ function SeedanceBody({ node }: { node: CanvasNode }) {
         </Text>
       )}
 
-      <VariantResult node={node} kind="video" emptyRu="Видео появится здесь после генерации в промптере" />
+      <VariantResult node={node} kind="video" emptyRu={ui("Видео появится здесь после генерации в промптере")} />
 
       <Button variant="dark" size="s" icon={<Icon name="options" size={1} />} loading={busy} onClick={() => void open()}>
-        Открыть промптер
-      </Button>
+        {ui("Открыть промптер")}</Button>
       {/* Причины со входов уже видны выше — здесь только то, что не удалось при открытии (не залилась картинка). */}
       {notes
         .filter((note) => !(inputs?.problems.includes(note) ?? false))
@@ -345,14 +340,14 @@ function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image
     <div className={styles.nodeResult}>
       {media !== null ? (
         kind === 'image' ? (
-          <img src={mediaUrl(media)} alt="Результат" />
+          <img src={mediaUrl(media)} alt={ui("Результат")} />
         ) : (
           <video src={mediaUrl(media)} controls muted loop playsInline />
         )
       ) : (
         <div className={`${styles.nodeDrop} lab-hatch`}>
           <Text variant="caption" tone={job?.status === 'failed' || job?.status === 'download_failed' ? 'accent' : 'tertiary'}>
-            {job === undefined ? emptyRu : `${STATUS_RU[job.status]}${isActive(job) ? '…' : ''}`}
+            {job === undefined ? emptyRu : `${ui(STATUS_RU[job.status])}${isActive(job) ? '…' : ''}`}
           </Text>
           {job?.error !== null && job?.error !== undefined && (
             <Text variant="caption" tone="secondary">
@@ -372,7 +367,7 @@ function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image
                   .finally(() => setRetrying(false));
               }}
             >
-              {job.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}
+              {job.status === 'download_failed' ? ui("Скачать снова") : ui("Проверить снова")}
             </Button>
           )}
           {retryError !== null && (
@@ -385,13 +380,13 @@ function VariantResult({ node, kind, emptyRu }: { node: CanvasNode; kind: 'image
       {!node.stale && media !== null && <SavedResultActions mediaId={media} />}
       {node.jobIds.length > 1 && (
         <div className={styles.iterations}>
-          <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label="Предыдущий вариант">
+          <button type="button" disabled={node.selected === 0} onClick={() => patchNode(node.id, { selected: node.selected - 1 }, `sel:${node.id}`)} aria-label={ui("Предыдущий вариант")}>
             <Icon name="chevron-back" size={0.875} />
           </button>
           <Text variant="caption" tone="secondary">
             {node.selected + 1} / {node.jobIds.length}
           </Text>
-          <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label="Следующий вариант">
+          <button type="button" disabled={node.selected >= node.jobIds.length - 1} onClick={() => patchNode(node.id, { selected: node.selected + 1 }, `sel:${node.id}`)} aria-label={ui("Следующий вариант")}>
             <Icon name="chevron-forward" size={0.875} />
           </button>
         </div>
@@ -448,7 +443,7 @@ function UpscaleSource({ node }: { node: CanvasNode }) {
   const factor = Number(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor);
   return (
     <Text variant="caption" tone="secondary">
-      {`Исходник ${info.width}×${info.height}${info.durationSec === null ? '' : ` · ${info.durationSec.toFixed(1)} с`} → ${info.width * factor}×${info.height * factor}`}
+      {ui("Исходник {0}×{1}{2} → {3}×{4}", info.width, info.height, info.durationSec === null ? '' : ` · ${info.durationSec.toFixed(1)} с`, info.width * factor, info.height * factor)}
     </Text>
   );
 }
@@ -532,7 +527,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   // Выход платной ноды (генератор, апскейл): выбранный вариант ‹ n/N ›, причины, кнопка с ценой.
   const runOutput = (
     <>
-      <VariantResult node={node} kind={node.kind} emptyRu="Результата пока нет" />
+      <VariantResult node={node} kind={node.kind} emptyRu={ui("Результата пока нет")} />
 
       {plan !== null && plan.problems.length > 0 && (
         <Text variant="caption" tone="secondary" className={styles.nodeProblems}>
@@ -540,7 +535,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         </Text>
       )}
       <Button variant="dark" size="s" loading={busy} disabled={plan === null || plan.problems.length > 0 || plan.estimate === null} icon={<Icon name={node.type === 'upscale' ? 'push' : 'sparkle'} size={1} />} onClick={onRun}>
-        {node.type === 'upscale' ? 'Апскейл' : 'Запустить'}
+        {node.type === 'upscale' ? ui("Апскейл") : ui("Запустить")}
         {plan?.estimate !== null && plan?.estimate !== undefined ? ` · ${formatCost(plan.estimate)}` : ''}
       </Button>
     </>
@@ -576,21 +571,21 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         <Text variant="label" medium className={styles.nodeTitle}>
           {nodeTitle(node)}
         </Text>
-        <button type="button" className={styles.nodeIcon} title="Удалить ноду" onPointerDown={(event) => event.stopPropagation()} onClick={() => removeNode(node.id)}>
+        <button type="button" className={styles.nodeIcon} title={ui("Удалить ноду")} onPointerDown={(event) => event.stopPropagation()} onClick={() => removeNode(node.id)}>
           <Icon name="close" size={0.875} />
         </button>
       </header>
 
       {/* Выход — справа на уровне первой строки. */}
-      <button type="button" aria-label={`Выход: ${nodeTitle(node)}`} aria-pressed={keyboardSource} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardOutput(); } }} className={`${styles.port} ${styles.portOut}`} style={{ top: PORT_TOP }} title="Выход — тяни к входу генератора" onPointerDown={(event) => onOutputDown(event, node)} />
+      <button type="button" aria-label={ui("Выход: {0}", nodeTitle(node))} aria-pressed={keyboardSource} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardOutput(); } }} className={`${styles.port} ${styles.portOut}`} style={{ top: PORT_TOP }} title={ui("Выход — тяни к входу генератора")} onPointerDown={(event) => onOutputDown(event, node)} />
 
       {ports.length > 0 && (
         <div className={styles.inputs} style={{ height: ports.length * PORT_STEP + 6 }}>
           {ports.map((port, i) => (
             <div key={port} className={styles.inputRow} style={{ top: PORT_TOP - 40 - PORT_STEP / 2 + i * PORT_STEP, height: PORT_STEP }}>
-              <button type="button" aria-label={`Вход ${PORT_RU[port]}: ${nodeTitle(node)}`} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardInput(port); } }} className={`${styles.port} ${styles.portIn}`} onPointerUp={() => onInputUp(node, port)} title={`Вход «${PORT_RU[port]}»`} />
+              <button type="button" aria-label={ui("Вход {0}: {1}", PORT_RU[port], nodeTitle(node))} onKeyDown={(event) => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); event.stopPropagation(); onKeyboardInput(port); } }} className={`${styles.port} ${styles.portIn}`} onPointerUp={() => onInputUp(node, port)} title={ui("Вход «{0}»", PORT_RU[port])} />
               <Text variant="caption" tone="secondary">
-                {node.type === 'seedance' && port === 'ref' ? 'Рефы' : PORT_RU[port]}
+                {node.type === 'seedance' && port === 'ref' ? ui("Рефы") : ui(PORT_RU[port])}
               </Text>
             </div>
           ))}
@@ -598,8 +593,8 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       )}
 
       <div className={styles.nodeBody} onPointerDown={(event) => event.stopPropagation()}>
-        {node.stale && (node.mediaId !== null || node.jobIds.length > 0) && <div role="status"><Text variant="caption" tone="accent">Вход изменился. Прежний результат устарел; выполни этот шаг заново.</Text></div>}
-        {node.type === 'prompt' && <textarea className={styles.nodeText} rows={5} value={node.text} placeholder="Текст промпта. Соедини выход со входом «Промпт» генератора." onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />}
+        {node.stale && (node.mediaId !== null || node.jobIds.length > 0) && <div role="status"><Text variant="caption" tone="accent">{ui("Вход изменился. Прежний результат устарел; выполни этот шаг заново.")}</Text></div>}
+        {node.type === 'prompt' && <textarea className={styles.nodeText} rows={5} value={node.text} placeholder={ui("Текст промпта. Соедини выход со входом «Промпт» генератора.")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />}
 
         {node.type === 'image' && (
           <>
@@ -608,19 +603,16 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             ) : (
               <div className={`${styles.nodeDrop} lab-hatch`}>
                 <Text variant="caption" tone="tertiary">
-                  Перетащи картинку сюда
-                </Text>
+                  {ui("Перетащи картинку сюда")}</Text>
               </div>
             )}
             {node.source?.type === 'media' && <SavedResultActions mediaId={node.source.mediaId} />}
             <div className={styles.nodeRow}>
               <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(event) => event.target.files?.[0] !== undefined && void setImage(event.target.files[0])} />
               <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => file.current?.click()}>
-                С диска
-              </Button>
+                {ui("С диска")}</Button>
               <Button variant="border" size="xs" icon={<Icon name="images" size={0.875} />} onClick={() => onPickFromLibrary(node.id)}>
-                Из библиотеки
-              </Button>
+                {ui("Из библиотеки")}</Button>
             </div>
           </>
         )}
@@ -628,13 +620,13 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         {node.type === 'frame' && (
           <>
             <SegmentedControl<'first' | 'last'>
-              aria-label="Какой кадр"
+              aria-label={ui("Какой кадр")}
               size="s"
               value={node.which}
               onChange={(which) => patchNode(node.id, { which, mediaId: null })}
               options={[
-                { value: 'first', label: 'Первый' },
-                { value: 'last', label: 'Последний' },
+                { value: 'first', label: ui("Первый") },
+                { value: 'last', label: ui("Последний") },
               ]}
             />
             {node.mediaId !== null ? (
@@ -642,17 +634,16 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             ) : (
               <div className={`${styles.nodeDrop} lab-hatch`}>
                 <Text variant="caption" tone="tertiary">
-                  {frameIn?.problemRu ?? 'Кадр ещё не извлечён'}
+                  {frameIn?.problemRu ?? ui("Кадр ещё не извлечён")}
                 </Text>
               </div>
             )}
             {!node.stale && node.mediaId !== null && <SavedResultActions mediaId={node.mediaId} />}
             <Button variant="border" size="s" icon={<Icon name="layers" size={0.875} />} loading={busy} disabled={frameIn?.mediaId === null || frameIn === null} onClick={() => void extract()}>
-              {node.mediaId === null ? 'Извлечь кадр · бесплатно' : 'Извлечь заново'}
+              {node.mediaId === null ? ui("Извлечь кадр · бесплатно") : ui("Извлечь заново")}
             </Button>
             <Text variant="caption" tone="tertiary">
-              Выход тяни во вход «Старт» следующего видео — клипы склеятся в сцену.
-            </Text>
+              {ui("Выход тяни во вход «Старт» следующего видео — клипы склеятся в сцену.")}</Text>
           </>
         )}
 
@@ -669,7 +660,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             <select
               className={styles.nodeSelect}
               value={node.modelId}
-              aria-label="Модель"
+              aria-label={ui("Модель")}
               onChange={(event) => {
                 const m = findModel(event.target.value);
                 if (m !== undefined) patchNode(node.id, { modelId: m.id, params: paramsFor(m, node.params) });
@@ -677,7 +668,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             >
               {modelsOf(node.kind).map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.titleRu}
+                  {ui(m.titleRu)}
                 </option>
               ))}
             </select>
@@ -688,7 +679,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
                 ))}
               </div>
             )}
-            <textarea className={styles.nodeText} rows={2} value={node.text} placeholder="Доп. текст — допишется после входящих промптов" onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />
+            <textarea className={styles.nodeText} rows={2} value={node.text} placeholder={ui("Доп. текст — допишется после входящих промптов")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />
             {runOutput}
           </>
         )}
@@ -696,12 +687,12 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         {node.type === 'upscale' && (
           <>
             <SegmentedControl<string>
-              aria-label="Увеличение"
+              aria-label={ui("Увеличение")}
               size="s"
               value={String(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor)}
               onChange={(upscaleFactor) => patchNode(node.id, { params: { ...node.params, upscaleFactor } }, `params:${node.id}`)}
               options={[
-                { value: '1', label: '1×', title: 'Только чистка: размер тот же' },
+                { value: '1', label: '1×', title: ui("Только чистка: размер тот же") },
                 { value: '2', label: '2×' },
                 { value: '4', label: '4×' },
               ]}
@@ -709,8 +700,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
             <UpscaleSource node={node} />
             {runOutput}
             <Text variant="caption" tone="tertiary">
-              Topaz не перерисовывает: тот же {node.kind === 'video' ? 'дубль' : 'кадр'}, больше пикселей. Выход — {node.kind === 'video' ? 'видео' : 'картинка'}: тяни в «Размер» или дальше.
-            </Text>
+              {ui("Topaz не перерисовывает: тот же ")}{node.kind === 'video' ? ui("дубль") : ui("кадр")}{ui(", больше пикселей. Выход — ")}{node.kind === 'video' ? ui("видео") : ui("картинка")}{ui(": тяни в «Размер» или дальше.")}</Text>
           </>
         )}
         {error !== null && (

@@ -1,8 +1,10 @@
+import { nodeTitle } from './nodeTitle.ts';
+import { ui } from '../language.ts';
 import { SeriesFlow } from '../series/SeriesFlow.tsx';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { z } from 'zod';
-import { flowCost, nodeTitle } from '../../core/canvas/plan.ts';
+import { flowCost } from '../../core/canvas/plan.ts';
 import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
@@ -30,35 +32,33 @@ export function FlowList() {
   return (
     <>
       <Button variant="border" size="s" icon={<Icon name="plus" size={1} />} className={styles.newFlow} onClick={() => void newFlow({ name: 'Новый холст', nodes: [], edges: [] })}>
-        Создать холст
-      </Button>
+        {ui("Создать холст")}</Button>
       <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>
-        Мои холсты
-      </Text>
-      <nav className={styles.flowList} aria-label="Мои холсты">
+        {ui("Мои холсты")}</Text>
+      <nav className={styles.flowList} aria-label={ui("Мои холсты")}>
         {flows.map((f) => (
           <div key={f.id} className={`${styles.flowItem} ${f.production ? styles.productionFlow : ''} ${f.id === flow?.id ? styles.flowItemActive : ''}`}>
             <button type="button" className={styles.flowLabel} aria-current={f.id === flow?.id ? 'page' : undefined} onClick={() => void openFlow(f.id)}>
-              <span>{f.name}{f.production && <Text as="span" variant="caption" tone="secondary" className={styles.productionBadge}>Из производства</Text>}</span>
+              <span>{f.name}{f.production && <Text as="span" variant="caption" tone="secondary" className={styles.productionBadge}>{ui("Из производства")}</Text>}</span>
               <Text as="span" variant="caption" tone="tertiary">
                 {f.nodes}
               </Text>
             </button>
-            <button type="button" className={styles.flowDelete} style={confirmDelete === f.id ? { width: 'auto', opacity: 1 } : undefined} aria-label={`Удалить холст «${f.name}»`} title="Удалить холст (файлы генераций останутся в библиотеке)" onClick={() => { if (confirmDelete !== f.id) { setConfirmDelete(f.id); return; } void deleteFlow(f.id).then(() => { setDeleted(f.id); setConfirmDelete(null); }); }}>
-              {confirmDelete === f.id ? 'Удалить?' : <Icon name="bin" size={0.875} />}
+            <button type="button" className={styles.flowDelete} style={confirmDelete === f.id ? { width: 'auto', opacity: 1 } : undefined} aria-label={ui("Удалить холст «{0}»", f.name)} title={ui("Удалить холст (файлы генераций останутся в библиотеке)")} onClick={() => { if (confirmDelete !== f.id) { setConfirmDelete(f.id); return; } void deleteFlow(f.id).then(() => { setDeleted(f.id); setConfirmDelete(null); }); }}>
+              {confirmDelete === f.id ? ui("Удалить?") : <Icon name="bin" size={0.875} />}
             </button>
           </div>
         ))}
       </nav>
-      {confirmDelete !== null && <Button variant="ghost" size="xs" onClick={() => setConfirmDelete(null)}>Отмена удаления</Button>}
-      {deleted !== null && <Button variant="border" size="s" onClick={() => void restoreFlow(deleted).then(() => setDeleted(null))}>Восстановить удалённый холст</Button>}
-      {flows.length === 0 && <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>Здесь будут твои работы.</Text>}
+      {confirmDelete !== null && <Button variant="ghost" size="xs" onClick={() => setConfirmDelete(null)}>{ui("Отмена удаления")}</Button>}
+      {deleted !== null && <Button variant="border" size="s" onClick={() => void restoreFlow(deleted).then(() => setDeleted(null))}>{ui("Восстановить удалённый холст")}</Button>}
+      {flows.length === 0 && <Text variant="caption" tone="tertiary" className={styles.flowsTitle}>{ui("Здесь будут твои работы.")}</Text>}
       <details className={styles.sidebarTemplates}>
-        <summary>Шаблоны холстов</summary>
-        <nav className={styles.flowList} aria-label="Шаблоны холстов">
+        <summary>{ui("Шаблоны холстов")}</summary>
+        <nav className={styles.flowList} aria-label={ui("Шаблоны холстов")}>
           {FLOW_TEMPLATES.map((t) => (
-            <button key={t.id} type="button" className={styles.flowLabel} title={t.descriptionRu} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
-              <span>{t.titleRu}</span>
+            <button key={t.id} type="button" className={styles.flowLabel} title={ui(t.descriptionRu)} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
+              <span>{ui(t.titleRu)}</span>
               <Icon name="plus" size={0.875} />
             </button>
           ))}
@@ -76,10 +76,10 @@ function TemplateCards() {
       {FLOW_TEMPLATES.map((t) => (
         <button key={t.id} type="button" className={styles.templateCard} onClick={() => void newFlow({ name: t.titleRu, ...t.build(newId) })}>
           <Text variant="label" medium>
-            {t.titleRu}
+            {ui(t.titleRu)}
           </Text>
           <Text variant="caption" tone="secondary">
-            {t.descriptionRu}
+            {ui(t.descriptionRu)}
           </Text>
         </button>
       ))}
@@ -288,7 +288,7 @@ export function Canvas() {
       } else if (mod && key === 'c') {
         const text = copySelected();
         const n = useCanvas.getState().selection.length;
-        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? `Скопировано блоков: ${n}, со связями — ⌘V вставит сюда или на другой холст.` : 'Блок скопирован — ⌘V вставит его сюда или на другой холст.'));
+        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? ui("Скопировано блоков: {0}, со связями — ⌘V вставит сюда или на другой холст.", n) : 'Блок скопирован — ⌘V вставит его сюда или на другой холст.'));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -325,17 +325,13 @@ export function Canvas() {
     return (
       <div className={styles.emptyPage}>
         <Text variant="title-m" medium>
-          Вся работа — на одном холсте
-        </Text>
+          {ui("Вся работа — на одном холсте")}</Text>
         <Text variant="label" tone="secondary">
-          Собери референсы, создавай изображения и видео, дорабатывай результат для клиента.
-        </Text>
+          {ui("Собери референсы, создавай изображения и видео, дорабатывай результат для клиента.")}</Text>
         <Button variant="primary" size="m" icon={<Icon name="plus" size={1} />} data-guide="canvas-create" onClick={() => void newFlow({ name: 'Новый холст', nodes: [], edges: [] })}>
-          Создать холст
-        </Button>
+          {ui("Создать холст")}</Button>
         <Text variant="caption" tone="tertiary">
-          или начни с шаблона
-        </Text>
+          {ui("или начни с шаблона")}</Text>
         <TemplateCards />
       </div>
     );
@@ -464,12 +460,12 @@ export function Canvas() {
     <div className={styles.canvas}>
       <header className={styles.head}>
         <div className={styles.flowIdentity} data-guide="canvas-save">
-          <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label="Название холста" />
+          <input className={styles.name} value={flow.name} onChange={(event) => rename(event.target.value)} aria-label={ui("Название холста")} />
           <Text variant="caption" tone={save === 'error' ? 'primary' : 'tertiary'}>
-            {SAVE_RU[save]}{error !== null ? ` · ${error}` : ''}
+            {ui(SAVE_RU[save])}{error !== null ? ` · ${error}` : ''}
           </Text>
         </div>
-        {error !== null && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().saveCopy()}>Сохранить копию</Button>}
+        {error !== null && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().saveCopy()}>{ui("Сохранить копию")}</Button>}
         <span className={styles.grow} />
         <details
           ref={moreMenu}
@@ -481,11 +477,11 @@ export function Canvas() {
             event.currentTarget.querySelector('summary')?.focus();
           }}
         >
-          <summary className={styles.moreTrigger}>Ещё</summary>
+          <summary className={styles.moreTrigger}>{ui("Ещё")}</summary>
           <div className={styles.morePanel}>
-            <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>Связи ({flow.edges.length})</Button>
-            <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title="Скачать схему холста в JSON. Медиафайлы скачиваются из результата.">Сохранить схему</Button>
-            <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title="Открыть сохранённую схему холста из JSON">Открыть схему</Button>
+            <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>{ui("Связи (")}{flow.edges.length})</Button>
+            <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title={ui("Скачать схему холста в JSON. Медиафайлы скачиваются из результата.")}>{ui("Сохранить схему")}</Button>
+            <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title={ui("Открыть сохранённую схему холста из JSON")}>{ui("Открыть схему")}</Button>
           </div>
         </details>
         <input ref={importer} type="file" accept="application/json,.json" hidden onChange={(event) => event.target.files?.[0] !== undefined && void importFlow(event.target.files[0]).finally(() => (event.target.value = ''))} />
@@ -505,26 +501,26 @@ export function Canvas() {
             if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget as Node)) event.currentTarget.open = false;
           }}
         >
-          <summary className={styles.addTrigger}><Icon name="plus" size={1} />Добавить</summary>
+          <summary className={styles.addTrigger}><Icon name="plus" size={1} />{ui("Добавить")}</summary>
           <div className={styles.addPanel}>
-            <div className={styles.addGroup} role="group" aria-label="Материал">
-              <Text variant="caption" tone="tertiary">Материал</Text>
-              <button type="button" onClick={() => addBlock('image')}><Icon name="image" size={1} />Изображение</button>
-              <button type="button" onClick={() => addBlock('video')}><Icon name="video" size={1} />Видео</button>
+            <div className={styles.addGroup} role="group" aria-label={ui("Материал")}>
+              <Text variant="caption" tone="tertiary">{ui("Материал")}</Text>
+              <button type="button" onClick={() => addBlock('image')}><Icon name="image" size={1} />{ui("Изображение")}</button>
+              <button type="button" onClick={() => addBlock('video')}><Icon name="video" size={1} />{ui("Видео")}</button>
             </div>
-            <div className={styles.addGroup} role="group" aria-label="Создать">
-              <Text variant="caption" tone="tertiary">Создать</Text>
-              <button type="button" onClick={() => addBlock('generator', 'image')}><Icon name="sparkles" size={1} />Изображение</button>
-              <button type="button" onClick={() => addBlock('generator', 'video')}><Icon name="video" size={1} />Видео</button>
-              <button type="button" onClick={() => addBlock('seedance')}><Icon name="options" size={1} />Seedance-промптер</button>
-              <button type="button" onClick={() => addBlock('prompt')}><Icon name="pencil" size={1} />Текст промпта</button>
+            <div className={styles.addGroup} role="group" aria-label={ui("Создать")}>
+              <Text variant="caption" tone="tertiary">{ui("Создать")}</Text>
+              <button type="button" onClick={() => addBlock('generator', 'image')}><Icon name="sparkles" size={1} />{ui("Изображение")}</button>
+              <button type="button" onClick={() => addBlock('generator', 'video')}><Icon name="video" size={1} />{ui("Видео")}</button>
+              <button type="button" onClick={() => addBlock('seedance')}><Icon name="options" size={1} />{ui("Seedance-промптер")}</button>
+              <button type="button" onClick={() => addBlock('prompt')}><Icon name="pencil" size={1} />{ui("Текст промпта")}</button>
             </div>
-            <div className={styles.addGroup} role="group" aria-label="Обработать">
-              <Text variant="caption" tone="tertiary">Обработать</Text>
-              <button type="button" onClick={() => addBlock('frame')}><Icon name="layers" size={1} />Стоп-кадр</button>
-              <button type="button" onClick={() => addBlock('trim')}><Icon name="time" size={1} />Обрезка видео</button>
-              <button type="button" onClick={() => addBlock('resize')}><Icon name="apps" size={1} />Размер под площадку</button>
-              <button type="button" onClick={() => addBlock('upscale')}><Icon name="push" size={1} />Апскейл Topaz</button>
+            <div className={styles.addGroup} role="group" aria-label={ui("Обработать")}>
+              <Text variant="caption" tone="tertiary">{ui("Обработать")}</Text>
+              <button type="button" onClick={() => addBlock('frame')}><Icon name="layers" size={1} />{ui("Стоп-кадр")}</button>
+              <button type="button" onClick={() => addBlock('trim')}><Icon name="time" size={1} />{ui("Обрезка видео")}</button>
+              <button type="button" onClick={() => addBlock('resize')}><Icon name="apps" size={1} />{ui("Размер под площадку")}</button>
+              <button type="button" onClick={() => addBlock('upscale')}><Icon name="push" size={1} />{ui("Апскейл Topaz")}</button>
             </div>
           </div>
         </details>
@@ -589,7 +585,7 @@ export function Canvas() {
               const d = curve(a.x, a.y, b.x, b.y);
               return (
                 <g key={edge.id} className={styles.edge} onClick={() => disconnect(edge.id)}>
-                  <title>Клик — убрать связь</title>
+                  <title>{ui("Клик — убрать связь")}</title>
                   <path d={d} className={styles.edgeHit} />
                   <path d={d} className={edge.port === 'prompt' ? styles.edgeText : styles.edgeMedia} />
                 </g>
@@ -605,23 +601,19 @@ export function Canvas() {
         {flow.nodes.length === 0 && (
           <div className={styles.emptyBoard}>
             <Text variant="title-m" medium>
-              С чего начнём?
-            </Text>
+              {ui("С чего начнём?")}</Text>
             <Text variant="label" tone="secondary">
-              Добавь блок или перетащи изображение или видео на холст.
-            </Text>
+              {ui("Добавь блок или перетащи изображение или видео на холст.")}</Text>
             <div className={styles.emptyActions}>
               <Button variant="primary" size="s" icon={<Icon name="plus" size={1} />} onClick={() => {
                 if (addMenu.current === null) return;
                 addMenu.current.open = true;
                 addMenu.current.querySelector('summary')?.focus();
               }}>
-                Добавить блок
-              </Button>
+                {ui("Добавить блок")}</Button>
             </div>
             <Text variant="caption" tone="tertiary">
-              Или выбери шаблон — откроется на новом холсте
-            </Text>
+              {ui("Или выбери шаблон — откроется на новом холсте")}</Text>
             <TemplateCards />
           </div>
         )}
@@ -639,15 +631,13 @@ export function Canvas() {
         {selection.length > 1 && (
           <div className={styles.selectionBar}>
             <Text variant="caption" tone="secondary">
-              Выделено: {selection.length} · перетащи блок — двинется группа · ⌘C / ⌘D / Delete
-            </Text>
+              {ui("Выделено: ")}{selection.length} {ui(" · перетащи блок — двинется группа · ⌘C / ⌘D / Delete")}</Text>
           </div>
         )}
         {linkMenu !== null && (
           <div className={styles.linkMenu} style={{ left: linkMenu.screenX - (board.current?.getBoundingClientRect().left ?? 0), top: linkMenu.screenY - (board.current?.getBoundingClientRect().top ?? 0) }} role="menu" onPointerDown={(event) => event.stopPropagation()}>
             <Text variant="caption" tone="tertiary" className={styles.linkMenuTitle}>
-              Добавить и соединить
-            </Text>
+              {ui("Добавить и соединить")}</Text>
             {linkOptions(linkMenu.from).map((opt) => (
               <button key={opt.label} type="button" role="menuitem" onClick={() => createLinked(opt)}>
                 <Icon name={opt.type === 'frame' ? 'layers' : opt.type === 'trim' ? 'time' : opt.type === 'resize' ? 'apps' : opt.type === 'seedance' ? 'options' : opt.type === 'upscale' ? 'push' : opt.kind === 'video' ? 'video' : 'sparkles'} size={0.875} />
@@ -656,8 +646,7 @@ export function Canvas() {
             ))}
             <button type="button" role="menuitem" onClick={() => setLinkMenu(null)}>
               <Icon name="close" size={0.875} />
-              Отмена
-            </button>
+              {ui("Отмена")}</button>
           </div>
         )}
         {hint !== null && (
@@ -668,43 +657,42 @@ export function Canvas() {
         )}
         {/* Плавающая группа: история, масштаб и оценка генераций. */}
         <div className={styles.zoom}>
-          {cost.unquoted > 0 && <Text variant="caption" tone="secondary">Seedance: цена перед запуском · {cost.unquoted}</Text>}
+          {cost.unquoted > 0 && <Text variant="caption" tone="secondary">{ui("Seedance: цена перед запуском · ")}{cost.unquoted}</Text>}
           {cost.usd > 0 && (
-            <span className={styles.cost} title="Оценка одного запуска каждого генератора. Каждый блок запускается отдельно, с ценой на кнопке.">
+            <span className={styles.cost} title={ui("Оценка одного запуска каждого генератора. Каждый блок запускается отдельно, с ценой на кнопке.")}>
               <Text as="span" variant="caption" tone="secondary">
-                Генерации ≈ ${cost.usd}
-                {cost.credits > 0 ? ` · ${cost.credits} кр` : ''}
+                {ui("Генерации ≈ $")}{cost.usd}
+                {cost.credits > 0 ? ui(" · {0} кр", cost.credits) : ''}
               </Text>
             </span>
           )}
-          <button type="button" onClick={undo} disabled={past.length === 0} aria-label="Отменить (⌘Z)" title="Отменить (⌘Z)">
+          <button type="button" onClick={undo} disabled={past.length === 0} aria-label={ui("Отменить (⌘Z)")} title={ui("Отменить (⌘Z)")}>
             <Icon name="arrow-undo" size={0.875} />
           </button>
-          <button type="button" onClick={redo} disabled={future.length === 0} aria-label="Повторить (⇧⌘Z)" title="Повторить (⇧⌘Z)">
+          <button type="button" onClick={redo} disabled={future.length === 0} aria-label={ui("Повторить (⇧⌘Z)")} title={ui("Повторить (⇧⌘Z)")}>
             <Icon name="arrow-redo" size={0.875} />
           </button>
-          <button type="button" onClick={fit} title="Показать все блоки">
+          <button type="button" onClick={fit} title={ui("Показать все блоки")}>
             <Text as="span" variant="caption">
-              Вписать
-            </Text>
+              {ui("Вписать")}</Text>
           </button>
-          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.max(0.3, viewport.zoom - 0.1) })} aria-label="Уменьшить">
+          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.max(0.3, viewport.zoom - 0.1) })} aria-label={ui("Уменьшить")}>
             <Icon name="minus" size={0.875} />
           </button>
           <Text as="span" variant="caption" tone="secondary" mono>
             {Math.round(viewport.zoom * 100)}%
           </Text>
-          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.min(2, viewport.zoom + 0.1) })} aria-label="Увеличить">
+          <button type="button" onClick={() => setViewport({ ...viewport, zoom: Math.min(2, viewport.zoom + 0.1) })} aria-label={ui("Увеличить")}>
             <Icon name="plus" size={0.875} />
           </button>
         </div>
       </div>
 
-      <Dialog open={connectionsOpen} onOpenChange={setConnectionsOpen} title="Связи холста" description="Клавиатура: выбери выход ноды, затем нужный вход. Здесь можно удалить связь.">
-        {flow.edges.length === 0 && <Text>Связей пока нет.</Text>}
-        {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {edge.port}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>Удалить связь</Button></div>)}
+      <Dialog open={connectionsOpen} onOpenChange={setConnectionsOpen} title={ui("Связи холста")} description={ui("Клавиатура: выбери выход ноды, затем нужный вход. Здесь можно удалить связь.")}>
+        {flow.edges.length === 0 && <Text>{ui("Связей пока нет.")}</Text>}
+        {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {edge.port}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>{ui("Удалить связь")}</Button></div>)}
       </Dialog>
-      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? 'Видео из библиотеки' : 'Картинка из библиотеки'} description="Выбери файл для этого блока. Свои файлы можно добавить в блоке кнопкой «С диска».">
+      <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? ui("Видео из библиотеки") : ui("Картинка из библиотеки")} description={ui("Выбери файл для этого блока. Свои файлы можно добавить в блоке кнопкой «С диска».")}>
         <div className={styles.pickerGrid}>
           {library
             .filter((m) => m.kind === pickKind)
@@ -723,7 +711,7 @@ export function Canvas() {
             ))}
           {library.every((m) => m.kind !== pickKind) && (
             <Text variant="label" tone="tertiary">
-              {pickKind === 'video' ? 'В библиотеке пока нет видео.' : 'В библиотеке пока нет картинок.'}
+              {pickKind === 'video' ? ui("В библиотеке пока нет видео.") : ui("В библиотеке пока нет картинок.")}
             </Text>
           )}
         </div>
@@ -732,13 +720,12 @@ export function Canvas() {
       <Dialog
         open={consent !== null}
         onOpenChange={(open) => !open && setConsent(null)}
-        title="Отправить картинки провайдеру?"
-        description="Изображения этого блока уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки."
+        title={ui("Отправить картинки провайдеру?")}
+        description={ui("Изображения этого блока уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки.")}
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConsent(null)}>
-              Отмена
-            </Button>
+              {ui("Отмена")}</Button>
             <Button
               variant="primary"
               size="s"
@@ -747,14 +734,12 @@ export function Canvas() {
                 setConsent(null);
               }}
             >
-              Отправить и запустить
-            </Button>
+              {ui("Отправить и запустить")}</Button>
           </>
         }
       >
         <Text variant="label" tone="secondary">
-          Запустится только этот блок.
-        </Text>
+          {ui("Запустится только этот блок.")}</Text>
       </Dialog>
     </div>
   );

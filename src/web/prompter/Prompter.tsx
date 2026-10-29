@@ -1,5 +1,7 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { estimate, findModel, formatCost, modelsOf, type GenParams, type MediaKind } from '../../core/gen/models.ts';
+import { estimate, findModel, modelsOf, type GenParams, type MediaKind } from '../../core/gen/models.ts';
 import { agentParams, hasStyles, PROMPTER_MAX_REFS, PROMPTER_REF_ROLE_RU, PROMPTER_REF_ROLES, type PrompterRefRole } from '../../core/llm/buildPrompter.ts';
 import { mediaUrl, thumbOf, useGen } from '../gen/genStore.ts';
 import { useStore } from '../store.ts';
@@ -47,25 +49,23 @@ function RefsUsed({ entry }: { entry: PrompterEntry }) {
   return (
     <section className={styles.block}>
       <Text variant="caption" tone="secondary">
-        Картинки в модель
-      </Text>
+        {ui("Картинки в модель")}</Text>
       <div className={styles.used}>
         {entry.refs.map((ref, index) => (
           <div key={ref.key} className={styles.usedItem} title={refTitle(ref)}>
             <img className={styles.usedThumb} src={thumbOf(ref.source)} alt="" />
             <Text variant="caption" medium>
-              {how.get(index) ?? 'словами'}
+              {ui(how.get(index)) ?? ui("словами")}
             </Text>
             <Text variant="caption" tone="tertiary">
-              {PROMPTER_REF_ROLE_RU[ref.role]}
+              {ui(PROMPTER_REF_ROLE_RU[ref.role])}
             </Text>
           </div>
         ))}
       </div>
       {entry.refs.length > entry.result.refs.length && (
         <Text variant="caption" tone="tertiary">
-          «Словами» — {model.titleRu} эту картинку не получит, агент описал из неё главное текстом.
-        </Text>
+          {ui("«Словами» — ")}{ui(model.titleRu)} {ui(" эту картинку не получит, агент описал из неё главное текстом.")}</Text>
       )}
     </section>
   );
@@ -107,18 +107,17 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
       <header className={styles.resultHead}>
         <div className={styles.stack}>
           <Text variant="caption" tone="secondary">
-            Модель
-          </Text>
+            {ui("Модель")}</Text>
           <span className={styles.modelLine}>
             <Text variant="title-m" medium>
-              {model.titleRu}
+              {ui(model.titleRu)}
             </Text>
-            <Tag tone={entry.choice === 'auto' ? 'accent' : 'neutral'}>{entry.choice === 'auto' ? 'выбрал агент' : 'твой выбор'}</Tag>
+            <Tag tone={entry.choice === 'auto' ? 'accent' : 'neutral'}>{entry.choice === 'auto' ? ui("выбрал агент") : ui("твой выбор")}</Tag>
           </span>
         </div>
         <div className={`${styles.stack} ${styles.costBox}`}>
           <Text variant="caption" tone="secondary">
-            {model.kind === 'image' ? 'Цена картинки' : 'Цена ролика'}
+            {model.kind === 'image' ? ui("Цена картинки") : ui("Цена ролика")}
           </Text>
           <Text variant="label" medium>
             {cost}
@@ -130,10 +129,9 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
       <section className={styles.block}>
         <div className={styles.blockHead}>
           <Text variant="caption" tone="secondary">
-            Промпт · {entry.result.prompt.length} знаков
-          </Text>
+            {ui("Промпт · ")}{entry.result.prompt.length} {ui(" знаков")}</Text>
           <Button variant="ghost" size="xs" icon={<Icon name={copied ? 'checkmark' : 'copy'} size={0.875} />} onClick={copy}>
-            {copied ? 'Скопировано' : 'Копировать'}
+            {copied ? ui("Скопировано") : ui("Копировать")}
           </Button>
         </div>
         <pre className={styles.prompt}>{entry.result.prompt}</pre>
@@ -143,15 +141,14 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
 
       <section className={styles.block}>
         <Text variant="caption" tone="secondary">
-          Параметры
-        </Text>
+          {ui("Параметры")}</Text>
         <div className={styles.tags}>
           {agentParams(model).map((def) => {
             const value = entry.result.params[def.key];
-            const shown = def.type === 'bool' ? (value === true ? 'да' : 'нет') : def.type === 'int' && def.key === 'durationSec' ? `${String(value)} с` : (def.optionLabelsRu?.[String(value)] ?? String(value));
+            const shown = def.type === 'bool' ? (value === true ? ui("да") : ui("нет")) : def.type === 'int' && def.key === 'durationSec' ? ui("{0} с", String(value)) : (def.optionLabelsRu?.[String(value)] ?? String(value));
             return (
               <Tag key={def.key} tone="outline">
-                {def.labelRu}: {shown}
+                {ui(def.labelRu)}: {shown}
               </Tag>
             );
           })}
@@ -161,10 +158,9 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
             {style?.previewUrl != null ? <img className={styles.moodPreview} src={style.previewUrl} alt="" /> : <span className={`${styles.moodPreview} lab-hatch`} />}
             <div className={styles.stack}>
               <Text variant="caption" tone="secondary">
-                Мудборд
-              </Text>
+                {ui("Мудборд")}</Text>
               <Text variant="label" medium>
-                {entry.result.styleName === '' ? 'Без мудборда' : entry.result.styleName}
+                {entry.result.styleName === '' ? ui("Без мудборда") : entry.result.styleName}
               </Text>
             </div>
           </div>
@@ -174,8 +170,7 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
       {entry.result.weakSpotsRu.length > 0 && (
         <section className={styles.block}>
           <Text variant="caption" tone="secondary">
-            Где может сломаться
-          </Text>
+            {ui("Где может сломаться")}</Text>
           <ul className={styles.spots}>
             {entry.result.weakSpotsRu.map((spot) => (
               <li key={spot} className={styles.spot}>
@@ -192,8 +187,7 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
       {entry.result.alternativesRu !== '' && (
         <section className={styles.block}>
           <Text variant="caption" tone="secondary">
-            Если не подойдёт
-          </Text>
+            {ui("Если не подойдёт")}</Text>
           <Text variant="label">{entry.result.alternativesRu}</Text>
         </section>
       )}
@@ -201,8 +195,7 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
       {entry.problems.length > 0 && (
         <section className={styles.block}>
           <Text variant="caption" tone="secondary">
-            Проверка не прошла и после ремонтного круга — поправь вручную в студии
-          </Text>
+            {ui("Проверка не прошла и после ремонтного круга — поправь вручную в студии")}</Text>
           {entry.problems.map((problem) => (
             <Text key={problem} variant="caption" tone="tertiary" mono>
               {problem}
@@ -213,33 +206,31 @@ function Result({ entry, onWrite }: { entry: PrompterEntry; onWrite: (commentRu?
 
       <div className={styles.actions}>
         <Button variant="primary" size="m" icon={<Icon name="arrow-forward" size={1} />} onClick={toStudio}>
-          {model.kind === 'image' ? 'В генератор изображений' : 'В генератор видео'}
+          {model.kind === 'image' ? ui("В генератор изображений") : ui("В генератор видео")}
         </Button>
         <Text variant="caption" tone="tertiary">
-          Промпт, параметры{entry.result.refs.length > 0 ? ' и картинки' : ''} встанут в форму {model.kind === 'image' ? '«Изображений»' : '«Видео»'}; генерация — там, по кнопке с ценой.
-        </Text>
+          {ui("Промпт, параметры")}{entry.result.refs.length > 0 ? ui(" и картинки") : ''} {ui(" встанут в форму ")}{model.kind === 'image' ? ui("«Изображений»") : ui("«Видео»")}{ui("; генерация — там, по кнопке с ценой.")}</Text>
       </div>
 
       <section className={styles.rewrite}>
         <TextField
-          label="Что поправить"
+          label={ui("Что поправить")}
           multiline
           rows={2}
           value={comment}
-          placeholder="Например: кадр шире, без текста, вечерний свет"
+          placeholder={ui("Например: кадр шире, без текста, вечерний свет")}
           onChange={(event) => setComment(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && comment.trim() !== '' && !running) onWrite(comment);
           }}
         />
         <Button variant="border" icon={<Icon name="arrow-redo" size={1} />} disabled={comment.trim() === '' || running} loading={running} onClick={() => onWrite(comment)}>
-          Переписать
-        </Button>
+          {ui("Переписать")}</Button>
       </section>
 
       <Text variant="caption" tone="tertiary">
-        {entry.commentRu !== '' ? `Правка: «${entry.commentRu}» · ` : ''}
-        {entry.llmModel ?? 'агент'} · {Math.round(entry.durationMs / 1000)} с · {new Date(entry.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+        {entry.commentRu !== '' ? ui("Правка: «{0}» · ", entry.commentRu) : ''}
+        {entry.llmModel ?? ui("агент")} · {Math.round(entry.durationMs / 1000)} {ui(" с · ")}{new Date(entry.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
       </Text>
     </article>
   );
@@ -279,14 +270,14 @@ function RefRow({ item, index, count }: { item: PrompterFormRef; index: number; 
       </div>
       <div className={styles.refFields}>
         <div className={styles.refTop}>
-          <Select label="Что это" value={item.role} onChange={(role) => patchRef(item.key, { role: role as PrompterRefRole })} options={roles.map((role) => ({ value: role, label: PROMPTER_REF_ROLE_RU[role] }))} />
+          <Select label={ui("Что это")} value={item.role} onChange={(role) => patchRef(item.key, { role: role as PrompterRefRole })} options={roles.map((role) => ({ value: role, label: ui(PROMPTER_REF_ROLE_RU[role]) }))} />
           <span className={styles.refActions}>
-            <Button variant="ghost" size="xs" iconOnly aria-label="Выше" icon={<Icon name="chevron-up" size={1} />} disabled={index === 0} onClick={() => moveRef(item.key, -1)} />
-            <Button variant="ghost" size="xs" iconOnly aria-label="Ниже" icon={<Icon name="chevron-down" size={1} />} disabled={index === count - 1} onClick={() => moveRef(item.key, 1)} />
-            <Button variant="ghost" size="xs" iconOnly aria-label="Убрать" icon={<Icon name="close" size={1} />} onClick={() => removeRef(item.key)} />
+            <Button variant="ghost" size="xs" iconOnly aria-label={ui("Выше")} icon={<Icon name="chevron-up" size={1} />} disabled={index === 0} onClick={() => moveRef(item.key, -1)} />
+            <Button variant="ghost" size="xs" iconOnly aria-label={ui("Ниже")} icon={<Icon name="chevron-down" size={1} />} disabled={index === count - 1} onClick={() => moveRef(item.key, 1)} />
+            <Button variant="ghost" size="xs" iconOnly aria-label={ui("Убрать")} icon={<Icon name="close" size={1} />} onClick={() => removeRef(item.key)} />
           </span>
         </div>
-        <TextField label="Комментарий" value={item.commentRu} placeholder={COMMENT_HINT[item.role]} onChange={(event) => patchRef(item.key, { commentRu: event.target.value })} />
+        <TextField label={ui("Комментарий")} value={item.commentRu} placeholder={ui(COMMENT_HINT[item.role])} onChange={(event) => patchRef(item.key, { commentRu: event.target.value })} />
       </div>
     </div>
   );
@@ -313,9 +304,9 @@ export function Prompter() {
   }, [loadMeta]);
 
   const models = modelsOf(kind);
-  const modelOptions = [{ value: 'auto', label: 'Авто — агент выберет' }, ...models.map((m) => ({ value: m.id, label: `${m.titleRu} · ${m.noteRu}` }))];
+  const modelOptions = [{ value: 'auto', label: ui('Авто — агент выберет') }, ...models.map((m) => ({ value: m.id, label: `${ui(m.titleRu)} · ${ui(m.noteRu)}` }))];
   const aspects = ASPECTS.filter((a) => models.some((m) => m.params.find((d) => d.key === 'aspectRatio')?.options?.includes(a)));
-  const cameraOptions = [{ value: '', label: 'Авто — по идее' }, ...Object.values(kits).map((k) => ({ value: k.id, label: k.titleRu })), { value: 'custom', label: 'Своя — опишу словами' }];
+  const cameraOptions = [{ value: '', label: ui('Авто — по идее') }, ...Object.values(kits).map((k) => ({ value: k.id, label: ui(k.titleRu) })), { value: 'custom', label: ui('Своя — опишу словами') }];
   const canWrite = ideaRu.trim() !== '' && !running;
 
   /** Картинки уходят агенту (Codex / OpenAI) — один раз за вкладку спрашиваем. */
@@ -351,21 +342,18 @@ export function Prompter() {
         <div className={styles.formHead}>
           <div className={styles.stack}>
             <Text variant="title-m" medium>
-              Помощник промптов
-            </Text>
+              {ui("Помощник промптов")}</Text>
             <Text variant="label" tone="secondary">
-              Опиши идею по-русски — получишь промпт и настройки модели.
-            </Text>
+              {ui("Опиши идею по-русски — получишь промпт и настройки модели.")}</Text>
           </div>
           <Button variant="ghost" size="s" icon={<Icon name="plus" size={1} />} onClick={reset} disabled={running}>
-            Новый
-          </Button>
+            {ui("Новый")}</Button>
         </div>
-        <SegmentedControl aria-label="Что делаем" value={kind} onChange={setKind} options={KIND_OPTIONS} />
-        <Select label="Модель" value={choice} onChange={setChoice} options={modelOptions} />
+        <SegmentedControl aria-label={ui("Что делаем")} value={kind} onChange={setKind} options={KIND_OPTIONS.map(option => ({...option, label: ui(option.label)}))} />
+        <Select label={ui("Модель")} value={choice} onChange={setChoice} options={modelOptions} />
         {kind === 'image' && templates.length > 0 && (
           <div className={styles.stack}>
-            <Select label="Шаблон" value={template} onChange={setTemplate} options={[{ value: '', label: 'Свободно' }, ...templates.filter((t) => t.kind === kind).map((t) => ({ value: t.id, label: t.titleRu }))]} />
+            <Select label={ui("Шаблон")} value={template} onChange={setTemplate} options={[{ value: '', label: ui("Свободно") }, ...templates.filter((t) => t.kind === kind).map((t) => ({ value: t.id, label: ui(t.titleRu) }))]} />
             {chosenTemplate !== undefined && (
               <Text variant="caption" tone="secondary">
                 {chosenTemplate.noteRu}
@@ -374,13 +362,13 @@ export function Prompter() {
           </div>
         )}
 
-        <Section n="01" title="Что в кадре" note="Своими словами, как думаешь. Остальные секции — по желанию: пустое агент решит сам.">
+        <Section n="01" title={ui("Что в кадре")} note={ui("Своими словами, как думаешь. Остальные секции — по желанию: пустое агент решит сам.")}>
           <TextField
-            label="Идея"
+            label={ui("Идея")}
             multiline
             rows={5}
             value={ideaRu}
-            placeholder={kind === 'image' ? 'Я на крыше ночью, снимок на старый телефон со вспышкой, вертикально для рилса' : 'Камера идёт за мной по мокрой улице, я оборачиваюсь к ней'}
+            placeholder={kind === 'image' ? ui("Я на крыше ночью, снимок на старый телефон со вспышкой, вертикально для рилса") : ui("Камера идёт за мной по мокрой улице, я оборачиваюсь к ней")}
             onChange={(event) => setIdea(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && canWrite) run();
@@ -388,14 +376,13 @@ export function Prompter() {
           />
         </Section>
 
-        <Section n="02" title="Референсы" note="Порядок — это нумерация в промпте. Скажи, что на картинке и что с неё взять.">
+        <Section n="02" title={ui("Референсы")} note={ui("Порядок — это нумерация в промпте. Скажи, что на картинке и что с неё взять.")}>
           {refs.map((item, index) => (
             <RefRow key={item.key} item={item} index={index} count={refs.length} />
           ))}
           <div className={styles.refAdd}>
             <Button variant="border" size="s" icon={<Icon name="upload" size={1} />} disabled={refs.length >= PROMPTER_MAX_REFS} onClick={() => fileInput.current?.click()}>
-              С диска
-            </Button>
+              {ui("С диска")}</Button>
             <Button
               variant="border"
               size="s"
@@ -406,23 +393,21 @@ export function Prompter() {
                 setPicker(true);
               }}
             >
-              Из библиотеки
-            </Button>
+              {ui("Из библиотеки")}</Button>
             <Text variant="caption" tone="tertiary">
-              или перетащи / вставь ⌘V · до {PROMPTER_MAX_REFS}
+              {ui("или перетащи / вставь ⌘V · до ")}{PROMPTER_MAX_REFS}
             </Text>
           </div>
           <div className={styles.boards}>
-            <Select label="Мой мудборд" value={board} onChange={setBoard} options={[{ value: '', label: moodboards.length === 0 ? 'пока нет — сохрани стили ниже' : 'выбери' }, ...moodboards.map((m) => ({ value: m.id, label: `${m.name} · ${m.images.length}` }))]} />
+            <Select label={ui("Мой мудборд")} value={board} onChange={setBoard} options={[{ value: '', label: moodboards.length === 0 ? ui("пока нет — сохрани стили ниже") : ui("выбери") }, ...moodboards.map((m) => ({ value: m.id, label: `${m.name} · ${m.images.length}` }))]} />
             <Button variant="border" size="s" disabled={board === '' || refs.length >= PROMPTER_MAX_REFS} onClick={() => addMoodboard(board)}>
-              Добавить
-            </Button>
+              {ui("Добавить")}</Button>
             {board !== '' && (
               <Button
                 variant="ghost"
                 size="s"
                 iconOnly
-                aria-label="Удалить мудборд (картинки останутся)"
+                aria-label={ui("Удалить мудборд (картинки останутся)")}
                 icon={<Icon name="bin" size={1} />}
                 onClick={() => {
                   void deleteMoodboard(board);
@@ -434,11 +419,10 @@ export function Prompter() {
           {styleRefs > 0 &&
             (boardName === null ? (
               <Button variant="ghost" size="s" icon={<Icon name="bookmark" size={1} />} onClick={() => setBoardName('')}>
-                Сохранить стили ({styleRefs}) как мудборд
-              </Button>
+                {ui("Сохранить стили (")}{styleRefs}{ui(") как мудборд")}</Button>
             ) : (
               <div className={styles.boards}>
-                <TextField label="Имя мудборда" value={boardName} placeholder="Night T" autoFocus onChange={(event) => setBoardName(event.target.value)} />
+                <TextField label={ui("Имя мудборда")} value={boardName} placeholder="Night T" autoFocus onChange={(event) => setBoardName(event.target.value)} />
                 <Button
                   variant="primary"
                   size="s"
@@ -448,11 +432,9 @@ export function Prompter() {
                     setBoardName(null);
                   }}
                 >
-                  Сохранить
-                </Button>
+                  {ui("Сохранить")}</Button>
                 <Button variant="ghost" size="s" onClick={() => setBoardName(null)}>
-                  Отмена
-                </Button>
+                  {ui("Отмена")}</Button>
               </div>
             ))}
           <input
@@ -468,32 +450,31 @@ export function Prompter() {
           />
         </Section>
 
-        <Section n="03" title="Как снято" note="Камера задаёт характер картинки: телефон, handycam, плёнка. Комплекты — те же, что в «Кадрах».">
+        <Section n="03" title={ui("Как снято")} note={ui("Камера задаёт характер картинки: телефон, handycam, плёнка. Комплекты — те же, что в «Кадрах».")}>
           <div className={styles.pair}>
-            <Select label="Формат" value={shot.aspectRatio} onChange={(aspectRatio) => setShot({ aspectRatio })} options={[{ value: '', label: 'Авто' }, ...aspects.map((a) => ({ value: a, label: a }))]} />
-            <Select label="Камера" value={shot.cameraKitId} onChange={(cameraKitId) => setShot({ cameraKitId })} options={cameraOptions} />
+            <Select label={ui("Формат")} value={shot.aspectRatio} onChange={(aspectRatio) => setShot({ aspectRatio })} options={[{ value: '', label: ui("Авто") }, ...aspects.map((a) => ({ value: a, label: a }))]} />
+            <Select label={ui("Камера")} value={shot.cameraKitId} onChange={(cameraKitId) => setShot({ cameraKitId })} options={cameraOptions} />
           </div>
-          {shot.cameraKitId === 'custom' && <TextField label="Камера и картинка — своими словами" multiline rows={2} value={shot.cameraRu} placeholder="Старая мыльница со вспышкой, пересвеченные лица, красные глаза" onChange={(event) => setShot({ cameraRu: event.target.value })} />}
+          {shot.cameraKitId === 'custom' && <TextField label={ui("Камера и картинка — своими словами")} multiline rows={2} value={shot.cameraRu} placeholder={ui("Старая мыльница со вспышкой, пересвеченные лица, красные глаза")} onChange={(event) => setShot({ cameraRu: event.target.value })} />}
         </Section>
 
-        <Section n="04" title="Место и свет">
-          <TextField label="Место" value={shot.placeRu} placeholder="Крыша панельки, внизу ночной город" onChange={(event) => setShot({ placeRu: event.target.value })} />
-          <TextField label="Погода и свет" multiline rows={2} value={shot.lightRu} placeholder="Ночь после дождя, влажный воздух, огни снизу" onChange={(event) => setShot({ lightRu: event.target.value })} />
+        <Section n="04" title={ui("Место и свет")}>
+          <TextField label={ui("Место")} value={shot.placeRu} placeholder={ui("Крыша панельки, внизу ночной город")} onChange={(event) => setShot({ placeRu: event.target.value })} />
+          <TextField label={ui("Погода и свет")} multiline rows={2} value={shot.lightRu} placeholder={ui("Ночь после дождя, влажный воздух, огни снизу")} onChange={(event) => setShot({ lightRu: event.target.value })} />
         </Section>
 
-        <Section n="05" title={kind === 'image' ? 'Текст в кадре' : 'Реплика'} note={kind === 'image' ? 'Попадёт в промпт буква в букву. Soul 2 текст не рисует — агент предложит дописать его правкой.' : 'Модель скажет её буква в букву. Вычитай.'}>
-          <TextField label={kind === 'image' ? 'Надпись' : 'Что говорит'} value={shot.textRu} placeholder={kind === 'image' ? 'Стоматология без воды' : 'Ну и где ты был?'} lang="ru" spellCheck onChange={(event) => setShot({ textRu: event.target.value })} />
+        <Section n="05" title={kind === 'image' ? ui("Текст в кадре") : ui("Реплика")} note={kind === 'image' ? ui("Попадёт в промпт буква в букву. Soul 2 текст не рисует — агент предложит дописать его правкой.") : ui("Модель скажет её буква в букву. Вычитай.")}>
+          <TextField label={kind === 'image' ? ui("Надпись") : ui("Что говорит")} value={shot.textRu} placeholder={kind === 'image' ? ui("Стоматология без воды") : ui("Ну и где ты был?")} lang="ru" spellCheck onChange={(event) => setShot({ textRu: event.target.value })} />
         </Section>
 
         <div className={styles.formFoot}>
           <div className={styles.formActions}>
             <Button variant="primary" size="m" icon={<Icon name="sparkles" size={1} />} disabled={!canWrite} loading={running} onClick={() => run()}>
-              {running ? 'Пишу промпт…' : 'Написать промпт'}
+              {running ? ui("Пишу промпт…") : ui("Написать промпт")}
             </Button>
             {running && (
               <Button variant="ghost" size="m" onClick={cancel}>
-                Отменить
-              </Button>
+                {ui("Отменить")}</Button>
             )}
           </div>
           {error !== null && (
@@ -502,8 +483,7 @@ export function Prompter() {
             </Text>
           )}
           <Text variant="caption" tone="tertiary">
-            Подготовка занимает 20–60 с (⌘Enter). Готовый промпт можно перенести в генератор и проверить перед запуском.
-          </Text>
+            {ui("Подготовка занимает 20–60 с (⌘Enter). Готовый промпт можно перенести в генератор и проверить перед запуском.")}</Text>
         </div>
       </section>
 
@@ -514,18 +494,16 @@ export function Prompter() {
               <Icon name="sparkles" size={1.5} />
             </span>
             <Text variant="title-m" medium>
-              Здесь появится промпт
-            </Text>
+              {ui("Здесь появится промпт")}</Text>
             <Text variant="label" tone="secondary">
-              Модель с объяснением выбора, параметры, мудборд и где модель может ошибиться
-            </Text>
+              {ui("Модель с объяснением выбора, параметры, мудборд и где модель может ошибиться")}</Text>
           </div>
         ) : (
           <Result entry={current} onWrite={run} />
         )}
       </section>
 
-      <Dialog open={picker} onOpenChange={setPicker} size="l" title="Картинка из библиотеки" description="Файл с диска — в OpenAI уйдёт уменьшенная копия.">
+      <Dialog open={picker} onOpenChange={setPicker} size="l" title={ui("Картинка из библиотеки")} description={ui("Файл с диска — в OpenAI уйдёт уменьшенная копия.")}>
         <div className={styles.pickerGrid}>
           {library
             .filter((m) => m.kind === 'image')
@@ -544,8 +522,7 @@ export function Prompter() {
             ))}
           {library.every((m) => m.kind !== 'image') && (
             <Text variant="label" tone="tertiary">
-              В библиотеке пока нет картинок.
-            </Text>
+              {ui("В библиотеке пока нет картинок.")}</Text>
           )}
         </div>
       </Dialog>
@@ -553,13 +530,12 @@ export function Prompter() {
       <Dialog
         open={consent !== null}
         onOpenChange={(open) => !open && setConsent(null)}
-        title="Показать картинки агенту?"
-        description="Уменьшенные копии (до 1568 px) уйдут в OpenAI через Codex вместе с идеей — агент смотрит, что на них, чтобы правильно назвать их в промпте. В KIE они уйдут только при генерации, со своим согласием. Согласие — до закрытия вкладки."
+        title={ui("Показать картинки агенту?")}
+        description={ui("Уменьшенные копии (до 1568 px) уйдут в OpenAI через Codex вместе с идеей — агент смотрит, что на них, чтобы правильно назвать их в промпте. В KIE они уйдут только при генерации, со своим согласием. Согласие — до закрытия вкладки.")}
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConsent(null)}>
-              Отмена
-            </Button>
+              {ui("Отмена")}</Button>
             <Button
               variant="primary"
               size="s"
@@ -570,8 +546,7 @@ export function Prompter() {
                 void write(pending?.commentRu);
               }}
             >
-              Показать и написать
-            </Button>
+              {ui("Показать и написать")}</Button>
           </>
         }
       >

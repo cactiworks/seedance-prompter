@@ -1,5 +1,7 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { estimate, findModel, formatCost, paramsFor, REF_ROLE_RU, type MediaKind, type RefRole } from '../../core/gen/models.ts';
+import { estimate, findModel, paramsFor, REF_ROLE_RU, type MediaKind, type RefRole } from '../../core/gen/models.ts';
 import { useGen, type ComposerRef } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Studio.module.css';
@@ -13,7 +15,7 @@ export function refNumbers(refs: readonly ComposerRef[]): Map<string, number> {
 }
 
 function summary(kind: MediaKind, params: Record<string, unknown>): string {
-  const parts = [params.aspectRatio, params.resolution, kind === 'video' && params.durationSec !== undefined ? `${String(params.durationSec)} с` : undefined, params.audio === true ? 'звук' : undefined];
+  const parts = [params.aspectRatio, params.resolution, kind === 'video' && params.durationSec !== undefined ? ui("{0} с", String(params.durationSec)) : undefined, params.audio === true ? 'звук' : undefined];
   return parts.filter((p) => p !== undefined).map(String).join(' / ');
 }
 
@@ -97,26 +99,26 @@ export function Composer({ kind }: { kind: MediaKind }) {
               const n = numbers.get(ref.key);
               return (
                 <figure key={ref.key} className={styles.chip}>
-                  <button type="button" className={styles.chipThumb} title={n === undefined ? REF_ROLE_RU[ref.role] : `Вставить @Image${n}`} onClick={() => n !== undefined && insertToken(n)}>
+                  <button type="button" className={styles.chipThumb} title={n === undefined ? ui(REF_ROLE_RU[ref.role]) : ui("Вставить @Image{0}", n)} onClick={() => n !== undefined && insertToken(n)}>
                     <img src={ref.thumb} alt={ref.label} />
-                    <span className={styles.chipBadge}>{n ?? REF_ROLE_RU[ref.role]}</span>
+                    <span className={styles.chipBadge}>{n ?? ui(REF_ROLE_RU[ref.role])}</span>
                   </button>
                   <span className={styles.chipTools}>
-                    <button type="button" title="Левее" disabled={i === 0} onClick={() => moveRef(kind, ref.key, -1)}>
+                    <button type="button" title={ui("Левее")} disabled={i === 0} onClick={() => moveRef(kind, ref.key, -1)}>
                       <Icon name="chevron-back" size={0.75} />
                     </button>
-                    <button type="button" title="Убрать" onClick={() => removeRef(kind, ref.key)}>
+                    <button type="button" title={ui("Убрать")} onClick={() => removeRef(kind, ref.key)}>
                       <Icon name="close" size={0.75} />
                     </button>
-                    <button type="button" title="Правее" disabled={i === c.refs.length - 1} onClick={() => moveRef(kind, ref.key, 1)}>
+                    <button type="button" title={ui("Правее")} disabled={i === c.refs.length - 1} onClick={() => moveRef(kind, ref.key, 1)}>
                       <Icon name="chevron-forward" size={0.75} />
                     </button>
                   </span>
                   {roles.length > 1 && (
-                    <select className={styles.chipRole} value={ref.role} onChange={(event) => setRole(kind, ref.key, event.target.value as RefRole)} aria-label="Роль картинки">
+                    <select className={styles.chipRole} value={ref.role} onChange={(event) => setRole(kind, ref.key, event.target.value as RefRole)} aria-label={ui("Роль картинки")}>
                       {roles.map((r) => (
                         <option key={r} value={r}>
-                          {REF_ROLE_RU[r]}
+                          {ui(REF_ROLE_RU[r])}
                         </option>
                       ))}
                     </select>
@@ -133,7 +135,7 @@ export function Composer({ kind }: { kind: MediaKind }) {
             className={styles.area}
             rows={2}
             value={c.prompt}
-            placeholder={kind === 'image' ? 'Опиши картинку. @ — сослаться на референс' : 'Опиши видео. @ — сослаться на референс'}
+            placeholder={kind === 'image' ? ui("Опиши картинку. @ — сослаться на референс") : ui("Опиши видео. @ — сослаться на референс")}
             onChange={(event) => onChange(event.target.value, event.target.selectionStart)}
             onKeyDown={onKeyDown}
             onPaste={(event) => {
@@ -172,19 +174,19 @@ export function Composer({ kind }: { kind: MediaKind }) {
 
         <div className={styles.composerBar}>
           <input ref={file} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(event) => void addFiles(kind, [...(event.target.files ?? [])]).finally(() => (event.target.value = ''))} />
-          <Button variant="soft" size="xs" iconOnly icon={<Icon name="plus" size={1} />} aria-label="Добавить картинку" title={model?.refs.max === 0 ? `${model.titleRu} не принимает картинки` : 'Добавить картинку (или вставь из буфера / перетащи)'} disabled={model?.refs.max === 0} onClick={() => file.current?.click()} />
+          <Button variant="soft" size="xs" iconOnly icon={<Icon name="plus" size={1} />} aria-label={ui("Добавить картинку")} title={model?.refs.max === 0 ? ui("{0} не принимает картинки", model.titleRu) : ui("Добавить картинку (или вставь из буфера / перетащи)")} disabled={model?.refs.max === 0} onClick={() => file.current?.click()} />
           <Text variant="caption" tone="secondary">
-            {model?.titleRu}
+            {ui(model?.titleRu)}
           </Text>
           {/* Степпер как у Higgsfield: − 1/4 +. Больше 4 за запуск сервер не примет. */}
-          <span className={styles.stepper} title="Сколько вариантов за запуск">
-            <button type="button" onClick={() => setCount(kind, c.count - 1)} disabled={c.count <= 1} aria-label="Меньше вариантов">
+          <span className={styles.stepper} title={ui("Сколько вариантов за запуск")}>
+            <button type="button" onClick={() => setCount(kind, c.count - 1)} disabled={c.count <= 1} aria-label={ui("Меньше вариантов")}>
               <Icon name="minus" size={0.75} />
             </button>
             <Text as="span" variant="caption" mono>
               {c.count}/4
             </Text>
-            <button type="button" onClick={() => setCount(kind, c.count + 1)} disabled={c.count >= 4} aria-label="Больше вариантов">
+            <button type="button" onClick={() => setCount(kind, c.count + 1)} disabled={c.count >= 4} aria-label={ui("Больше вариантов")}>
               <Icon name="plus" size={0.75} />
             </button>
           </span>
@@ -194,7 +196,7 @@ export function Composer({ kind }: { kind: MediaKind }) {
               {formatCost(cost)}
             </Text>
           )}
-          <Button variant="dark" size="s" iconOnly icon={<Icon name="arrow-forward" size={1} />} aria-label="Сгенерировать" title="Сгенерировать (Enter)" loading={c.sending} disabled={c.prompt.trim() === '' || model === undefined} onClick={() => void send()} />
+          <Button variant="dark" size="s" iconOnly icon={<Icon name="arrow-forward" size={1} />} aria-label={ui("Сгенерировать")} title={ui("Сгенерировать (Enter)")} loading={c.sending} disabled={c.prompt.trim() === '' || model === undefined} onClick={() => void send()} />
         </div>
       </div>
       <Text variant="caption" tone={c.error === null ? 'tertiary' : 'accent'} className={styles.composerNote}>
@@ -204,13 +206,12 @@ export function Composer({ kind }: { kind: MediaKind }) {
       <Dialog
         open={askConsent}
         onOpenChange={setAskConsent}
-        title="Отправить картинки в KIE?"
-        description="Картинки уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки."
+        title={ui("Отправить картинки в KIE?")}
+        description={ui("Картинки уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки.")}
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setAskConsent(false)}>
-              Отмена
-            </Button>
+              {ui("Отмена")}</Button>
             <Button
               variant="primary"
               size="s"
@@ -219,13 +220,13 @@ export function Composer({ kind }: { kind: MediaKind }) {
                 void send(true);
               }}
             >
-              Отправить и сгенерировать{cost === null ? '' : ` · ${formatCost(cost)}`}
+              {ui("Отправить и сгенерировать")}{cost === null ? '' : ` · ${formatCost(cost)}`}
             </Button>
           </>
         }
       >
         <Text variant="label" tone="secondary">
-          Картинок: {c.refs.length}.
+          {ui("Картинок: ")}{c.refs.length}.
         </Text>
       </Dialog>
     </div>

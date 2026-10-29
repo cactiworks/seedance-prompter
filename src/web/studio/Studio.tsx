@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useEffect, useState } from 'react';
 import { findModel, type MediaKind } from '../../core/gen/models.ts';
 import type { MediaItem } from '../../core/model/media.ts';
@@ -43,17 +44,17 @@ export function Studio({ kind }: { kind: MediaKind }) {
           void addFiles(kind, [...event.dataTransfer.files]);
         }}
       >
-        <div className={styles.settingsButton}><Button variant="border" size="s" onClick={() => setSettingsOpen(true)}>Модель и параметры</Button></div>
+        <div className={styles.settingsButton}><Button variant="border" size="s" onClick={() => setSettingsOpen(true)}>{ui("Модель и параметры")}</Button></div>
         {feed.length === 0 ? (
           <div className={styles.empty}>
             <span className={styles.emptyIcon}>
               <Icon name={kind === 'image' ? 'image' : 'video'} size={1.5} />
             </span>
             <Text variant="title-m" medium>
-              {kind === 'image' ? 'Создай изображение' : 'Создай видео'}
+              {kind === 'image' ? ui("Создай изображение") : ui("Создай видео")}
             </Text>
             <Text variant="label" tone="secondary">
-              {kind === 'image' ? 'Опиши идею внизу или добавь референс. Модель и формат — в параметрах.' : 'Опиши сцену внизу. Чтобы оживить изображение, добавь его как референс.'}
+              {kind === 'image' ? ui("Опиши идею внизу или добавь референс. Модель и формат — в параметрах.") : ui("Опиши сцену внизу. Чтобы оживить изображение, добавь его как референс.")}
             </Text>
           </div>
         ) : (
@@ -67,13 +68,12 @@ export function Studio({ kind }: { kind: MediaKind }) {
         {dragging && (
           <div className={styles.dropHint}>
             <Text variant="title-s" medium>
-              Отпусти — картинка станет референсом
-            </Text>
+              {ui("Отпусти — картинка станет референсом")}</Text>
           </div>
         )}
       </section>
       <div className={styles.desktopSettings}><Controls kind={kind} /></div>
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen} title="Модель и параметры"><div className={styles.settingsDialog}><Controls kind={kind} /></div></Dialog>
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen} title={ui("Модель и параметры")}><div className={styles.settingsDialog}><Controls kind={kind} /></div></Dialog>
       <MediaPreview
         item={open}
         list={feedMedia}

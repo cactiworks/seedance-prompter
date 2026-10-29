@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useEffect, useState } from 'react';
 import { VERDICT_RU, VERDICT_SYMPTOMS, VERDICTS, type Verdict } from '../../core/gen/calibration.ts';
 import { Icon, type IconName } from '../ui/components/index.ts';
@@ -22,7 +23,7 @@ export function VerdictBar({ mediaId, compact = false }: { mediaId: string; comp
 
   return (
     <div className={`${styles.verdict} ${compact ? styles.verdictCompact : ''}`}>
-      <div className={styles.verdictButtons} role="radiogroup" aria-label="Оценка">
+      <div className={styles.verdictButtons} role="radiogroup" aria-label={ui("Оценка")}>
         {VERDICTS.map((v) => (
           <button
             key={v}
@@ -30,11 +31,11 @@ export function VerdictBar({ mediaId, compact = false }: { mediaId: string; comp
             role="radio"
             aria-checked={entry?.verdict === v}
             className={`${styles.verdictButton} ${entry?.verdict === v ? styles[`verdict_${v}`] : ''}`}
-            title={VERDICT_RU[v]}
+            title={ui(VERDICT_RU[v])}
             onClick={() => void (entry?.verdict === v ? clearVerdict(mediaId) : setVerdict(mediaId, { verdict: v }))}
           >
             <Icon name={MARK[v]} size={0.875} />
-            {!compact && VERDICT_RU[v]}
+            {!compact && ui(VERDICT_RU[v])}
           </button>
         ))}
       </div>
@@ -51,7 +52,7 @@ export function VerdictBar({ mediaId, compact = false }: { mediaId: string; comp
         </div>
       )}
       {!compact && entry !== undefined && (
-        <input className={styles.verdictNote} value={note} placeholder="Заметка: что именно не так" lang="ru" onChange={(event) => setNote(event.target.value)} onBlur={() => note !== entry.noteRu && void setVerdict(mediaId, { verdict: entry.verdict, noteRu: note })} />
+        <input className={styles.verdictNote} value={note} placeholder={ui("Заметка: что именно не так")} lang="ru" onChange={(event) => setNote(event.target.value)} onBlur={() => note !== entry.noteRu && void setVerdict(mediaId, { verdict: entry.verdict, noteRu: note })} />
       )}
     </div>
   );

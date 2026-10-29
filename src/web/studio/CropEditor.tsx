@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { MediaItem } from '../../core/model/media.ts';
@@ -145,14 +146,14 @@ export function CropEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
 
   return (
     <div className={styles.maskStage}>
-      <div className={styles.maskTools} role="toolbar" aria-label="Обрезка">
+      <div className={styles.maskTools} role="toolbar" aria-label={ui("Обрезка")}>
         {ASPECTS.map((a) => (
           <button key={a.id} type="button" className={`${styles.maskTool} ${aspect === a.id ? styles.maskToolOn : ''}`} onClick={() => pickAspect(a.id)} aria-pressed={aspect === a.id}>
             {a.labelRu}
           </button>
         ))}
         <span className={styles.maskDivider} />
-        <button type="button" className={styles.maskTool} onClick={onExit} title="Выйти из обрезки (Esc)" aria-label="Выйти из обрезки">
+        <button type="button" className={styles.maskTool} onClick={onExit} title={ui("Выйти из обрезки (Esc)")} aria-label={ui("Выйти из обрезки")}>
           <Icon name="close" size={1} />
         </button>
       </div>
@@ -181,12 +182,11 @@ export function CropEditor({ item, onExit }: { item: MediaItem; onExit: () => vo
         </Text>
         <span />
         <Button variant="primary" size="m" icon={<Icon name="checkmark" size={1} />} loading={state.busy} onClick={() => void crop()}>
-          Обрезать · бесплатно
-        </Button>
+          {ui("Обрезать · бесплатно")}</Button>
       </div>
       <div className={styles.maskNote}>
         <Text variant="caption" tone="secondary">
-          {state.messageRu ?? 'Углы — размер, середина — сдвиг. Делается на этом компьютере, в провайдер ничего не уходит.'}
+          {state.messageRu ?? ui("Углы — размер, середина — сдвиг. Делается на этом компьютере, в провайдер ничего не уходит.")}
         </Text>
       </div>
     </div>

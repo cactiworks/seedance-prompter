@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { mediaCostLabel } from '../../core/gen/models.ts';
 import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
@@ -21,7 +22,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
     <div className={styles.list}>
       {(jobsError !== null || actionError !== null) && <Text variant="caption" role="alert">{jobsError ?? actionError}</Text>}
       <Text variant="caption" tone="secondary">
-        Генерации попытки · {mine.length}
+        {ui("Генерации попытки · ")}{mine.length}
       </Text>
       <div className={styles.row}>
         {mine.map((job) => {
@@ -33,7 +34,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
               ) : (
                 <div className={`${styles.media} ${styles.placeholder} lab-hatch`}>
                   <Text variant="label" medium className={job.status === 'failed' || job.status === 'download_failed' ? styles.failed : undefined}>
-                    {STATUS_RU[job.status]}
+                    {ui(STATUS_RU[job.status])}
                     {isActive(job) ? '…' : ''}
                   </Text>
                   {job.error !== null && (
@@ -43,7 +44,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
                   )}
                   {retryable(job) && (
                     <Button variant="border" size="xs" onClick={() => { setActionError(null); void retry(job.id).catch((error: unknown) => setActionError(error instanceof Error ? error.message : 'Не удалось проверить задачу.')); }}>
-                      {job.status === 'download_failed' ? 'Скачать снова' : 'Проверить снова'}
+                      {job.status === 'download_failed' ? ui("Скачать снова") : ui("Проверить снова")}
                     </Button>
                   )}
                 </div>
@@ -54,7 +55,7 @@ export function ShotGenerations({ slug, shotId, attemptN }: { slug: string; shot
                 </Text>
                 {mediaId !== undefined && (
                   <Button variant="ghost" size="xs" onClick={() => void reveal(mediaId)}>
-                    {remoteStudio ? 'Скачать' : 'В Finder'}
+                    {remoteStudio ? ui("Скачать") : ui("В Finder")}
                   </Button>
                 )}
               </figcaption>

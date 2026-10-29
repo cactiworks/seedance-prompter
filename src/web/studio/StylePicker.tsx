@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { useEffect } from 'react';
 import type { ProviderId } from '../../core/gen/models.ts';
 import { useGen } from '../gen/genStore.ts';
@@ -18,21 +19,19 @@ export function StylePicker({ provider, value, onChange, compact = false }: { pr
   if (list === undefined) {
     return (
       <Text variant="caption" tone="tertiary">
-        Загружаю мудборды…
-      </Text>
+        {ui("Загружаю мудборды…")}</Text>
     );
   }
   if (list.length === 0) {
     return (
       <Text variant="caption" tone="tertiary">
-        Мудборды недоступны — нет ключа провайдера или он не ответил.
-      </Text>
+        {ui("Мудборды недоступны — нет ключа провайдера или он не ответил.")}</Text>
     );
   }
   if (compact) {
     return (
-      <select className={styles.styleSelect} value={value} onChange={(event) => onChange(event.target.value)} aria-label="Мудборд">
-        <option value="">Без мудборда</option>
+      <select className={styles.styleSelect} value={value} onChange={(event) => onChange(event.target.value)} aria-label={ui("Мудборд")}>
+        <option value="">{ui("Без мудборда")}</option>
         {list.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}
@@ -45,14 +44,13 @@ export function StylePicker({ provider, value, onChange, compact = false }: { pr
   return (
     <>
     <Text variant="label" medium>
-      {chosen?.name ?? 'Без мудборда'}
+      {chosen?.name ?? ui("Без мудборда")}
     </Text>
-    <div className={styles.styleGrid} role="listbox" aria-label="Мудборд">
+    <div className={styles.styleGrid} role="listbox" aria-label={ui("Мудборд")}>
       <button type="button" role="option" aria-selected={value === ''} className={`${styles.styleItem} ${value === '' ? styles.styleOn : ''}`} onClick={() => onChange('')}>
         <span className={`${styles.stylePreview} lab-hatch`} />
         <Text as="span" variant="caption">
-          Без мудборда
-        </Text>
+          {ui("Без мудборда")}</Text>
       </button>
       {list.map((s) => (
         <button key={s.id} type="button" role="option" aria-selected={value === s.id} title={s.description || s.name} className={`${styles.styleItem} ${value === s.id ? styles.styleOn : ''}`} onClick={() => onChange(s.id)}>

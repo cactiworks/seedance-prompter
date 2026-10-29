@@ -1,6 +1,8 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { useEffect, useState } from 'react';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
-import { estimate, formatCost, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
+import { estimate, paramsFor, upscaleModelOf } from '../../core/gen/models.ts';
 import type { MediaItem } from '../../core/model/media.ts';
 import { hasRefsConsent, measureInput, useGen, type MeasuredInput } from '../gen/genStore.ts';
 import { Button, Icon, SegmentedControl, Text } from '../ui/components/index.ts';
@@ -61,36 +63,33 @@ export function VideoEditPanel({ item }: { item: MediaItem }) {
     <div className={styles.panelBody}>
       <section className={styles.block}>
         <Text variant="label" medium>
-          Апскейл · Topaz
-        </Text>
+          {ui("Апскейл · Topaz")}</Text>
         <Text variant="caption" tone="secondary">
-          Тот же дубль, больше пикселей: Topaz не перерисовывает. Так утверждённый черновик доходит до финала — перегенерация
-          дала бы другой дубль.
-        </Text>
+          {ui("Тот же дубль, больше пикселей: Topaz не перерисовывает. Так утверждённый черновик доходит до финала — перегенерация дала бы другой дубль.")}</Text>
         <SegmentedControl<string>
-          aria-label="Увеличение"
+          aria-label={ui("Увеличение")}
           size="s"
           value={factor}
           onChange={setFactor}
           options={[
-            { value: '1', label: '1×', title: 'Только чистка: размер тот же' },
+            { value: '1', label: '1×', title: ui("Только чистка: размер тот же") },
             { value: '2', label: '2×' },
             { value: '4', label: '4×' },
           ]}
         />
         {info !== null && info.width !== null && info.height !== null && (
           <Text variant="caption" tone="secondary">
-            {`Исходник ${info.width}×${info.height}${info.durationSec === null ? '' : ` · ${info.durationSec.toFixed(1)} с`} → ${info.width * scale}×${info.height * scale}`}
+            {ui("Исходник {0}×{1}{2} → {3}×{4}", info.width, info.height, info.durationSec === null ? '' : ` · ${info.durationSec.toFixed(1)} с`, info.width * scale, info.height * scale)}
           </Text>
         )}
         {needConsent && (
           <label className={styles.consent}>
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <Text variant="caption">Видео уйдёт в KIE, а оттуда исполнителю модели. Если в нём лицо — оно тоже уйдёт.</Text>
+            <Text variant="caption">{ui("Видео уйдёт в KIE, а оттуда исполнителю модели. Если в нём лицо — оно тоже уйдёт.")}</Text>
           </label>
         )}
         <Button variant="dark" size="m" icon={<Icon name="push" size={1} />} loading={state.busy} disabled={blocked} onClick={() => void start()}>
-          Апскейл{cost === null ? '' : ` · ${formatCost(cost)}`}
+          {ui("Апскейл")}{cost === null ? '' : ` · ${formatCost(cost)}`}
         </Button>
         {state.messageRu !== null && (
           <Text variant="caption" tone="secondary">
@@ -99,8 +98,7 @@ export function VideoEditPanel({ item }: { item: MediaItem }) {
         )}
       </section>
       <Text variant="caption" tone="tertiary">
-        Результат — новая версия в ленте слева; исходник не меняется. Цена — по секундам видео: 2× — 8 кр/с, 4× — 14 кр/с.
-      </Text>
+        {ui("Результат — новая версия в ленте слева; исходник не меняется. Цена — по секундам видео: 2× — 8 кр/с, 4× — 14 кр/с.")}</Text>
     </div>
   );
 }

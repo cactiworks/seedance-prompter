@@ -1,7 +1,9 @@
+import { formatCost } from '../formatCost.ts';
+import { ui } from '../language.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState } from 'react';
 import { choiceParams, fillFix, fixParams, type FixPack, type FixRecipe } from '../../core/gen/fixes.ts';
-import { estimate, findModel, formatCost, modelsOf, paramsFor, type GenModel } from '../../core/gen/models.ts';
+import { estimate, findModel, modelsOf, paramsFor, type GenModel } from '../../core/gen/models.ts';
 import type { MediaItem, RefSource } from '../../core/model/media.ts';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
 import { hasRefsConsent, mediaUrl, thumbOf, uploadImage, useGen } from '../gen/genStore.ts';
@@ -113,12 +115,10 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
     <div className={styles.panelBody}>
       <section className={styles.block}>
         <Text variant="caption" tone="tertiary" medium>
-          ЧТО НЕ ТАК
-        </Text>
+          {ui("ЧТО НЕ ТАК")}</Text>
         <div className={styles.fixChips}>
-          <button type="button" className={`${styles.fixChip} ${brush ? styles.fixChipOn : ''}`} onClick={() => onMode('brush')} title="Закрась кистью, что изменить, и напиши, что сделать">
-            <Icon name="brush" size={0.875} /> Кистью
-          </button>
+          <button type="button" className={`${styles.fixChip} ${brush ? styles.fixChipOn : ''}`} onClick={() => onMode('brush')} title={ui("Закрась кистью, что изменить, и напиши, что сделать")}>
+            <Icon name="brush" size={0.875} /> {ui(" Кистью")}</button>
           {(pack?.recipes ?? [])
             .filter((r) => r.group === 'fix')
             .map((r) => (
@@ -127,12 +127,10 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
               </button>
             ))}
           <button type="button" className={`${styles.fixChip} ${mode === 'view' && recipeId === CUSTOM ? styles.fixChipOn : ''}`} onClick={() => pick(CUSTOM)}>
-            Своими словами
-          </button>
+            {ui("Своими словами")}</button>
         </div>
         <Text variant="caption" tone="tertiary" medium>
-          ИНСТРУМЕНТЫ
-        </Text>
+          {ui("ИНСТРУМЕНТЫ")}</Text>
         <div className={styles.fixChips}>
           {(pack?.recipes ?? [])
             .filter((r) => r.group === 'tool')
@@ -141,42 +139,33 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
                 {r.titleRu}
               </button>
             ))}
-          <button type="button" className={`${styles.fixChip} ${mode === 'crop' ? styles.fixChipOn : ''}`} onClick={() => onMode('crop')} title="Обрезать рамкой — бесплатно, локально">
-            Обрезать
-          </button>
+          <button type="button" className={`${styles.fixChip} ${mode === 'crop' ? styles.fixChipOn : ''}`} onClick={() => onMode('crop')} title={ui("Обрезать рамкой — бесплатно, локально")}>
+            {ui("Обрезать")}</button>
         </div>
       </section>
 
       {mode === 'crop' ? (
         <section className={styles.block}>
           <Text variant="label" medium>
-            Обрезать · бесплатно
-          </Text>
+            {ui("Обрезать · бесплатно")}</Text>
           <Text variant="caption" tone="secondary">
-            Потяни рамку за углы или перетащи её целиком; формат — кнопками над картинкой. Обрезка делается на этом
-            компьютере (ffmpeg), в провайдер ничего не уходит. Результат — новой версией, исходник не меняется.
-          </Text>
+            {ui("Потяни рамку за углы или перетащи её целиком; формат — кнопками над картинкой. Обрезка делается на этом компьютере (ffmpeg), в провайдер ничего не уходит. Результат — новой версией, исходник не меняется.")}</Text>
         </section>
       ) : brush ? (
         <section className={styles.block}>
           <Text variant="label" medium>
-            Кистью · Seedream 5 Pro
-          </Text>
+            {ui("Кистью · Seedream 5 Pro")}</Text>
           <Text variant="caption" tone="secondary">
-            Закрась на картинке, что изменить, и ниже напиши, что сделать, — по-русски, агент переведёт. Меняется только
-            выделенное, остальное модель держит как есть.
-          </Text>
+            {ui("Закрась на картинке, что изменить, и ниже напиши, что сделать, — по-русски, агент переведёт. Меняется только выделенное, остальное модель держит как есть.")}</Text>
           <Text variant="caption" tone="secondary">
-            Модель получает не саму закраску, а рамки вокруг каждого пятна (формат интерактивной правки Seedream) — их
-            видно пунктиром. Если в рамку попало два предмета, назови нужный: «кружку слева».
-          </Text>
+            {ui("Модель получает не саму закраску, а рамки вокруг каждого пятна (формат интерактивной правки Seedream) — их видно пунктиром. Если в рамку попало два предмета, назови нужный: «кружку слева».")}</Text>
           <dl className={styles.facts}>
             {[
-              ['B / E', 'кисть / ластик'],
-              ['[ и ]', 'размер кисти'],
-              ['⌘Z / ⇧⌘Z', 'отменить / вернуть'],
-              ['Enter', 'изменить'],
-              ['Esc', 'выйти из кисти'],
+              ['B / E', ui("кисть / ластик")],
+              [ui("[ и ]"), ui("размер кисти")],
+              ['⌘Z / ⇧⌘Z', ui("отменить / вернуть")],
+              ['Enter', ui("изменить")],
+              ['Esc', ui("выйти из кисти")],
             ].map(([k, v]) => (
               <div key={k} className={styles.fact}>
                 <dt>{k}</dt>
@@ -190,12 +179,11 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
         {recipe === undefined ? (
           <>
             <Text variant="caption" tone="secondary">
-              Эта картинка уйдёт референсом, модель сделает новую версию по твоему описанию. Исходник не меняется.
-            </Text>
-            <select className={styles.select} value={customModel} onChange={(event) => setCustomModel(event.target.value)} aria-label="Модель правки">
+              {ui("Эта картинка уйдёт референсом, модель сделает новую версию по твоему описанию. Исходник не меняется.")}</Text>
+            <select className={styles.select} value={customModel} onChange={(event) => setCustomModel(event.target.value)} aria-label={ui("Модель правки")}>
               {editModels().map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.titleRu}
+                  {ui(m.titleRu)}
                 </option>
               ))}
             </select>
@@ -210,11 +198,11 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
             </Text>
             {recipe.models.length > 1 && (
               <SegmentedControl<string>
-                aria-label="Модель правки"
+                aria-label={ui("Модель правки")}
                 size="s"
                 value={String(modelIndex)}
                 onChange={(v) => setModelIndex(Number(v))}
-                options={recipe.models.map((m, i) => ({ value: String(i), label: findModel(m.modelId)?.titleRu ?? m.modelId, title: m.params.variant === 'sunburst' ? 'Вариант Sunburst — тщательнее' : undefined }))}
+                options={recipe.models.map((m, i) => ({ value: String(i), label: findModel(m.modelId)?.titleRu ?? m.modelId, title: m.params.variant === 'sunburst' ? ui("Вариант Sunburst — тщательнее") : undefined }))}
               />
             )}
           </>
@@ -222,7 +210,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
 
         {model !== undefined && resolutionFree && (
           <SegmentedControl<string>
-            aria-label="Разрешение"
+            aria-label={ui("Разрешение")}
             size="s"
             value={String(params.resolution)}
             onChange={setResolution}
@@ -231,7 +219,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
         )}
 
         {recipe === undefined ? (
-          <textarea className={styles.editText} rows={4} value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder="Опиши, как изменить: «сделай фон ночным, добавь неоновые отражения на асфальте»" />
+          <textarea className={styles.editText} rows={4} value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder={ui("Опиши, как изменить: «сделай фон ночным, добавь неоновые отражения на асфальте»")} />
         ) : (
           recipe.fields.map((field) => {
             const options = field.options;
@@ -281,8 +269,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
             <div className={styles.fixExtra}>
               {extra !== null ? <img className={styles.fixThumb} src={thumbOf(extra)} alt="" /> : <span className={`${styles.fixThumb} lab-hatch`} />}
               <Button variant="border" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => fileInput.current?.click()}>
-                С диска
-              </Button>
+                {ui("С диска")}</Button>
               <Button
                 variant="border"
                 size="xs"
@@ -292,13 +279,11 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
                   setPicking((v) => !v);
                 }}
               >
-                Из библиотеки
-              </Button>
+                {ui("Из библиотеки")}</Button>
             </div>
             {picking && library.every((m) => m.kind !== 'image' || m.id === item.id) && (
               <Text variant="caption" tone="tertiary">
-                В библиотеке нет других картинок — загрузи фото с диска.
-              </Text>
+                {ui("В библиотеке нет других картинок — загрузи фото с диска.")}</Text>
             )}
             {picking && (
               <div className={styles.fixPick}>
@@ -338,7 +323,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
 
         {recipe !== undefined && filled.prompt !== '' && (
           <details className={styles.fixDetails}>
-            <summary>Промпт правки</summary>
+            <summary>{ui("Промпт правки")}</summary>
             <Text variant="caption" className={styles.prompt}>
               {filled.prompt}
             </Text>
@@ -348,11 +333,11 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
         {needConsent && (
           <label className={styles.consent}>
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <Text variant="caption">Картинк{refCount > 1 ? 'и уйдут' : 'а уйдёт'} в KIE, а оттуда исполнителю модели. Если на них лицо — оно тоже уйдёт.</Text>
+            <Text variant="caption">{ui("Картинк")}{refCount > 1 ? ui("и уйдут") : ui("а уйдёт")} {ui(" в KIE, а оттуда исполнителю модели. Если на них лицо — оно тоже уйдёт.")}</Text>
           </label>
         )}
         <Button variant="dark" size="m" icon={<Icon name="sparkle" size={1} />} loading={state.busy} disabled={blocked} onClick={() => void start()}>
-          {recipe === undefined ? 'Изменить' : recipe.group === 'tool' ? 'Применить' : 'Починить'}
+          {recipe === undefined ? ui("Изменить") : recipe.group === 'tool' ? ui("Применить") : ui("Починить")}
           {cost === null ? '' : ` · ${formatCost(cost)}`}
         </Button>
         {state.messageRu !== null && (
@@ -363,9 +348,7 @@ export function EditPanel({ item, mode, onMode }: { item: MediaItem; mode: Stage
       </section>
       )}
       <Text variant="caption" tone="tertiary">
-        Каждая правка — отдельная задача в «Материалах» и новая версия после завершения; исходник не меняется. Обрезка бесплатная и локальная, остальное — по
-        цене на кнопке.
-      </Text>
+        {ui("Каждая правка — отдельная задача в «Материалах» и новая версия после завершения; исходник не меняется. Обрезка бесплатная и локальная, остальное — по цене на кнопке.")}</Text>
     </div>
   );
 }

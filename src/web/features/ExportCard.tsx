@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { remoteStudio } from '../download.ts';
 import { useEffect, useState } from 'react';
 import { activeCritiqueFindings } from '../../core/review.ts';
@@ -54,16 +55,16 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const nextAttempt = Math.max(0, ...shot.attempts.map((a) => a.n)) + 1;
 
   const items: GateItem[] = [
-    { id: 'settings', label: `В Higgsfield выставлено: Seedance 2.5, ${project.aspectRatio}, ${durationSec} с, Enhance Prompt выключен` },
-    { id: 'panel', label: `Картинки загружены в этом порядке: ${shot.panel.map((_, i) => i + 1).join(' → ')}` },
-    ...(warnings > 0 ? [{ id: 'warnings', label: `Предупреждения линтера (${warnings}) просмотрены` }] : []),
+    { id: 'settings', label: ui("В Higgsfield выставлено: Seedance 2.5, {0}, {1} с, Enhance Prompt выключен", project.aspectRatio, durationSec) },
+    { id: 'panel', label: ui("Картинки загружены в этом порядке: {0}", shot.panel.map((_, i) => i + 1).join(' → ')) },
+    ...(warnings > 0 ? [{ id: 'warnings', label: ui("Предупреждения линтера ({0}) просмотрены", warnings) }] : []),
     critique === null
       ? { id: 'no-critic', label: stale ? 'Промпт менялся после проверки критиком — иду без перепроверки, осознанно' : 'Иду без итоговой проверки критиком — осознанно' }
       : critique.findings.length === 0
         ? { id: 'critic-clean', label: 'Критик прочитал этот текст и замечаний не нашёл', auto: true }
         : activeCritic.length === 0
-          ? { id: 'critic-dismissed', label: `Все замечания критика (${critique.findings.length}) оставлены без исправления по твоему решению`, auto: true }
-          : { id: 'critic', label: `Оставшиеся замечания критика (${activeCritic.length}) просмотрены` },
+          ? { id: 'critic-dismissed', label: ui("Все замечания критика ({0}) оставлены без исправления по твоему решению", critique.findings.length), auto: true }
+          : { id: 'critic', label: ui("Оставшиеся замечания критика ({0}) просмотрены", activeCritic.length) },
   ];
   const passed = items.every((item) => item.auto === true || ticks.includes(item.id));
   const tick = (id: string, on: boolean): void => setGate({ reviewKey, ticks: on ? [...ticks, id] : ticks.filter((x) => x !== id) });
@@ -89,7 +90,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const needConsent = panelFiles.length > 0 && !hasRefsConsent() && !consent;
   const genProblems = [
     ...(gen.status.higgsfield !== undefined && !gen.status.higgsfield.hasKey ? [`Higgsfield: ${gen.status.higgsfield.keyProblem ?? 'нет ключа'}.`] : []),
-    ...panelFiles.filter((f) => f.file === null).map((f) => `У картинки ${f.n} панели нет файла.`),
+    ...panelFiles.filter((f) => f.file === null).map((f) => ui("У картинки {0} панели нет файла.", f.n)),
     ...(seedance === undefined ? [] : validateGen(seedance, build.prompt, genParams, panelFiles.map(() => project.production ? 'start' as const : 'ref' as const))),
   ];
   const genBlockers = [
@@ -137,67 +138,66 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
   const footer = (
     <>
       <Text variant="caption" tone="secondary" className={styles.footNote}>
-        {!passed ? 'Отметь пункты чек-листа — кнопка откроется.' : savedN?.prompt === build.prompt ? `Попытка №${savedN.n} сохранена. После генерации разбери её в блоке «Попытки».` : 'После копирования сохрани попытку: будет с чем сравнить результат.'}
+        {!passed ? ui("Отметь пункты чек-листа — кнопка откроется.") : savedN?.prompt === build.prompt ? ui("Попытка №{0} сохранена. После генерации разбери её в блоке «Попытки».", savedN.n) : ui("После копирования сохрани попытку: будет с чем сравнить результат.")}
       </Text>
       <Button variant="secondary" size="m" icon={<Icon name="bookmark" />} disabled={!passed || savedN?.prompt === build.prompt} onClick={save}>
-        Сохранить как попытку {nextAttempt}
+        {ui("Сохранить как попытку ")}{nextAttempt}
       </Button>
       <Button variant="dark" size="m" icon={<Icon name={copied === build.prompt ? 'checkmark' : 'copy'} />} disabled={!passed} onClick={() => void copy()}>
-        {copied === build.prompt ? 'Скопировано' : 'Скопировать промпт'}
+        {copied === build.prompt ? ui("Скопировано") : ui("Скопировать промпт")}
       </Button>
     </>
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={`${project.production ? shot.title : `Кадр ${shotIndex + 1}`} → генерация`} description="Запустить через Higgsfield API или перенести в Higgsfield вручную по шагам ниже. Здесь ничего не редактируется." footer={footer}>
+    <Dialog open={open} onOpenChange={onOpenChange} size="l" title={ui("{0} → генерация", project.production ? shot.title : `Кадр ${shotIndex + 1}`)} description={ui("Запустить через Higgsfield API или перенести в Higgsfield вручную по шагам ниже. Здесь ничего не редактируется.")} footer={footer}>
       <div className={styles.steps}>
         <section className={styles.step}>
-          <StepHead n="▶" title="Сгенерировать здесь — Seedance 2.5 через Higgsfield" />
+          <StepHead n="▶" title={ui("Сгенерировать здесь — Seedance 2.5 через Higgsfield")} />
           <div className={styles.row}>
-            <SegmentedControl<string> aria-label="Разрешение" size="s" value={genRes} onChange={setGenRes} options={['480p', '720p', '1080p'].map((r) => ({ value: r, label: r }))} />
-            <Switch checked={genAudio} onChange={setGenAudio} label="Звук" />
+            <SegmentedControl<string> aria-label={ui("Разрешение")} size="s" value={genRes} onChange={setGenRes} options={['480p', '720p', '1080p'].map((r) => ({ value: r, label: r }))} />
+            <Switch checked={genAudio} onChange={setGenAudio} label={ui("Звук")} />
             <div className={styles.chips}>
               <Tag tone="neutral">{project.aspectRatio}</Tag>
-              <Tag tone="neutral">{durationSec} с</Tag>
-              <Tag tone="outline">картинок: {panelFiles.length} → @Image1…</Tag>
+              <Tag tone="neutral">{durationSec} {ui(" с")}</Tag>
+              <Tag tone="outline">{ui("картинок: ")}{panelFiles.length} → @Image1…</Tag>
             </div>
           </div>
           {panelFiles.length > 0 && !hasRefsConsent() && (
             <label className={styles.gateItem}>
               <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-              <Text variant="label">Картинки панели ({panelFiles.length}) уйдут в Higgsfield API. Если на них лицо, оно тоже уйдёт.</Text>
+              <Text variant="label">{ui("Картинки панели (")}{panelFiles.length}{ui(") уйдут в Higgsfield API. Если на них лицо, оно тоже уйдёт.")}</Text>
             </label>
           )}
           {genBlockers.length > 0 && (
             <Text variant="caption" tone="secondary" role="status">
-              Чтобы рассчитать стоимость: {genBlockers.join(' ')}
+              {ui("Чтобы рассчитать стоимость: ")}{genBlockers.join(' ')}
             </Text>
           )}
           <div className={styles.row}>
             <Button variant="dark" size="m" icon={<Icon name="sparkle" />} loading={genBusy} disabled={genBlockers.length > 0 || genCost === null} onClick={() => void generate()}>
-              Рассчитать стоимость видео
-            </Button>
+              {ui("Рассчитать стоимость видео")}</Button>
             {launched !== null && (
               <Text variant="label" tone={launched.errorRu === undefined ? 'secondary' : 'accent'}>
-                {launched.errorRu ?? `Задача попытки №${launched.n} добавлена в «Материалы». Статус виден также в блоке «Попытки»; файл появится после завершения.`}
+                {launched.errorRu ?? ui("Задача попытки №{0} добавлена в «Материалы». Статус виден также в блоке «Попытки»; файл появится после завершения.", launched.n)}
               </Text>
             )}
           </div>
         </section>
 
         <section className={styles.step}>
-          <StepHead n="1" title="Настройки генерации" />
+          <StepHead n="1" title={ui("Настройки генерации")} />
           <div className={styles.chips}>
             <Tag tone="neutral">Seedance 2.5</Tag>
             <Tag tone="neutral">{project.aspectRatio}</Tag>
-            <Tag tone="neutral">{durationSec} с</Tag>
-            <Tag tone="danger">Enhance Prompt: выкл</Tag>
-            <Tag tone="outline">ссылки: {project.dialect.refSyntax === 'higgsfield-chip' ? '<<<image_N>>>' : '@Image N'}</Tag>
+            <Tag tone="neutral">{durationSec} {ui(" с")}</Tag>
+            <Tag tone="danger">{ui("Enhance Prompt: выкл")}</Tag>
+            <Tag tone="outline">{ui("ссылки: ")}{project.dialect.refSyntax === 'higgsfield-chip' ? '<<<image_N>>>' : '@Image N'}</Tag>
           </div>
         </section>
 
         <section className={styles.step}>
-          <StepHead n="2" title={`Референсы — ${shot.panel.length} шт., загружать строго по номерам`} />
+          <StepHead n="2" title={ui("Референсы — {0} шт., загружать строго по номерам", shot.panel.length)} />
           <div className={styles.refs}>
             {shot.panel.map((key, i) => {
               const ref = refByKey.get(key);
@@ -210,18 +210,18 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
                     <span className={styles.number}>{i + 1}</span>
                   </div>
                   <Text variant="label" medium>{ref?.label ?? key}</Text>
-                  <Text variant="caption" tone="secondary">{KIND_RU[ref?.kind ?? 'other']}{names.length > 0 ? ` · ${names.join(', ')}` : ''}</Text>
+                  <Text variant="caption" tone="secondary">{ui(KIND_RU[ref?.kind ?? 'other'])}{names.length > 0 ? ` · ${names.join(', ')}` : ''}</Text>
                   <Text variant="caption" tone="tertiary" mono>{refSyntax(i + 1)}</Text>
-                  {file === null && <Tag tone="warning">нет файла</Tag>}
+                  {file === null && <Tag tone="warning">{ui("нет файла")}</Tag>}
                 </div>
               );
             })}
           </div>
           <div className={styles.row}>
             <Button variant="secondary" size="s" icon={<Icon name="folder" />} loading={store.exporting} disabled={shot.panel.length === 0} onClick={() => void store.exportPanel()}>
-              {remoteStudio ? 'Скачать файлы по номерам в ZIP' : 'Сложить в папку по номерам и открыть в Finder'}
+              {remoteStudio ? ui("Скачать файлы по номерам в ZIP") : ui("Сложить в папку по номерам и открыть в Finder")}
             </Button>
-            <Text variant="caption" tone="tertiary">Файлы получат имена 01-…, 02-… в порядке панели, перетаскивай по одному сверху вниз.</Text>
+            <Text variant="caption" tone="tertiary">{ui("Файлы получат имена 01-…, 02-… в порядке панели, перетаскивай по одному сверху вниз.")}</Text>
           </div>
           {exported !== null && (
             <div className={`${styles.note} ${exported.errorRu !== undefined ? styles.noteBad : ''}`}>
@@ -229,8 +229,8 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
                 <Text variant="label">{exported.errorRu}</Text>
               ) : (
                 <>
-                  <Text variant="label" medium>{exported.downloadUrl ? 'Архив подготовлен к скачиванию' : `Папка открыта: ${exported.dir}`}</Text>
-                  <Text variant="caption" tone="secondary" mono>{exported.files.map((f) => f.file ?? `${String(f.n).padStart(2, '0')} — нет файла (${f.key})`).join(' · ')}</Text>
+                  <Text variant="label" medium>{exported.downloadUrl ? ui("Архив подготовлен к скачиванию") : ui("Папка открыта: {0}", exported.dir)}</Text>
+                  <Text variant="caption" tone="secondary" mono>{exported.files.map((f) => f.file ?? ui("{0} — нет файла ({1})", String(f.n).padStart(2, '0'), f.key)).join(' · ')}</Text>
                 </>
               )}
             </div>
@@ -238,42 +238,42 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
         </section>
 
         <section className={styles.step}>
-          <StepHead n="3" title={`Промпт — ${build.metrics.chars} знаков`} />
+          <StepHead n="3" title={ui("Промпт — {0} знаков", build.metrics.chars)} />
           <div className={styles.prompt}>
             <PromptText text={build.prompt} />
           </div>
         </section>
 
         <section className={styles.step}>
-          <StepHead n="4" title="Что должно получиться" />
+          <StepHead n="4" title={ui("Что должно получиться")} />
           {critique === null ? (
             <div className={styles.row}>
-              <Text variant="label" tone="secondary">{stale ? 'Критик читал прошлую версию текста — пересказ устарел.' : 'Критик этот текст не читал: пересказа «что увидит зритель» нет.'}</Text>
-              <Button variant="soft" size="s" icon={<Icon name="eye" />} loading={store.critiquing} onClick={() => void store.critiqueShot()}>{store.critiquing ? 'Критик читает…' : stale ? 'Перепроверить' : 'Проверить критиком'}</Button>
+              <Text variant="label" tone="secondary">{stale ? ui("Критик читал прошлую версию текста — пересказ устарел.") : ui("Критик этот текст не читал: пересказа «что увидит зритель» нет.")}</Text>
+              <Button variant="soft" size="s" icon={<Icon name="eye" />} loading={store.critiquing} onClick={() => void store.critiqueShot()}>{store.critiquing ? ui("Критик читает…") : stale ? ui("Перепроверить") : ui("Проверить критиком")}</Button>
             </div>
           ) : (
             <div className={styles.readback}>
               <div className={styles.chips}>
-                <Tag tone={activeCritic.length < critique.findings.length ? 'outline' : VERDICT[critique.verdict]?.tone ?? 'neutral'} dot>Исходная оценка: {VERDICT[critique.verdict]?.label ?? critique.verdict}</Tag>
+                <Tag tone={activeCritic.length < critique.findings.length ? 'outline' : VERDICT[critique.verdict]?.tone ?? 'neutral'} dot>{ui("Исходная оценка: ")}{ui(VERDICT[critique.verdict]?.label) ?? critique.verdict}</Tag>
                 <Text variant="label" tone="secondary">{critique.summaryRu}</Text>
               </div>
-              {activeCritic.length < critique.findings.length && <Text variant="caption" tone="secondary">Осталось замечаний: {activeCritic.length}. Оставлено без исправления: {critique.findings.length - activeCritic.length}.</Text>}
+              {activeCritic.length < critique.findings.length && <Text variant="caption" tone="secondary">{ui("Осталось замечаний: ")}{activeCritic.length}{ui(". Оставлено без исправления: ")}{critique.findings.length - activeCritic.length}.</Text>}
               {critique.readback.map((r) => (
                 <div key={r.paragraph} className={styles.readbackRow}>
                   <Text variant="caption" tone="tertiary" mono>{String(r.paragraph).padStart(2, '0')}</Text>
                   <div>
                     <Text variant="label">{r.seesRu}</Text>
-                    {r.unsureRu !== undefined && r.unsureRu !== '' && <Text variant="caption" tone="secondary">Не уверен: {r.unsureRu}</Text>}
+                    {r.unsureRu !== undefined && r.unsureRu !== '' && <Text variant="caption" tone="secondary">{ui("Не уверен: ")}{r.unsureRu}</Text>}
                   </div>
                 </div>
               ))}
-              {critique.findings.length > 0 && <Text variant="caption" tone="secondary">Замечания критика ({critique.findings.length}) — в окне «Проверка перед генерацией».</Text>}
+              {critique.findings.length > 0 && <Text variant="caption" tone="secondary">{ui("Замечания критика (")}{critique.findings.length}{ui(") — в окне «Проверка перед генерацией».")}</Text>}
             </div>
           )}
         </section>
 
         <section className={styles.step}>
-          <StepHead n="5" title="Перед тем как нажать «Генерировать»" />
+          <StepHead n="5" title={ui("Перед тем как нажать «Генерировать»")} />
           <div className={styles.gate}>
             {items.map((item) => (
               <label key={item.id} className={styles.gateItem}>
@@ -281,7 +281,7 @@ export function ExportCard({ open, onOpenChange, project, shot, shotIndex, build
                 <Text variant="label" tone={item.auto === true ? 'secondary' : 'primary'}>{item.label}</Text>
               </label>
             ))}
-            <Text variant="caption" tone="tertiary">Любая правка промпта сбрасывает отметки: галочки относятся к этому тексту.</Text>
+            <Text variant="caption" tone="tertiary">{ui("Любая правка промпта сбрасывает отметки: галочки относятся к этому тексту.")}</Text>
           </div>
         </section>
       </div>

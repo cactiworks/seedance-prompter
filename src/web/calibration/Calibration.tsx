@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useMemo, useState } from 'react';
 import { calibrationTag, expandSuite, parseCalibrationTag, repeatedSymptoms, suiteCost, VERDICT_RU, VERDICT_SYMPTOMS, VERDICTS, type CalibrationSuite, type Repeat } from '../../core/gen/calibration.ts';
@@ -16,7 +17,7 @@ const JOURNAL = 'journal';
 
 const costLine = (suite: CalibrationSuite): string =>
   suiteCost(suite)
-    .map((c) => (c.unitRu === '$' ? `$${c.usd} Higgsfield` : `${c.credits} кр ≈ $${c.usd}`))
+    .map((c) => (c.unitRu === '$' ? `$${c.usd} Higgsfield` : ui("{0} кр ≈ ${1}", c.credits, c.usd)))
     .join(' + ');
 
 const runDate = (runId: string): string => new Date(parseInt(runId, 36)).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -29,14 +30,14 @@ function Cell({ job, onOpen }: { job: GenJob | undefined; onOpen: (mediaId: stri
     return (
       <div className={styles.cellEmpty}>
         <Text variant="caption" tone={job.status === 'failed' ? 'primary' : 'tertiary'} className={job.status === 'failed' ? styles.failed : undefined}>
-          {job.error?.messageRu ?? STATUS_RU[job.status]}
+          {job.error?.messageRu ?? ui(STATUS_RU[job.status])}
         </Text>
       </div>
     );
   }
   return (
     <div className={styles.cell}>
-      <button type="button" className={styles.cellImage} onClick={() => onOpen(mediaId)} title="Открыть">
+      <button type="button" className={styles.cellImage} onClick={() => onOpen(mediaId)} title={ui("Открыть")}>
         <img src={mediaUrl(mediaId)} alt="" loading="lazy" />
       </button>
       <VerdictBar mediaId={mediaId} compact />
@@ -62,7 +63,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
     const id = Date.now().toString(36);
     const errors: string[] = [];
     try {
-      const res = await fetch('/api/studio/sessions', { method: 'POST', headers: HEADERS, body: JSON.stringify({ kind: 'image', title: `Калибровка · ${suite.titleRu}` }) });
+      const res = await fetch('/api/studio/sessions', { method: 'POST', headers: HEADERS, body: JSON.stringify({ kind: 'image', title: ui("Калибровка · {0}", suite.titleRu) }) });
       if (!res.ok) throw new Error('Не удалось создать подборку калибровки. Генерации не отправлены.');
       const session = (await res.json()) as { id: string };
       for (const job of planned) {
@@ -77,7 +78,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
       }
       void loadSessions('image');
       setRunId(id);
-      setState({ busy: false, messageRu: errors.length === 0 ? `Запущено ${planned.length} генераций — результаты появятся в сетке и в сессии «Калибровка · ${suite.titleRu}».` : `Есть задачи, требующие внимания: ${[...new Set(errors)].join('; ')}. Статусы — в сетке и в «Материалах».` });
+      setState({ busy: false, messageRu: errors.length === 0 ? ui("Запущено {0} генераций — результаты появятся в сетке и в сессии «Калибровка · {1}».", planned.length, suite.titleRu) : ui("Есть задачи, требующие внимания: {0}. Статусы — в сетке и в «Материалах».", [...new Set(errors)].join('; ')) });
     } catch (error) {
       setState({ busy: false, messageRu: error instanceof Error ? error.message : 'Набор не запустился.' });
     }
@@ -97,10 +98,10 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
         </div>
         <div className={styles.launch}>
           <Button variant="primary" size="m" icon={<Icon name="sparkles" size={1} />} loading={state.busy} onClick={() => setConfirm(true)}>
-            Запустить · {costLine(suite)}
+            {ui("Запустить · ")}{costLine(suite)}
           </Button>
           <Text variant="caption" tone="tertiary">
-            {planned.length} генераций · {suite.cases.length} × {suite.models.length}
+            {planned.length} {ui(" генераций · ")}{suite.cases.length} × {suite.models.length}
           </Text>
         </div>
       </header>
@@ -108,7 +109,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
 
       {runs.length > 0 && (
         <div className={styles.runs}>
-          <Select label="Запуск" value={shown} onChange={setRunId} options={runs.map((r) => ({ value: r, label: runDate(r) }))} />
+          <Select label={ui("Запуск")} value={shown} onChange={setRunId} options={runs.map((r) => ({ value: r, label: runDate(r) }))} />
         </div>
       )}
 
@@ -116,7 +117,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
         <span />
         {suite.models.map((m) => (
           <Text key={m.key} variant="label" medium className={styles.colHead}>
-            {m.labelRu}
+            {ui(m.labelRu)}
           </Text>
         ))}
         {suite.cases.map((c) => (
@@ -126,7 +127,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
                 {c.labelRu}
               </Text>
               <details className={styles.promptDetails}>
-                <summary>промпт</summary>
+                <summary>{ui("промпт")}</summary>
                 <Text variant="caption" tone="secondary">
                   {c.prompt}
                 </Text>
@@ -138,8 +139,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
           </div>
         ))}
         <Text variant="caption" tone="tertiary">
-          Итог
-        </Text>
+          {ui("Итог")}</Text>
         {suite.models.map((m) => {
           const ids = suite.cases.flatMap((c) => jobOf(c.id, m.key)?.mediaIds.filter((id): id is string => id !== null) ?? []);
           const marks = verdicts.filter((v) => ids.includes(v.mediaId));
@@ -147,7 +147,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
             <div key={m.key} className={styles.summary}>
               {VERDICTS.map((v) => (
                 <Tag key={v} tone={v === 'good' ? 'success' : v === 'almost' ? 'warning' : 'danger'}>
-                  {VERDICT_RU[v]} {marks.filter((x) => x.verdict === v).length}
+                  {ui(VERDICT_RU[v])} {marks.filter((x) => x.verdict === v).length}
                 </Tag>
               ))}
             </div>
@@ -158,15 +158,14 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
       <Dialog
         open={confirm}
         onOpenChange={setConfirm}
-        title={`Запустить «${suite.titleRu}»?`}
-        description="Картинок на входе нет — уходят только промпты. Каждая генерация проходит обычный гейт цены; если у провайдера не хватит баланса, задача упадёт без списания."
+        title={ui("Запустить «{0}»?", suite.titleRu)}
+        description={ui("Картинок на входе нет — уходят только промпты. Каждая генерация проходит обычный гейт цены; если у провайдера не хватит баланса, задача упадёт без списания.")}
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConfirm(false)}>
-              Отмена
-            </Button>
+              {ui("Отмена")}</Button>
             <Button variant="primary" size="s" onClick={() => void launch()}>
-              Запустить · {costLine(suite)}
+              {ui("Запустить · ")}{costLine(suite)}
             </Button>
           </>
         }
@@ -179,7 +178,7 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
             return (
               <li key={m.key}>
                 <Text variant="label">
-                  {m.labelRu} — {mine.length} × {provider === 'higgsfield' ? `$${mine[0]?.credits ?? 0}` : `${mine[0]?.credits ?? 0} кр`} = {provider === 'higgsfield' ? `$${Math.round(sum * 1000) / 1000}` : `${sum} кр`}
+                  {ui(m.labelRu)} — {mine.length} × {provider === 'higgsfield' ? `$${mine[0]?.credits ?? 0}` : ui("{0} кр", mine[0]?.credits ?? 0)} = {provider === 'higgsfield' ? `$${Math.round(sum * 1000) / 1000}` : ui("{0} кр", sum)}
                 </Text>
               </li>
             );
@@ -193,16 +192,15 @@ function SuiteView({ suite, onOpen }: { suite: CalibrationSuite; onOpen: (mediaI
 function RepeatCard({ repeat }: { repeat: Repeat }) {
   const addLearning = useJournal((s) => s.addLearning);
   const title = findModel(repeat.modelId)?.titleRu ?? repeat.modelId;
-  const [text, setText] = useState(`«${symptomRu(repeat.symptom)}» — ${repeat.count} из ${repeat.of} оценок. `);
+  const [text, setText] = useState(ui("«{0}» — {1} из {2} оценок. ", symptomRu(repeat.symptom), repeat.count, repeat.of));
   return (
     <div className={styles.repeat}>
       <Text variant="label" medium>
-        {title} · {symptomRu(repeat.symptom)} — {repeat.count} из {repeat.of}
+        {title} · {symptomRu(repeat.symptom)} — {repeat.count} {ui(" из ")}{repeat.of}
       </Text>
       <textarea className={styles.ruleText} rows={2} value={text} lang="ru" onChange={(event) => setText(event.target.value)} />
       <Button variant="border" size="s" icon={<Icon name="bookmark" size={1} />} disabled={text.trim().length < 10} onClick={() => void addLearning(repeat.modelId, text, repeat.mediaIds)}>
-        В правила промптера
-      </Button>
+        {ui("В правила промптера")}</Button>
     </div>
   );
 }
@@ -219,9 +217,8 @@ function JournalView() {
     <section className={styles.suite}>
       <div className={styles.stack}>
         <Text variant="title-m" medium>
-          Журнал и правила
-        </Text>
-        <Text tone="secondary">Оценки со всех генераций — из калибровки и из студии. Одна ошибка у одной модели три раза — повод для правила.</Text>
+          {ui("Журнал и правила")}</Text>
+        <Text tone="secondary">{ui("Оценки со всех генераций — из калибровки и из студии. Одна ошибка у одной модели три раза — повод для правила.")}</Text>
       </div>
 
       <div className={styles.stats}>
@@ -231,26 +228,24 @@ function JournalView() {
           return (
             <div key={model.id} className={styles.stat}>
               <Text variant="label" medium>
-                {model.titleRu}
+                {ui(model.titleRu)}
               </Text>
               <Text variant="caption" tone="secondary">
-                оценок: {mine.length} · {VERDICTS.map((v) => `${VERDICT_RU[v].toLowerCase()} ${mine.filter((x) => x.verdict === v).length}`).join(' · ')}
+                {ui("оценок: ")}{mine.length} · {VERDICTS.map((v) => `${ui(VERDICT_RU[v]).toLowerCase()} ${mine.filter((x) => x.verdict === v).length}`).join(' · ')}
               </Text>
             </div>
           );
         })}
         {verdicts.length === 0 && (
           <Text variant="label" tone="tertiary" className={styles.wide}>
-            Оценок пока нет. Оценивай в сетке калибровки или в просмотре любой картинки (вкладка «Инфо»).
-          </Text>
+            {ui("Оценок пока нет. Оценивай в сетке калибровки или в просмотре любой картинки (вкладка «Инфо»).")}</Text>
         )}
       </div>
 
       {repeats.length > 0 && (
         <div className={styles.stack}>
           <Text variant="caption" tone="secondary">
-            Повторяется три раза и больше — допиши вывод и отправь в правила
-          </Text>
+            {ui("Повторяется три раза и больше — допиши вывод и отправь в правила")}</Text>
           {repeats.map((r) => (
             <RepeatCard key={`${r.modelId}-${r.symptom}`} repeat={r} />
           ))}
@@ -259,12 +254,10 @@ function JournalView() {
 
       <div className={styles.stack}>
         <Text variant="caption" tone="secondary">
-          Правила промптера — агент получает их в карточке модели, они главнее заявлений вендора
-        </Text>
+          {ui("Правила промптера — агент получает их в карточке модели, они главнее заявлений вендора")}</Text>
         {learnings.length === 0 && (
           <Text variant="label" tone="tertiary">
-            Правил пока нет.
-          </Text>
+            {ui("Правил пока нет.")}</Text>
         )}
         {learnings.map((l) => (
           <div key={l.id} className={styles.rule}>
@@ -273,14 +266,14 @@ function JournalView() {
               {l.textRu}
             </Text>
             <Text variant="caption" tone="tertiary">
-              {l.evidence.length} прогонов · {new Date(l.at).toLocaleDateString('ru-RU')}
+              {l.evidence.length} {ui(" прогонов · ")}{new Date(l.at).toLocaleDateString('ru-RU')}
             </Text>
-            <Button variant="ghost" size="xs" iconOnly aria-label="Удалить правило" icon={<Icon name="bin" size={0.875} />} onClick={() => void removeLearning(l.id)} />
+            <Button variant="ghost" size="xs" iconOnly aria-label={ui("Удалить правило")} icon={<Icon name="bin" size={0.875} />} onClick={() => void removeLearning(l.id)} />
           </div>
         ))}
         <div className={styles.manual}>
-          <Select label="Модель" value={manual.modelId} onChange={(modelId) => setManual({ ...manual, modelId })} options={imageModels.map((m) => ({ value: m.id, label: m.titleRu }))} />
-          <textarea className={styles.ruleText} rows={2} value={manual.text} placeholder="Своё правило: «Soul 2 режет ноги при full body — просить medium-full shot»" lang="ru" onChange={(event) => setManual({ ...manual, text: event.target.value })} />
+          <Select label={ui("Модель")} value={manual.modelId} onChange={(modelId) => setManual({ ...manual, modelId })} options={imageModels.map((m) => ({ value: m.id, label: ui(m.titleRu) }))} />
+          <textarea className={styles.ruleText} rows={2} value={manual.text} placeholder={ui("Своё правило: «Soul 2 режет ноги при full body — просить medium-full shot»")} lang="ru" onChange={(event) => setManual({ ...manual, text: event.target.value })} />
           <Button
             variant="border"
             size="s"
@@ -290,8 +283,7 @@ function JournalView() {
               setManual({ ...manual, text: '' });
             }}
           >
-            Добавить правило
-          </Button>
+            {ui("Добавить правило")}</Button>
         </div>
       </div>
     </section>
@@ -306,8 +298,7 @@ export function CalibrationList() {
   return (
     <nav className={styles.list}>
       <Text variant="caption" tone="tertiary" className={styles.listTitle}>
-        Наборы
-      </Text>
+        {ui("Наборы")}</Text>
       {suites.map((s) => (
         <button key={s.id} type="button" className={`${styles.item} ${current === s.id ? styles.itemOn : ''}`} onClick={() => select(s.id)}>
           <Text variant="label" medium>
@@ -320,11 +311,9 @@ export function CalibrationList() {
       ))}
       <button type="button" className={`${styles.item} ${current === JOURNAL ? styles.itemOn : ''}`} onClick={() => select(JOURNAL)}>
         <Text variant="label" medium>
-          Журнал и правила
-        </Text>
+          {ui("Журнал и правила")}</Text>
         <Text variant="caption" tone="secondary">
-          оценки → правила промптера
-        </Text>
+          {ui("оценки → правила промптера")}</Text>
       </button>
       {error !== null && (
         <Text variant="caption" className={styles.failed}>

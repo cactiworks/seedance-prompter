@@ -1,3 +1,4 @@
+import { ui } from '../language.ts';
 import { seriesFormFingerprint } from '../../core/production/seriesForm.ts';
 import { useEffect, useState } from 'react';
 import type { Project } from '../../core/model/project.ts';
@@ -33,7 +34,7 @@ export function usePreparation(slug: string) {
 export const refreshPreparation = () => window.dispatchEvent(new Event('series-preparation'));
 export function SeriesNodeStatus({ slug }: { slug: string }) {
   const { data, error } = usePreparation(slug);
-  return <Text variant="caption" tone="secondary">{error || preparationLabel(data)}</Text>;
+  return <Text variant="caption" tone="secondary">{error || ui(preparationLabel(data))}</Text>;
 }
 export function SeriesPreparation({ project }: { project: Project }) {
   const { data, error: pollError } = usePreparation(project.slug);
@@ -81,18 +82,18 @@ export function SeriesPreparation({ project }: { project: Project }) {
   };
   const running = data?.state?.status === 'running';
   const changed = data?.project.seriesFill && JSON.stringify(seriesFormFingerprint(project)) !== JSON.stringify(seriesFormFingerprint(data.project));
-  return <section className={styles.panel} aria-label="Подготовка по серии">
-    <div className={styles.row}><Text variant="label" medium>Из производства · {project.title}</Text><Text variant="caption" role="status">{changed && !running ? 'Форма изменена · проверка устарела' : preparationLabel(data)}</Text></div>
-    <Text variant="caption" tone="secondary">Агент заполнит форму по режиссуре всей серии и исходному фото. Ручные поля сохранятся; после критика — не больше одного исправления.</Text>
+  return <section className={styles.panel} aria-label={ui("Подготовка по серии")}>
+    <div className={styles.row}><Text variant="label" medium>{ui("Из производства · ")}{project.title}</Text><Text variant="caption" role="status">{changed && !running ? ui("Форма изменена · проверка устарела") : ui(preparationLabel(data))}</Text></div>
+    <Text variant="caption" tone="secondary">{ui("Агент заполнит форму по режиссуре всей серии и исходному фото. Ручные поля сохранятся; после критика — не больше одного исправления.")}</Text>
     {data?.contextProblem && <Text role="alert" variant="caption">{data.contextProblem}</Text>}
     {!!data?.state?.issues.length && <ul className={styles.issues}>{data.state.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}
-    <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} disabled={running || busy} />Передать фото и контекст серии в моё AI-подключение · до 4 вызовов</label>
+    <label className={styles.choice}><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} disabled={running || busy} />{ui("Передать фото и контекст серии в моё AI-подключение · до 4 вызовов")}</label>
     <div className={styles.row}>
-      <Button variant="primary" size="s" loading={busy || running} disabled={!consent || !!data?.contextProblem} onClick={() => void start()}>{reset ? 'Заполнить заново с заменой ручных полей' : 'Заполнить по серии'}</Button>
-      <Button variant="ghost" size="s" disabled={busy || running} onClick={() => setReset(!reset)}>{reset ? 'Отменить сброс' : 'Полный сброс и заполнение'}</Button>
-      {project.seriesFill && <Button variant="border" size="s" disabled={busy || running} onClick={() => void restore()}>Вернуть предыдущую форму</Button>}
+      <Button variant="primary" size="s" loading={busy || running} disabled={!consent || !!data?.contextProblem} onClick={() => void start()}>{reset ? ui("Заполнить заново с заменой ручных полей") : ui("Заполнить по серии")}</Button>
+      <Button variant="ghost" size="s" disabled={busy || running} onClick={() => setReset(!reset)}>{reset ? ui("Отменить сброс") : ui("Полный сброс и заполнение")}</Button>
+      {project.seriesFill && <Button variant="border" size="s" disabled={busy || running} onClick={() => void restore()}>{ui("Вернуть предыдущую форму")}</Button>}
     </div>
-    {reset && <Text variant="caption">Этот запуск заменит ручные поля. Предыдущую форму можно будет восстановить.</Text>}
+    {reset && <Text variant="caption">{ui("Этот запуск заменит ручные поля. Предыдущую форму можно будет восстановить.")}</Text>}
     {(error || pollError) && <Text role="alert" variant="caption">{error || pollError}</Text>}
   </section>;
 }
