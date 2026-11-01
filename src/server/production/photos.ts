@@ -7,7 +7,7 @@ import { SubmitError } from '../gen/runtime.ts';
 import { appearanceReady, boundPrompts, pendingAppearance } from '../../core/production/appearance.ts';
 import { masterApproved, pendingReview } from '../../core/production/review.ts';
 import { hasStoryEvents } from '../../core/production/plan.ts';
-import { quotePhotoSelection, type ContinuePhotos } from '../../core/production/selection.ts';
+import { photoAcceptanceProblem, selectablePhotoIds, quotePhotoSelection, type AcceptPhotos, type ContinuePhotos } from '../../core/production/selection.ts';
 
 interface Store {
   get(id: string): Promise<ProductionRun>;
@@ -27,6 +27,31 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
     if (!gen) throw new ProductionError('INVALID', 'Генератор фото не подключён. Перезапусти сервер новой версии.');
     return gen;
   };
+  async function acceptSelection(id: string, input: AcceptPhotos): Promise<ProductionRun> {
+    return store.update(id, async run => {
+      if (run.photos?.requests.some(r => r.id === input.requestId)) return;
+      if (run.rev !== input.rev) throw new ProductionError('CONFLICT', 'Серия изменилась. Обнови выбор фотографий.');
+      const problem = photoAcceptanceProblem(run);
+      if (problem) throw new ProductionError('INVALID', problem);
+      const eligible = selectablePhotoIds(run);
+      if (!input.ids.length || new Set(input.ids).size !== input.ids.length || input.ids.some(id => !eligible.includes(id))) throw new ProductionError('CONFLICT', 'Выбранные фотографии изменились. Обнови выбор.');
+      // Read local files only; accepting does not estimate, upload, submit or invoke an agent.
+      for (const id of input.ids) {
+        const artifact = run.artifacts.find(a => a.id === id)!;
+        const media = await requireGen().library.get(artifact.mediaId!);
+        if (!media || media.kind !== 'image') throw new ProductionError('INVALID', 'Выбранное фото отсутствует в библиотеке.');
+        try { await requireGen().library.readBytes(media); }
+        catch { throw new ProductionError('INVALID', 'Файл выбранного фото недоступен. Повтори получение файла перед приёмкой.'); }
+      }
+      for (const shot of run.shots) if (shot.photoId && input.ids.includes(shot.photoId)) {
+        shot.acceptedPhotoId = shot.photoId; shot.step = 'ready'; shot.error = null;
+        run.approvals.push({ kind: 'photo', artifactId: shot.photoId, at: new Date(now()).toISOString() });
+      }
+      run.photos!.requests.push({ id: input.requestId, usd: 0, at: new Date(now()).toISOString() });
+      if (run.shots.every(s => s.acceptedPhotoId)) run.photos!.status = 'complete';
+      record(run, now(), `Принято ${input.ids.length} выбранных фото для Canvas. Остальные позиции сохранены без пересоздания; новых генераций и AI-вызовов нет.`);
+    });
+  }
   async function continueSelection(id: string, input: ContinuePhotos, codexAccountId?: string): Promise<ProductionRun> {
     return store.update(id, run => {
       if (run.photos?.requests.some(r => r.id === input.requestId)) return;
@@ -211,7 +236,7 @@ export function createPhotoProduction(store: Store, gen: GenRuntime | undefined,
     } finally { sending.delete(id); }
   }
   return {
-    start, tick, continueSelection,
+    start, tick, continueSelection, acceptSelection,
     selectionQuote: async (id: string, ids: string[]) => quotePhotoSelection(await store.get(id), ids),
     quote: async (id: string, retryMaster = false) => {
       const run = await store.get(id); readyForPhotos(run);

@@ -2,13 +2,13 @@ import { ui } from '../language.ts';
 import { useState } from 'react';
 import type { ProductionRun } from '../../core/production/model.ts';
 import { photoPrice } from '../../core/production/photos.ts';
-import type { PhotoSelectionQuote } from '../../core/production/selection.ts';
+import { photoSelectionProblem, type PhotoSelectionQuote } from '../../core/production/selection.ts';
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { Button, Text } from '../ui/components/index.ts';
 import { useProduction } from './store.ts';
 import styles from './Production.module.css';
 
-export function PhotoSelection({ run, ids, onDone, onLoading }: { run: ProductionRun; ids: string[]; onDone: () => void; onLoading: (loading: boolean) => void }) {
+export function PhotoSelection({ run, ids, onDone, onLoading, onOpenCanvas }: { run: ProductionRun; ids: string[]; onDone: () => void; onLoading: (loading: boolean) => void; onOpenCanvas: () => Promise<void> }) {
   const { busy, photoCommand } = useProduction();
   const [offer, setOffer] = useState<{ quote: PhotoSelectionQuote; key: string; requestId: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,12 +32,24 @@ export function PhotoSelection({ run, ids, onDone, onLoading }: { run: Productio
     finally { setLoading(false); onLoading(false); }
   }
   const remaining = run.shots.filter(s => !s.acceptedPhotoId).length - ids.length;
-  return <div className={styles.costControls}>
-    <Text variant="label">{ui("Выбрано ")}{ids.length}. {remaining ? ui("Без галочки: {0} — будут созданы заново.", remaining) : ui("Все оставшиеся позиции выбраны.")}</Text>
+  const canRegenerate = !photoSelectionProblem(run) && remaining > 0;
+  async function accept() {
+    setLoading(true); onLoading(true); setError(null); setOffer(null);
+    try {
+      if (!await photoCommand('photos/accept', { rev: run.rev, ids, requestId: crypto.randomUUID() })) return;
+      onDone();
+      await onOpenCanvas();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Фото приняты, но Canvas не открылся. Повтори переход ниже.'); }
+    finally { setLoading(false); onLoading(false); }
+  }
+  return <div className={`${styles.costControls} ${styles.selectionControls}`}>
+    <Text variant="label">{ui("Выбрано ")}{ids.length}. {ui("Остальные фото сохранятся без изменений. Можно забрать только нужные кадры.")}</Text>
+    <div className={styles.gateActions}><Button variant="primary" disabled={!ids.length || busy || loading || run.paused} loading={loading} onClick={() => void accept()}>{ui("Принять и открыть Canvas")}{ids.length > 0 ? ` · ${ids.length}` : ''}</Button></div>
+    <Text variant="caption" tone="secondary">{ui("Приёмка и перенос бесплатны. В Canvas агент заполнит Prompter по замыслу серии после твоего запуска; видео — после отдельного подтверждения цены.")}</Text>
     {error && <Text role="alert">{error}</Text>}
-    {current ? <>
+    {canRegenerate && (current ? <>
       <Text variant="caption" tone="secondary">{ui("Сохраним выбранные. Позиций на перегенерацию: ")}{current.quote.count}{ui(". Кнопка подтверждает ")}{photoPrice(current.quote.usd)}{ui(", передачу данных в Higgsfield и проверку фото с фрагментами и до шести refs в Codex / OpenAI (лимиты и оплата твоего подключения).")}</Text>
-      <div><Button variant="primary" disabled={busy || run.paused} onClick={() => void commit(current.quote, current.requestId)}>{ui("Пересоздать ")}{current.quote.count} · {photoPrice(current.quote.usd)}</Button></div>
-    </> : <div><Button variant="primary" disabled={busy || loading || run.paused} loading={loading} onClick={() => void next()}>{ui("Продолжить")}</Button></div>}
+      <div className={styles.gateActions}><Button variant="border" disabled={busy || loading || run.paused} onClick={() => void commit(current.quote, current.requestId)}>{ui("Пересоздать ")}{current.quote.count} · {photoPrice(current.quote.usd)}</Button><Button variant="ghost" disabled={busy || loading} onClick={() => setOffer(null)}>{ui("Отмена")}</Button></div>
+    </> : <div><Button variant="ghost" disabled={busy || loading || run.paused} onClick={() => void next()}>{ui("Цена пересоздания остальных")}</Button></div>)}
   </div>;
 }

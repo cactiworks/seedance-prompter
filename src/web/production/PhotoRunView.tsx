@@ -15,7 +15,7 @@ import { useProduction } from './store.ts';
 import { PhotoReview, PhotoVerdict } from './PhotoReview.tsx';
 import { PhotoStart } from './PhotoStart.tsx';
 import { PhotoSelection } from './PhotoSelection.tsx';
-import { photoSelectionProblem } from '../../core/production/selection.ts';
+import { photoSelectionProblem, selectablePhotoIds } from '../../core/production/selection.ts';
 import { useGen } from '../gen/genStore.ts';
 import styles from './Production.module.css';
 
@@ -49,7 +49,7 @@ function nextStep(run: ProductionRun): [string, string] {
     ? [ui("Создаём опорный кадр"), ui("Попытка {0} из {1}.", (run.photos.masterHistory?.length ?? 0) + 1, run.photos.budget?.masterLimit ?? 1)]
     : [ui("Создаём фотографии"), ui("{0} из {1} готово. Затем — отбор и твоя приёмка.", run.shots.filter(s => s.photoId).length, run.shots.length)];
   if (run.review?.status === 'running' || (run.review?.status === 'pending' && run.photos?.status === 'review')) return [ui("Отбираем фотографии"), ui("Проверяем внешность, одежду, логику сцены и цельность серии.")];
-  if (!photoSelectionProblem(run)) return [ui("Выбери подходящие фотографии"), ui("Отметь галочкой то, что подходит, и нажми «Продолжить». Пересоздадим только неотмеченные позиции. Правки в Canvas — по желанию.")];
+  if (selectablePhotoIds(run).length) return [ui("Выбери подходящие фотографии"), ui("Отметь один или несколько кадров и перенеси их в Canvas. Остальные можно оставить как есть или пересоздать отдельно.")];
   if (run.photos?.status === 'review') return [ui("Отбор требует внимания"), ui("Фото сохранены. Повтори проверку, чтобы перейти к приёмке.")];
   return [run.photos ? ui("Продолжить эту серию") : ui("План готов — можно создавать фото"), run.photos ? ui("Сохранённые этапы повторяться не будут.") : ui("Кадров: {0} · Soul 2 · {1} · {2}", run.shots.length, photoOutput(run).resolution, photoOutput(run).aspectRatio)];
 }
@@ -63,7 +63,7 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const [handoffBusy, setHandoffBusy] = useState(false);
   const artifact = currentArtifact(run, inspect);
   const master = currentArtifact(run, run.photos?.masterArtifactId ?? null);
-  const eligible = photoSelectionProblem(run) ? [] : run.shots.filter(s => !s.acceptedPhotoId && s.photoId).map(s => s.photoId!);
+  const eligible = selectablePhotoIds(run);
   const selection = selected.filter(id => eligible.includes(id));
   const accepted = run.shots.filter(s => s.acceptedPhotoId).length;
   const step = progress(run);
@@ -71,6 +71,19 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
   const failures = run.photos?.items.filter(i => ['failed', 'unknown', 'download_failed'].includes(i.status)) ?? [];
   const inspectReview = artifact && (reviewedPhoto(run, artifact.id) ?? run.photos?.masterHistory?.find(h => h.artifactId === artifact.id)?.review.report?.results.find(r => r.artifactId === artifact.id));
   const replan = () => { setDraft({ contentMode: run.contentMode, brollCount: run.brollCount, title: run.title, script: run.script, direction: run.direction, characterId: run.characterId, style: run.style, ...photoOutput(run), planningMode: 'codex', mode: 'photos', scenario: 'normal' }); newForm(); };
+  const openCanvas = async () => {
+    setHandoffBusy(true); setDownloadError(null);
+    try {
+      if (!await useCanvas.getState().flush()) throw new Error('Сначала сохрани открытый Canvas. Принятые фотографии уже сохранены в серии.');
+      const flow = await seriesApi<{id:string}>(`/api/production/${run.id}/canvas`, {});
+      await useCanvas.getState().loadFlows();
+      if (!await useCanvas.getState().openFlow(flow.id, true)) throw new Error('Не удалось обновить Canvas. Правки и принятые фото сохранены; повтори переход.');
+      window.location.hash = '/canvas';
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Фото приняты, но Canvas не открылся. Повтори переход.');
+      throw error;
+    } finally { setHandoffBusy(false); }
+  };
   return <>
     <header className={styles.header}><div><Text variant="caption" tone="secondary">{run.contentMode === 'broll' ? ui("Креативные B-roll · фото") : ui("Серия фотографий")} · {run.style === 'cinema' ? 'Cinematic' : 'Phone / UGC'} · {photoOutput(run).resolution} · {photoOutput(run).aspectRatio}{run.character && ` · ${run.character.name}`}</Text><Text as="h1" variant="title-m">{run.title}</Text></div><div className={styles.headerActions}>{run.photos?.status !== 'complete' && <Button variant="border" disabled={busy} onClick={() => void act({ type: run.paused ? 'resume' : 'pause' })}>{run.paused ? ui("Снять паузу") : ui("Пауза")}</Button>}</div></header>
     <ol className={styles.productionPath} aria-label={ui("Путь серии")}>{[ui("План"), ui("Опорный кадр"), ui("Фотографии"), ui("Твой выбор"), ui("Готово")].map((label, i) => <li key={label} aria-current={step === i ? 'step' : undefined} data-complete={step > i}><span>{String(i + 1).padStart(2, '0')}</span>{label}</li>)}</ol>
@@ -93,17 +106,10 @@ export function PhotoRunView({ run }: { run: ProductionRun }) {
         <Text variant="caption">{item.key === 'scene' ? ui("Опорный кадр") : run.shots.find(s => s.id === item.key)?.title}: {item.error}</Text>
         {item.jobId && (item.status === 'download_failed' || item.errorCode === 'POLL_TIMEOUT') && <div><Button variant="border" disabled={busy} onClick={() => void photoCommand('photos/retry', { jobId: item.jobId })}>{ui("Повторить ")}{item.status === 'download_failed' ? ui("скачивание") : ui("проверку статуса")} {ui(" · без генерации")}</Button></div>}
       </div>)}
-      {eligible.length > 0 && <PhotoSelection run={run} ids={selection} onDone={() => setSelected([])} onLoading={setSelecting} />}
-      {run.shots.length > 0 && <Text variant="caption">{ui("Принято ")}{accepted} {ui(" из ")}{run.shots.length}. {accepted < run.shots.length ? ui("Без принятого фото: {0}.", run.shots.length - accepted) : ui("Все запланированные позиции закрыты.")}</Text>}
-      {accepted > 0 && <div className={styles.headerActions}><Button variant="primary" loading={handoffBusy} onClick={() => {
-        setHandoffBusy(true); setDownloadError(null);
-        void (async () => {
-          if (!await useCanvas.getState().flush()) throw new Error('Сначала сохрани открытый Canvas.');
-          const flow = await seriesApi<{id:string}>(`/api/production/${run.id}/canvas`, {});
-          await useCanvas.getState().loadFlows();
-          if (!await useCanvas.getState().openFlow(flow.id, true)) throw new Error('Не удалось обновить Canvas. Правки сохранены; повтори переход.');
-          window.location.hash = '/canvas';
-        })().catch(e => setDownloadError(e instanceof Error ? e.message : 'Не удалось открыть Canvas.')).finally(() => setHandoffBusy(false));
+      {eligible.length > 0 && <PhotoSelection run={run} ids={selection} onDone={() => setSelected([])} onLoading={setSelecting} onOpenCanvas={openCanvas} />}
+      {run.shots.length > 0 && <Text variant="caption">{ui("Принято ")}{accepted} {ui(" из ")}{run.shots.length}. {accepted < run.shots.length ? ui("Остальные позиции необязательны для Canvas; к ним можно вернуться позже.") : ui("Все запланированные позиции закрыты.")}</Text>}
+      {accepted > 0 && <div className={styles.headerActions}><Button variant="primary" disabled={busy || selecting || handoffBusy} loading={handoffBusy} onClick={() => {
+        void openCanvas().catch(e => setDownloadError(e instanceof Error ? e.message : 'Не удалось открыть Canvas.'));
       }}>{ui("Продолжить в Canvas")}</Button><Button variant="border" loading={downloading} onClick={() => {
         const ids = run.shots.flatMap(s => { const mediaId = currentArtifact(run, s.acceptedPhotoId)?.mediaId; return mediaId ? [mediaId] : []; });
         setDownloading(true); setDownloadError(null);

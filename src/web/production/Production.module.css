@@ -742,6 +742,21 @@
   justify-self: start;
 }
 
+.selectionControls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.selectionControls > * {
+  min-width: 0;
+}
+
+.selectionControls button {
+  max-width: 100%;
+  height: auto;
+  min-height: 2.25rem;
+  white-space: normal;
+}
+
 .productionResults {
   display: grid;
   gap: var(--lab-space-10);

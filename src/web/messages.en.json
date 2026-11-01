@@ -1486,5 +1486,11 @@
   "вертикаль, пост": "vertical, posts",
   "горизонталь, ТВ": "horizontal, TV",
   "горизонталь, YouTube": "horizontal, YouTube",
-  "широкий, кино": "widescreen, cinema"
+  "широкий, кино": "widescreen, cinema",
+  "Остальные фото сохранятся без изменений. Можно забрать только нужные кадры.": "Other photos stay unchanged. Take only the shots you need.",
+  "Принять и открыть Canvas": "Accept and open Canvas",
+  "Приёмка и перенос бесплатны. В Canvas агент заполнит Prompter по замыслу серии после твоего запуска; видео — после отдельного подтверждения цены.": "Accepting and transferring are free. In Canvas, start the agent to fill Prompter from the series plan; confirm the price separately to generate video.",
+  "Отметь один или несколько кадров и перенеси их в Canvas. Остальные можно оставить как есть или пересоздать отдельно.": "Select one or more shots and transfer them to Canvas. Leave the others as they are, or regenerate them separately.",
+  "Остальные позиции необязательны для Canvas; к ним можно вернуться позже.": "The other positions are optional for Canvas; you can return to them later.",
+  "Цена пересоздания остальных": "Price to regenerate others"
 }

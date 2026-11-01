@@ -308,7 +308,7 @@ Codex-запуска, другой input с тем же ID получает conf
 сохраняются. Сырые ответы Seedream остаются в библиотеке, версия Production ссылается на предыдущую.
 `POST /:id/retouch/quote` — расчёт без LLM/медиа; `/start` — rev/requestId/ids/confirmUsd/consent;
 `/retry` — безопасный poll/download или локальное сохранение областей, без новой генерации.
-Этот API сохранён для существующих задач; новый creator flow его не вызывает. Старый approvePhotos направляет к «Продолжить». Выбор пуст по умолчанию; принятые позиции сохраняются между кругами.
+Этот API сохранён для существующих задач; новый creator flow его не вызывает. Старый approvePhotos направляет к «Принять и открыть Canvas». Выбор пуст по умолчанию; принятые позиции сохраняются между кругами.
 
 Codex отдельно проверяет весь кадр, identity refs, исходную и новую версии и соседние кадры.
 В fixes — до шести областей, каждая <=30%, суммарно до 60% кадра (одинаковые bbox считаются один раз).
@@ -426,3 +426,6 @@ Corrupt flow files fail closed and stay on disk. Recovery copies retain media/jo
 independent Seedance drafts and drop Production ownership. Terminal series polls may refresh a saved,
 idle editor only to a higher revision; dirty/saving/conflict and active editor agents are protected.
 Source-frame key and planned duration (unless manually protected) are checked before series criticism.
+
+
+01.11.2026: POST /api/production/:id/photos/accept с ids/rev/requestId атомарно принимает только текущие сохранённые фото. Проверяет локальные файлы, revision и отсутствие активной работы; UUID записывается с usd=0, повтор идемпотентен. Невыбранные shots/jobs/budget/reports/artifacts не меняются. Photos.complete означает полное покрытие, но для handoff достаточно одного принятого фото. Canvas handoff вызывается после успешной приёмки отдельно; при сбое перехода сохранённые approvals остаются и действие повторяется без новых генераций.

@@ -67,6 +67,76 @@ async function setup(count = 2, patch: Partial<GenProvider> = {}, character: Cha
 afterEach(async () => { for (const { dir, rt, gen } of resources.splice(0)) { rt.stop(); gen.stop(); for (const run of await rt.list()) { await rt.review.wait(run.id); await rt.appearance.wait(run.id); } rmSync(dir, { recursive: true, force: true }); } vi.unstubAllGlobals(); });
 
 describe('real photos with injected providers only', () => {
+  it.each(['story', 'broll'] as const)('accepts only selected %s photos without regeneration, account calls or changing other positions', async contentMode => {
+    const s = await setup(3, {}, null, undefined, undefined, undefined, contentMode);
+    await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 14; i++) await s.cycle();
+    const original = await s.get();
+    const ids = original.shots.slice(0, 2).map(shot => shot.photoId!);
+    const characters = createCharacters({ dataDir: s.dir });
+    const select = vi.spyOn(characters, 'select');
+    const app = productionRoutes(s.rt, characters);
+    const request = { ids, rev: original.rev, requestId: crypto.randomUUID() };
+    const post = (input: object) => app.request(`/${s.id}/photos/accept`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) });
+    const calls = s.calls.length; const submits = s.submit.mock.calls.length;
+    expect((await post(request)).status).toBe(200);
+    const accepted = await s.get();
+    expect(accepted.shots.map(shot => shot.acceptedPhotoId)).toEqual([...ids, null]);
+    expect(accepted.shots[2]).toEqual(original.shots[2]);
+    expect(accepted.photos!.items).toEqual(original.photos!.items);
+    expect(accepted.photos!.budget).toEqual(original.photos!.budget);
+    expect(accepted.artifacts).toEqual(original.artifacts);
+    expect(accepted.review).toEqual(original.review);
+    expect(accepted.photos!.status).toBe('review');
+    expect(accepted.approvals).toHaveLength(original.approvals.length + 2);
+    expect((await post(request)).status).toBe(200);
+    expect((await s.get()).rev).toBe(accepted.rev);
+    expect((await post({ ...request, requestId: crypto.randomUUID() })).status).toBe(409);
+    for (let i = 0; i < 3; i++) await s.cycle();
+    expect(s.calls).toHaveLength(calls); expect(s.submit).toHaveBeenCalledTimes(submits);
+    expect(select).not.toHaveBeenCalled();
+    const remaining = await s.rt.photos.selectionQuote(s.id, []);
+    expect(remaining).toMatchObject({ count: 1, accepted: 2 });
+    const last = await s.get();
+    expect((await post({ ids: [last.shots[2]!.photoId], rev: last.rev, requestId: crypto.randomUUID() })).status).toBe(200);
+    expect((await s.get()).photos!.status).toBe('complete');
+    expect(s.submit).toHaveBeenCalledTimes(submits);
+  });
+
+  it.each(['unknown', 'download_failed'] as const)('accepts a saved subset while another position is %s, without resetting that task', async status => {
+    const s = await setup(2, {}, null); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get();
+    run.photos!.status = 'stopped'; run.photos!.items[2]!.status = status;
+    run.photos!.items[2]!.error = 'Неизвестный исход или файл не скачан';
+    run.shots[1]!.photoId = null; run.shots[1]!.step = 'photos';
+    writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
+    const calls = s.calls.length; const submits = s.submit.mock.calls.length;
+    const saved = await s.rt.photos.acceptSelection(s.id, { ids: [run.shots[0]!.photoId!], rev: run.rev, requestId: crypto.randomUUID() });
+    expect(saved.shots[0]!.acceptedPhotoId).toBe(run.shots[0]!.photoId);
+    expect(saved.shots[1]).toEqual(run.shots[1]); expect(saved.photos!.items).toEqual(run.photos!.items);
+    expect(saved.photos!.status).toBe('stopped');
+    expect(s.submit).toHaveBeenCalledTimes(submits); expect(s.calls).toHaveLength(calls);
+  });
+
+  it('rejects empty, duplicate, stale, noncurrent or unavailable photos without accepting anything', async () => {
+    const s = await setup(2, {}, null); await s.rt.photos.start(s.id, await s.input());
+    for (let i = 0; i < 12; i++) await s.cycle();
+    const run = await s.get(), id = run.shots[0]!.photoId!;
+    const input = { rev: run.rev, requestId: crypto.randomUUID(), ids: [id] };
+    for (const ids of [[], [id, id], ['missing'], [run.photos!.masterArtifactId!]]) {
+      await expect(s.rt.photos.acceptSelection(s.id, { ...input, ids })).rejects.toThrow();
+    }
+    await expect(s.rt.photos.acceptSelection(s.id, { ...input, rev: run.rev - 1 })).rejects.toThrow('изменилась');
+    const readBytes = vi.spyOn(s.gen.library, 'readBytes').mockRejectedValue(new Error('missing'));
+    await expect(s.rt.photos.acceptSelection(s.id, input)).rejects.toThrow('недоступен');
+    readBytes.mockRestore();
+    expect(await s.get()).toEqual(run);
+    await s.rt.act(s.id, { rev: run.rev, type: 'pause' }); const paused = await s.get();
+    await expect(s.rt.photos.acceptSelection(s.id, { ...input, rev: paused.rev })).rejects.toThrow('паузу');
+    expect((await s.get()).shots.every(shot => !shot.acceptedPhotoId)).toBe(true);
+  });
+
   it('keeps all background photo roles on the consenting account and rebinds only explicit regeneration', async () => {
     const accountCalls: { id?: string; task?: string }[] = [];
     const planner = '11111111-1111-4111-8111-111111111111';
@@ -298,7 +368,7 @@ describe('real photos with injected providers only', () => {
     expect(run.review?.report?.results.every(r => r.verdict === 'reject')).toBe(true);
     expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true);
     expect(await s.gen.library.get(run.artifacts[1]!.mediaId!)).toBeTruthy();
-    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids })).rejects.toThrow('Продолжить');
+    await expect(s.rt.act(s.id, { type: 'approvePhotos', rev: run.rev, ids })).rejects.toThrow('Принять и открыть Canvas');
     const accepted = await s.accept(ids);
     expect(accepted.shots[0]!.acceptedPhotoId).toBe(ids[0]);
     expect(accepted.artifacts).toHaveLength(2); expect(s.submit).toHaveBeenCalledTimes(2);

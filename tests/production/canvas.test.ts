@@ -9,7 +9,7 @@ import { withShotIds } from '../../src/core/production/plan.ts';
 import { formOf, formProblems, applyForm } from '../../src/core/production/seriesForm.ts';
 import { type Project, type SeriesForm } from '../../src/core/model/project.ts';
 import { createProductionCanvas } from '../../src/server/production/canvas.ts';
-import type { ProductionRuntime } from '../../src/server/production/runtime.ts';
+import { createProductionRuntime, type ProductionRuntime } from '../../src/server/production/runtime.ts';
 import { createGenRuntime } from '../../src/server/gen/runtime.ts';
 import { createFlows } from '../../src/server/storage/flows.ts';
 import { createStore } from '../../src/server/storage/fsStore.ts';
@@ -77,6 +77,31 @@ async function finished(f: Awaited<ReturnType<typeof fixture>>) {
   expect(value.state?.status).not.toBe('running'); return value;
 }
 describe('Production Canvas preparation without media submission',()=>{
+  it('accepts a subset, extends its Canvas later and preserves the prepared branch without generating other photos', async () => {
+    const f=await fixture();
+    const run=structuredClone(f.run);run.shots.forEach(s=>{s.acceptedPhotoId=null;s.step='photoReview';});
+    run.photos={status:'review',identityId:null,masterArtifactId:null,requests:[],items:run.shots.map(s=>({key:s.id,tag:s.id,jobId:null,taskId:null,status:'saved',mediaId:run.artifacts.find(a=>a.id===s.photoId)!.mediaId!,error:null,errorCode:null}))};
+    await mkdir(path.join(f.options.dataDir,'production-mock'),{recursive:true});
+    await writeFile(path.join(f.options.dataDir,'production-mock',`${run.id}.json`),JSON.stringify(run));
+    const production=createProductionRuntime({dataDir:f.options.dataDir,gen:f.gen,runLlm:vi.fn()});
+    const service=createProductionCanvas({...f.options,production});
+    const first=await production.photos.acceptSelection(run.id,{rev:run.rev,ids:[run.shots[0]!.photoId!],requestId:crypto.randomUUID()});
+    const flow=await service.handoff(run.id);expect(flow.nodes).toHaveLength(2);
+    const original=flow.nodes.find(n=>n.type==='seedance')!;
+    const project=await f.store.read(original.slug);const r=runner([filled(project),ready]);
+    await service.start(project.slug,project.rev,r.run);
+    await vi.waitFor(async()=>expect((await service.inspect(project.slug)).state?.status).toBe('ready'));
+    const prepared=await f.store.read(project.slug);
+    await f.flows.save(flow.id,{...flow,nodes:flow.nodes.map(n=>({...n,x:818}))});
+    const second=await production.photos.acceptSelection(run.id,{rev:first.rev,ids:[run.shots[1]!.photoId!],requestId:crypto.randomUUID()});
+    const extended=await service.handoff(run.id);
+    expect(extended.id).toBe(flow.id);expect(extended.nodes).toHaveLength(4);
+    expect(extended.nodes.find(n=>n.id===original.id)!.x).toBe(818);
+    expect(await f.store.read(project.slug)).toEqual(prepared);
+    expect(second.shots[2]).toEqual(run.shots[2]);expect(second.photos!.items).toEqual(run.photos!.items);
+    const again=await service.handoff(run.id);expect(again.rev).toBe(extended.rev);
+    expect(r.requests).toHaveLength(2);expect(f.submit).not.toHaveBeenCalled();production.stop();
+  });
   it('an unchanged handoff does not advance revision or conflict with an open Canvas', async () => {
     const f=await fixture();
     const again=await f.service.handoff(f.run.id);

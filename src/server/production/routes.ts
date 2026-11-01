@@ -8,7 +8,7 @@ import type { Characters } from './characters.ts';
 import { SoulIdError } from './soulId.ts';
 import { ProductionError } from '../../core/production/engine.ts';
 import { PhotoStartSchema } from '../../core/production/photos.ts';
-import { ContinuePhotosSchema, PhotoSelectionSchema } from '../../core/production/selection.ts';
+import { AcceptPhotosSchema, ContinuePhotosSchema, PhotoSelectionSchema } from '../../core/production/selection.ts';
 import { ReviewStartSchema } from '../../core/production/review.ts';
 import { SubmitError } from '../gen/runtime.ts';
 import { ActionSchema, CreateRunSchema } from '../../core/production/model.ts';
@@ -54,6 +54,11 @@ export function productionRoutes(runtime: ProductionRuntime, characters: Charact
       return c.json(await runtime.retouch.retry(c.req.param('id'), input.data.jobId));
     })
     .get('/:id/photos/quote', async (c) => c.json(await runtime.photos.quote(c.req.param('id'), c.req.query('retryMaster') === 'true')))
+    .post('/:id/photos/accept', async c => {
+      const input = AcceptPhotosSchema.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ messageRu: 'Выбери сохранённые фотографии и обнови версию серии.' }, 422);
+      return c.json(await runtime.photos.acceptSelection(c.req.param('id'), input.data));
+    })
     .post('/:id/photos/selection/quote', async c => {
       const input = PhotoSelectionSchema.safeParse(await c.req.json().catch(() => null));
       if (!input.success) return c.json({ messageRu: 'Нужен список выбранных фотографий.' }, 422);
