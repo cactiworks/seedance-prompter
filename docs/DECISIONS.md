@@ -1161,3 +1161,27 @@ Flow без потери нод и ручных правок. Complete по-пр
 сбрасывается и не повторяется. Контекст всей серии остаётся у Prompter; заполнение и критика
 запускаются явно, видео — после отдельного подтверждения цены. При ошибке открытия Canvas
 приёмка уже сохранена, интерфейс даёт повторить переход без нового платного запроса.
+
+
+## 06.11.2026 — прямой вход на существующий VPS
+
+Владелец уточнил запрос о hosting: отказаться от Netlify/Vercel и других hosting-посредников,
+использовать существующий VPS. Основной путь — браузер → прямой HTTPS Caddy → Node/systemd;
+код, shared data, Codex CLI, private accounts и media tools остаются на сервере. Перенос backend
+в Vercel Functions не выполняется; Vercel в рабочую topology не добавлен.
+
+Это смена входного адреса, а не перенос хранилища. Direct cutover проверен 06.11.2026:
+UI/assets/health и shared списки доступны, download совпал по SHA-256, video Range — 206,
+Origin/CSRF checks проходят; launcher переключён и проверен. VPS runtime/config/data не менялись,
+restart не выполнялся. Netlify сохраняет только legacy-роль для отката. Availability сообщает,
+что project disabled из-за team credits: gateway не включали и не удаляли; постоянное ручное
+отключение не заявлено, после billing cycle доступность может восстановиться. Общий team tariff
+не отменён и не является блокером прямого входа. Legacy origin остаётся в allowlist только для
+отката. Исторический Netlify шаблон сохранён. Подробные live результаты — `docs/BACKLOG.md` и
+`deploy/README.md`; AI status disconnected, реальный login/inference проверяет владелец.
+
+Следствия: точный прямой HTTPS origin нужен в `SP_PUBLIC_ORIGINS`; Caddy сохраняет loopback Host.
+Launcher направляется на прямой origin. Shared материалы доступны из того же хранилища, а
+host-only cookies и localStorage прежнего адреса не мигрируют: browser drafts сохраняются заранее,
+каждый пользователь при необходимости подключает свой AI заново. Private profiles и consent
+между origins вручную не копируются. Повторный запуск платных/unknown задач не входит в cutover.

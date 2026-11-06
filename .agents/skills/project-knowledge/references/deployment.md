@@ -1,6 +1,13 @@
 # Запуск
 
-Рабочая студия с 19.10.2026 находится на Linux VPS за HTTPS; по решению владельца 19.10.2026 browser auth отключён, Node слушает
+Рабочая студия с 19.10.2026 находится на Linux VPS. По решению 06.11.2026 основной вход —
+прямой HTTPS через Caddy на существующем VPS; cutover проверен 06.11.2026. Netlify остаётся
+legacy gateway для отката, Vercel не внедрён. Direct UI/assets/API, чтение shared data, download,
+Range и Origin/CSRF checks проверены; launcher переключён. VPS runtime/config/data не менялись,
+restart не выполнялся. Legacy project отключён платформой из-за team credits; его не включали,
+не удаляли и общий тариф не отменяли. Это не блокер прямого входа. Результаты — `deploy/README.md`
+и `docs/BACKLOG.md`. Реальный AI login/inference проверяет владелец. По решению владельца
+19.10.2026 browser auth отключён, Node слушает
 `127.0.0.1`. Локальный режим Mac сохранён для разработки/отката. Код обновляется через публичный GitHub remote
 по решению владельца (рамки — [project.md](project.md)); `data/` и кэш Figma в git не входят.
 
@@ -62,15 +69,22 @@ latency и самоотчёт модели о доступном контекс�
 Повреждённая/незавершённая блокировка не удаляется вслепую: сначала проверить запущенные процессы.
 
 
-## Linux / Netlify
+## Linux / прямой HTTPS
 
-Полная инструкция, topology, env, cutover, проверки и ограничения — `deploy/README.md`.
+Полная инструкция, topology, env, direct cutover, проверки и ограничения — `deploy/README.md`.
+Caddy остаётся единственным reverse proxy к Node; exact direct origin включается в
+`SP_PUBLIC_ORIGINS`, upstream Host остаётся loopback. Прежний origin остаётся в allowlist для отката,
+но не требуется прямому входу. Legacy Netlify template сохранён для отката,
+добавление Vercel и перенос backend в serverless не выполняются.
 Только код и шаблоны deploy публичны. Конкретные IP, доступы, backup и operational runbook —
 в приватной папке владельца вне Git. На сервере Node 26.12.0, Codex CLI 0.162.1, ffmpeg и zip;
 `SP_SERVE_STATIC=1` отдаёт готовый dist, systemd запускает приложение без Vite/auto-update.
-На Mac игнорируемый `.seedance-remote.json` направляет обычный launcher в общую студию;
+На Mac игнорируемый `.seedance-remote.json` направляет обычный launcher на прямой HTTPS origin общей студии;
 start:offline, dev и явные SP_PORT/SP_DATA_DIR остаются локальными. Старую data нельзя
-синхронизировать поверх серверной после cutover.
+синхронизировать поверх серверной после cutover. Смена только входного URL не переносит data
+и не требует второго scheduler. Cookies и localStorage привязаны к hostname/origin: browser drafts
+сохраняются до смены адреса, на новом origin каждый пользователь при необходимости подключает свой
+AI заново. Consent и private account profiles между браузерами/origins не копируются.
 
 
 С 20.10.2026 в server mode каждый браузер подключает собственный ChatGPT кнопкой в header

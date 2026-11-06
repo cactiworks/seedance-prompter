@@ -355,9 +355,10 @@ visualInterest в logic-v5/logic-audit-v5 требует observation с выбр
 и без автоматического style_id; это текстовая режиссура и visual QC, не отдельная cinema-модель.
 
 
-## Общая студия (19.10.2026)
+## Общая студия (19.10.2026; прямой вход с 06.11.2026)
 
-Netlify HTTPS proxy → Caddy с Basic Auth на всех путях → loopback Node/systemd. Данные и медиа
+Браузер → прямой HTTPS Caddy на VPS → loopback Node/systemd. Browser auth отключён по решению
+владельца; Netlify остался legacy gateway для отката и не участвует в рабочем входе. Данные и медиа
 живут только на VPS. `SP_PUBLIC_ORIGINS` разрешает точные HTTPS origins, Host/CSRF gate сохранён.
 `asyncRequests.ts` отделяет выполнение JSON POST от HTTP ожидания: 202 + короткий polling, cancel
 передаёт AbortSignal; рестарт/истечение возвращает 410 без повтора POST. Durable состояния

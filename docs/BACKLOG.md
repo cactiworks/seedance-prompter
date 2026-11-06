@@ -1,9 +1,25 @@
 # Бэклог — система AI-креатора
 
 Идеи владельца и что из них следует. Живой список: статус этапов — таблица ниже, что впереди — блоки после неё,
-почему так — `DECISIONS.md`. Порядок внутри блока — примерная очерёдность, не обещание. Обновлено 01.11.2026.
+почему так — `DECISIONS.md`. Порядок внутри блока — примерная очерёдность, не обещание. Обновлено 06.11.2026.
 
 ## Статус этапов
+
+06.11.2026 (прямой VPS без hosting gateway): cutover на прямой HTTPS через Caddy проверен,
+launcher переключён. UI/JS/CSS — 200, health release `2d1cecc`, pack и shared списки доступны.
+Media download совпал по SHA-256, video Range — 206/65 536 bytes. Direct Origin POST прошёл до
+`INVALID`/422 без записи; foreign Origin и отсутствие `x-sp-client` — 403. В браузере открыты
+library, Production и AI dialog без генераций; launcher проверен через `SP_NO_OPEN=1 npm start`.
+Backend, Codex CLI, media tools и shared data остались на том же сервере; runtime/config/data VPS
+не менялись и не перезапускались. Vercel project не создавался. Netlify — legacy gateway для
+отката; availability сообщает disabled из-за team credits, его не включали и не удаляли.
+Общий team tariff не отменялся, его состояние не блокирует direct студию; после billing cycle
+доступность gateway может восстановиться. Legacy origin сохранён в allowlist только для отката.
+Host-only AI sessions и localStorage не переходят на другой origin автоматически. AI status —
+enabled/disconnected; реальный login и inference выполняет владелец. Платных прогонов в smoke нет;
+проверенный direct access не подтверждает качество генерации. Deployment docs и runbook обновлены.
+Полный `npm run check`: 626 tests / 56 files, TypeScript/ESLint/Stylelint и build прошли;
+независимое deployment review выявило устаревшие topology references, они исправлены.
 
 01.11.2026 (часть серии → Canvas): «Принять и открыть Canvas» сохраняет только отмеченные фото
 без AI/media calls и открывает связанный Flow. Невыбранные фото и бюджеты остаются без изменений.

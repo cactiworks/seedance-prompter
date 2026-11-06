@@ -1,7 +1,11 @@
 # Seedance Prompter
 
 Система AI-креатора, выросла из конструктора промптов Seedance 2.5. С 19.10.2026 рабочая студия
-на сервере владельца: общая data, HTTPS через Netlify/Caddy. Локальный Mac — разработка/откат. Как устроено сейчас — `.agents/skills/project-knowledge/` (роутер `SKILL.md`); почему так —
+на сервере владельца: общая data, Caddy и Node/systemd. По решению 06.11.2026 основной вход —
+прямой HTTPS на существующий VPS; cutover проверен 06.11.2026. Netlify остаётся legacy gateway
+для отката и не участвует в прямом входе; Vercel не внедрён. Фактические проверки —
+`docs/BACKLOG.md` и `deploy/README.md`.
+Локальный Mac — разработка/откат. Как устроено сейчас — `.agents/skills/project-knowledge/` (роутер `SKILL.md`); почему так —
 `docs/DECISIONS.md`; что дальше и статус этапов — `docs/BACKLOG.md`.
 
 ## Нельзя
