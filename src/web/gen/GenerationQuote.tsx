@@ -43,7 +43,7 @@ function QuoteDialog({ pending }: { pending: Pending }) {
     {error && <Text role="alert">{error}</Text>}
     <div style={{ display: 'flex', gap: 'var(--lab-space-8)', flexWrap: 'wrap', marginTop: 'var(--lab-space-16)' }}>
       <Button variant="border" onClick={cancel}>{ui("Отмена")}</Button>
-      {quote ? <Button variant="primary" disabled={quote.estimate.approximate && !acceptApproximate} onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits, acceptApproximate }); }}>{ui("Сгенерировать · ")}{formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>{ui("Рассчитать цену")}</Button>}
+      {quote ? <Button variant="primary" disabled={quote.estimate.approximate && !acceptApproximate} onClick={() => { useQuote.setState({ pending: null }); pending.resolve({ ...pending.body, refsConsent: true, quoteId: quote.quoteId, confirmCredits: quote.estimate.credits, acceptApproximate }); }}>{ui("Сгенерировать · ")}{formatCost(quote.estimate)}</Button> : <Button variant="primary" loading={busy} onClick={() => void calculate()}>{error ? ui("Повторить") : ui("Рассчитать цену")}</Button>}
     </div>
   </Dialog>;
 }

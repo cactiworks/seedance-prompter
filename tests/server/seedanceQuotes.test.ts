@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGenRuntime } from '../../src/server/gen/runtime.ts';
 import { GenError, type GenProvider } from '../../src/server/gen/provider.ts';
+import { seedanceTariff } from '../../src/server/gen/seedancePricing.ts';
 import { GenJobSchema } from '../../src/core/model/media.ts';
 import { createStore } from '../../src/server/storage/fsStore.ts';
 import { FlowSchema } from '../../src/core/model/canvas.ts';
@@ -20,6 +21,25 @@ async function fixture(){
   return {gen,provider,kie,request,estimate,submit,upload,dataDir,advance:(ms:number)=>{time+=ms;}};
 }
 describe('Higgsfield Seedance quote contract',()=>{
+  it('retries failed pricing without jobs and keeps the new live tariff behind consent and a single-use quote', async () => {
+    const f = await fixture();
+    f.estimate.mockRejectedValueOnce(new GenError('NETWORK', 'offline'));
+    await expect(f.gen.quote(f.request)).rejects.toThrow('offline');
+    expect(await f.gen.jobs.all()).toEqual([]); expect(f.submit).not.toHaveBeenCalled();
+    f.provider.estimate = async (endpoint, input) => seedanceTariff(endpoint, input, 'Standard self-serve rates in USD per video second: 480p: $0.1177; 720p: $0.2647; 1080p: $0.6518. Total price = selected rate × output duration in seconds.');
+    const request = { ...f.request, count: 2, confirmCredits: 1.4124 };
+    let quote = await f.gen.quote(request);
+    expect(quote.estimate).toMatchObject({ usd: 1.4124, credits: 1.4124, unitRu: '$', approximate: true });
+    await expect(f.gen.submit({ ...request, quoteId: quote.quoteId })).rejects.toMatchObject({ code: 'APPROXIMATE_CONSENT' });
+    expect(f.submit).not.toHaveBeenCalled();
+    quote = await f.gen.quote(request);
+    const confirmed = { ...request, quoteId: quote.quoteId, acceptApproximate: true };
+    const result = await f.gen.submit(confirmed);
+    expect(result.jobs).toHaveLength(2); expect(f.submit).toHaveBeenCalledTimes(2);
+    expect(result.jobs[0]).toMatchObject({ estimateUnit: '$', approximate: true, estimateUsd: 0.7062 });
+    await expect(f.gen.submit(confirmed)).rejects.toMatchObject({ code: 'QUOTE_REQUIRED' });
+    expect(f.submit).toHaveBeenCalledTimes(2);
+  });
   it('all endpoints and exact quote input; one quote authorizes only one dispatch',async()=>{
     const f=await fixture();const q=await f.gen.quote(f.request);expect(f.submit).not.toHaveBeenCalled();
     const body={...f.request,quoteId:q.quoteId};const results=await Promise.allSettled([f.gen.submit(body),f.gen.submit(body)]);

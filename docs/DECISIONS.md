@@ -1185,3 +1185,15 @@ Launcher направляется на прямой origin. Shared матери�
 host-only cookies и localStorage прежнего адреса не мигрируют: browser drafts сохраняются заранее,
 каждый пользователь при необходимости подключает свой AI заново. Private profiles и consent
 между origins вручную не копируются. Повторный запуск платных/unknown задач не входит в cutover.
+
+
+## 13.11.2026 — актуальный self-serve tariff Seedance вместо привязки к старой фразе
+
+Бесплатный live /estimate воспроизвёл HTTP 200 и отказ локального parser: Higgsfield заменил
+старое описание 16:9 новым `Standard self-serve rates in USD per video second` для T2V/I2V.
+Reference-to-video возвращает другой текст с таблицами без/с video input. Поддержаны обе
+проверенные формы; image refs выбирают ставку без video input. Ставки из живого ответа,
+без статической подмены, а формула — output duration × ставка × число видео. Legacy tariff
+сохранён. USD и approximate consent не меняются; перепроверка и одноразовость quote остаются.
+Неизвестный тариф блокируется с предложением повторить расчёт, явная кнопка «Повторить»
+не отправляет media jobs. Поддержка входных видео и автоматический resubmit не добавлены.

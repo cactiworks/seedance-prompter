@@ -13,6 +13,6 @@ export function formatCost(estimate: Estimate): string {
 /** Localize the deterministic server tariff note; preserve unknown provider descriptions. */
 export function tariffNote(note: string | undefined): string | undefined {
   if (!note || getLanguage() !== 'en') return note;
-  const match = /^Ориентир по тарифу Higgsfield для 16:9: \$(\d+(?:\.\d+)?)\/с × (\d+) с, до скидок аккаунта\. Фактическое списание зависит от размеров результата и может отличаться\. Это не верхний предел расходов\.$/.exec(note);
-  return match ? `Reference Higgsfield tariff for 16:9: $${match[1]}/s × ${match[2]} s, before account discounts. Actual charges depend on output dimensions and may differ. This is not a spending cap.` : note;
+  const match = /^Ориентир по тарифу Higgsfield (для 16:9|self-serve): \$(\d+(?:\.\d+)?)\/с × (\d+) с, до скидок аккаунта\. Фактическое списание зависит от размеров результата и может отличаться\. Это не верхний предел расходов\.$/.exec(note);
+  return match ? `Reference Higgsfield tariff ${match[1] === 'self-serve' ? 'for self-serve' : 'for 16:9'}: $${match[2]}/s × ${match[3]} s, before account discounts. Actual charges depend on output dimensions and may differ. This is not a spending cap.` : note;
 }

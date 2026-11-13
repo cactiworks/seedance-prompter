@@ -53,6 +53,7 @@ it('localizes only the known tariff note, preserving its numbers and unknown pro
   expect(tariffNote(source)).toBe(source);
   setLanguage('en');
   expect(tariffNote(source)).toBe('Reference Higgsfield tariff for 16:9: $0.2056/s × 5 s, before account discounts. Actual charges depend on output dimensions and may differ. This is not a spending cap.');
+  expect(tariffNote(source.replace('для 16:9', 'self-serve').replace('0.2056', '0.1177'))).toBe('Reference Higgsfield tariff for self-serve: $0.1177/s × 5 s, before account discounts. Actual charges depend on output dimensions and may differ. This is not a spending cap.');
   expect(tariffNote('Собственное описание провайдера')).toBe('Собственное описание провайдера');
   expect(tariffNote(undefined)).toBeUndefined();
 });

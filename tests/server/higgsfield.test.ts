@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createHiggsfieldProvider } from '../../src/server/gen/higgsfield.ts';
 import { GenError } from '../../src/server/gen/provider.ts';
+import { seedanceTariff } from '../../src/server/gen/seedancePricing.ts';
 
 const KEY = 'kid:secret';
+const SELF_SERVE = 'Standard self-serve rates in USD per video second: 480p: $0.1177; 720p: $0.2647; 1080p: $0.6518. Total price = selected rate × output duration in seconds.';
+const REFERENCE = 'Standard self-serve rates in USD per second of generated video.\n\n- Without video input: 480p: $0.1177; 720p: $0.2647; 1080p: $0.6518.\n- With video input: 480p: $0.1387; 720p: $0.3264; 1080p: $0.7858.\n\nTotal price = selected rate × output duration in seconds. Input video duration is not added to the billed duration. Image or audio references alone use the rate without video input.';
 const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 function fakeFetch(...responses: Response[]) {
@@ -66,6 +69,41 @@ describe('Higgsfield API (Soul 2)', () => {
       const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
       expect(await hf.estimate!('bytedance/seedance-2.5/image-to-video',{duration:4,resolution})).toMatchObject({usd,credits:usd,unitRu:'$',approximate:true,pricingDescription:description});
     }
+  });
+  it.each(['text-to-video', 'image-to-video', 'reference-to-video'])('reads the current self-serve tariff for %s without submitting', async route => {
+    const description = route === 'reference-to-video' ? REFERENCE : SELF_SERVE;
+    for (const [resolution, usd] of [['480p', 0.5885], ['720p', 1.3235], ['1080p', 3.259]] as const) {
+      const { fetch, seen } = fakeFetch(json({ type: 'description', pricing_description: description }));
+      const hf = createHiggsfieldProvider({ apiKey: () => KEY, fetch });
+      const price = await hf.estimate!(`bytedance/seedance-2.5/${route}`, { duration: 5, resolution });
+      expect(price).toMatchObject({ usd, credits: usd, unitRu: '$', approximate: true, pricingDescription: description });
+      expect(price.pricingNote).not.toContain('16:9');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.url).toContain('/estimate/');
+    }
+  });
+  it('normalizes provider whitespace and reads live rates rather than fixed catalog prices', () => {
+    const description = SELF_SERVE.replaceAll(' ', '\n  ').replace('0.1177', '0.1');
+    expect(seedanceTariff('bytedance/seedance-2.5/text-to-video', { duration: 30, resolution: '480p' }, description)).toMatchObject({ usd: 3, pricingDescription: description });
+  });
+  it.each([
+    SELF_SERVE.replace('0.1177', '0'), SELF_SERVE.replace('0.2647', '-0.2647'),
+    SELF_SERVE.replace('720p:', '480p:'), SELF_SERVE.replace('USD', 'EUR'),
+    SELF_SERVE.replace('output duration', 'input duration'), `${SELF_SERVE} Additional surcharge: $1.`,
+    REFERENCE.replace('Without video input:', 'With video input:'), 'x'.repeat(6001),
+  ])('rejects an unsupported tariff instead of guessing a price', description => {
+    expect(() => seedanceTariff('bytedance/seedance-2.5/reference-to-video', { duration: 5, resolution: '480p' }, description)).toThrow(GenError);
+  });
+  it.each([
+    { duration: 5, resolution: '4K' }, { duration: '5', resolution: '480p' },
+    { duration: 3, resolution: '480p' }, { duration: 31, resolution: '480p' },
+    { duration: 5, resolution: '480p', video_urls: ['https://example.com/video.mp4'] },
+    { duration: 5, resolution: '480p', video_url: 'https://example.com/video.mp4' },
+  ])('does not apply the image-only rate to unsupported inputs: %j', input => {
+    expect(() => seedanceTariff('bytedance/seedance-2.5/reference-to-video', input, REFERENCE)).toThrow(GenError);
+  });
+  it('does not use Seedance tariffs for another model', () => {
+    expect(() => seedanceTariff('other/model', { duration: 5, resolution: '480p' }, SELF_SERVE)).toThrow(GenError);
   });
   it.each([{type:'description',pricing_description:'Contact sales'}, {type:'description',pricing_description:'Price $0.01'}, {credits:null,usd:0.5}, {credits:true,usd:0.1}, {credits:'',usd:0.1}])('rejects unknown or nonnumeric price shapes without fallback: %j',async body=>{
     const {fetch}=fakeFetch(json(body));const hf=createHiggsfieldProvider({apiKey:()=>KEY,fetch});
