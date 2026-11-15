@@ -115,7 +115,10 @@ export const useCanvas = create<CanvasState>((set, get) => {
   let navigation = 0;
   const revisions = new Map<string, number>();
   const draftKey = (id: string): string => `sp-canvas-draft:${id}`;
-  const remember = (flow: Flow): void => { try { localStorage.setItem(draftKey(flow.id), JSON.stringify(flow)); } catch { /* in-memory draft remains */ } };
+  const remember = (flow: Flow): boolean => {
+    try { localStorage.setItem(draftKey(flow.id), JSON.stringify(flow)); return true; }
+    catch { return false; } // Navigation stays blocked if this is the only copy.
+  };
   const flush = async (): Promise<boolean> => {
     if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
     if (writing !== null) return writing;
@@ -126,7 +129,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         remember(outgoing);
         if (get().flow?.id === snapshot.id) set({ save: 'saving' });
         try {
-          const saved = await json<Flow>(await fetch(`/api/canvas/flows/${snapshot.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(outgoing), keepalive: true }));
+          const saved = await json<Flow>(await fetch(`/api/canvas/flows/${snapshot.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(outgoing) }));
           revisions.set(snapshot.id, saved.rev ?? outgoing.rev + 1);
           set((state) => ({ flows: state.flows.map((item) => item.id === saved.id ? { id: saved.id, name: saved.name, nodes: saved.nodes.length, updatedAt: saved.updatedAt, production: saved.production } : item) }));
           if (pending === snapshot) {
@@ -151,6 +154,10 @@ export const useCanvas = create<CanvasState>((set, get) => {
     if (saveTimer !== null) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; void flush(); }, 600);
   };
+  /** Failed remote saves must not trap all flows. Park only a verified durable
+   * draft; leave its revision intact so it cannot overwrite newer server work. */
+  const canLeave = async (): Promise<boolean> => await flush()
+    || (pending !== null && remember({ ...pending, rev: revisions.get(pending.id) ?? pending.rev }));
 
   const pushHistory = (flow: Flow, key: string | null): void => {
     const now = Date.now();
@@ -222,12 +229,12 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     openFlow: async (id, reload = false) => {
       const request = ++navigation;
-      if (!await flush()) return false;
       if (get().flow?.id === id && !reload) return true;
+      if (!await canLeave() || request !== navigation) return false;
       let saved: Flow;
       try { saved = FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${id}`))); }
       catch (error) { if (request === navigation) set({ error: error instanceof Error ? error.message : 'Не удалось открыть холст.' }); return false; }
-      if (request !== navigation || !await flush() || request !== navigation) return false;
+      if (request !== navigation || !await canLeave() || request !== navigation) return false;
       // A forced refresh may race with typing into this same flow. Its newer
       // acknowledged save is authoritative over the snapshot fetched earlier.
       const current = get().flow;
@@ -236,13 +243,23 @@ export const useCanvas = create<CanvasState>((set, get) => {
       let flow = saved;
       try {
         const raw = localStorage.getItem(draftKey(id));
-        if (raw !== null) flow = FlowSchema.parse(JSON.parse(raw));
+        if (raw !== null) {
+          const draft = FlowSchema.parse(JSON.parse(raw));
+          if (draft.id === id) {
+            // A successful PUT with a lost response may leave an older-revision
+            // browser draft. Equal content needs no recovery copy or overwrite.
+            const content = (f: Flow): string => JSON.stringify({ ...f, rev: 0, updatedAt: '' });
+            if (content(draft) === content(saved)) localStorage.removeItem(draftKey(id));
+            else flow = draft;
+          }
+        }
       } catch { /* invalid browser draft must not hide the server copy */ }
       lastKey = null;
       const restored = flow !== saved;
       const conflict = restored && (flow.rev ?? 0) !== (saved.rev ?? 0);
       if (conflict) revisions.set(id, flow.rev ?? 0);
-      set({ flow, selected: null, selection: [], save: restored ? 'dirty' : 'saved', past: [], future: [], error: conflict ? 'Есть локальный черновик и другая версия на сервере. Сохрани схему или создай копию, чтобы не потерять правки.' : null });
+      pending = null; // The previous flow's failed draft stays under its own storage key.
+      set({ flow, selected: null, selection: [], save: conflict ? 'error' : restored ? 'dirty' : 'saved', past: [], future: [], error: conflict ? 'Есть локальный черновик и другая версия на сервере. Сохрани схему или создай копию, чтобы не потерять правки. Другие холсты можно открывать.' : null });
       if (restored) { pending = flow; if (!conflict) persist(); }
       return true;
     },
@@ -270,11 +287,13 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     newFlow: async (from) => {
       const request = ++navigation;
-      if (!await flush()) return;
+      if (!await canLeave() || request !== navigation) return;
       const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: from?.name ?? '' }) }));
-      if (request !== navigation || !await flush() || request !== navigation) { await get().loadFlows(); return; }
+      if (request !== navigation || !await canLeave() || request !== navigation) { await get().loadFlows(); return; }
       lastKey = null;
-      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, selected: null, selection: [], past: [], future: [] });
+      pending = null;
+      revisions.set(created.id, created.rev ?? 0);
+      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, save: from === undefined ? 'saved' : 'dirty', error: null, selected: null, selection: [], past: [], future: [] });
       if (from !== undefined) persist();
       await get().loadFlows();
     },

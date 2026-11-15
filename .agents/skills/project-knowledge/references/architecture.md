@@ -428,5 +428,13 @@ independent Seedance drafts and drop Production ownership. Terminal series polls
 idle editor only to a higher revision; dirty/saving/conflict and active editor agents are protected.
 Source-frame key and planned duration (unless manually protected) are checked before series criticism.
 
+Canvas navigation (15.11.2026): failed remote save no longer traps the user in one Flow. Switching
+or creating a Flow requires either acknowledged save or successful localStorage write of the latest
+pending draft under its own Flow ID and revision. Pending is detached only after the destination is
+loaded; failed GET retains the current draft. Returning/reloading restores conflicting drafts without
+overwriting the server. Equal payloads (ignoring revision/update time) are acknowledged as saved,
+including a lost PUT response. Ordinary PUT does not use keepalive: browser's 64 KiB quota otherwise
+rejects large graphs. Pagehide relies on the draft already persisted with each edit.
+
 
 01.11.2026: POST /api/production/:id/photos/accept с ids/rev/requestId атомарно принимает только текущие сохранённые фото. Проверяет локальные файлы, revision и отсутствие активной работы; UUID записывается с usd=0, повтор идемпотентен. Невыбранные shots/jobs/budget/reports/artifacts не меняются. Photos.complete означает полное покрытие, но для handoff достаточно одного принятого фото. Canvas handoff вызывается после успешной приёмки отдельно; при сбое перехода сохранённые approvals остаются и действие повторяется без новых генераций.

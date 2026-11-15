@@ -157,3 +157,74 @@ it('saving a recovery copy gives Seedance drafts independent ownership and keeps
   expect(copy.edges[0]?.to).toBe(copied.id);
   expect(flows.get('f-alpha-123')?.nodes[1]?.slug).toBe(seedance.slug);
 });
+
+it('a conflicting draft does not trap navigation and survives returning and reloading', async () => {
+  const canvas = useCanvas.getState();
+  await canvas.openFlow('f-alpha-123');
+  canvas.rename('Local draft');
+  flows.set('f-alpha-123', { ...flows.get('f-alpha-123')!, name: 'Remote edit', rev: 2 });
+  expect(await canvas.openFlow('f-other-123')).toBe(true);
+  expect(useCanvas.getState().flow?.id).toBe('f-other-123');
+  expect(flows.get('f-alpha-123')?.name).toBe('Remote edit');
+  canvas.rename('Other flow edit'); expect(await canvas.flush()).toBe(true);
+  expect(await canvas.openFlow('f-alpha-123')).toBe(true);
+  expect(useCanvas.getState()).toMatchObject({ flow: { name: 'Local draft' }, save: 'error' });
+  expect(await canvas.openFlow('f-other-123')).toBe(true);
+  useCanvas.setState({ flow: null });
+  expect(await canvas.openFlow('f-alpha-123')).toBe(true);
+  expect(useCanvas.getState().flow?.name).toBe('Local draft');
+  expect(flows.get('f-alpha-123')?.name).toBe('Remote edit');
+  await canvas.saveCopy();
+});
+
+it('a failed save allows navigation only after the latest draft is durable', async () => {
+  const canvas = useCanvas.getState(); await canvas.openFlow('f-alpha-123');
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => init?.method === 'PUT' ? Response.json({ messageRu: 'offline' }, { status: 503 }) : realFetch(url, init)));
+  canvas.rename('Unsaved draft');
+  localStorage.setItem = () => { throw new Error('storage full'); };
+  expect(await canvas.openFlow('f-other-123')).toBe(false);
+  expect(useCanvas.getState().flow?.name).toBe('Unsaved draft');
+  vi.stubGlobal('fetch', realFetch); expect(await canvas.flush()).toBe(true);
+});
+
+it('failed destination loading keeps the current draft available for the next navigation', async () => {
+  const canvas = useCanvas.getState(); await canvas.openFlow('f-alpha-123'); canvas.rename('Keep this draft');
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => init?.method === 'PUT' || url.endsWith('f-other-123') ? Response.json({ messageRu: 'offline' }, { status: 503 }) : realFetch(url, init)));
+  expect(await canvas.openFlow('f-other-123')).toBe(false);
+  expect(useCanvas.getState().flow?.name).toBe('Keep this draft');
+  vi.stubGlobal('fetch', realFetch); expect(await canvas.flush()).toBe(true);
+});
+
+it('ordinary saves do not use keepalive, whose 64 KiB browser limit can reject a large flow', async () => {
+  const canvas = useCanvas.getState(); await canvas.openFlow('f-alpha-123');
+  canvas.update(f => ({ ...f, nodes: [{ ...blankNode('prompt', 0, 0), text: 'x'.repeat(70000) }] }));
+  expect(await canvas.flush()).toBe(true);
+  const put = vi.mocked(globalThis.fetch).mock.calls.find(([, init]) => init?.method === 'PUT');
+  expect(put?.[1]?.keepalive).not.toBe(true);
+});
+
+it('a saved payload with a lost acknowledgement is recognized on return without a recovery copy', async () => {
+  const canvas = useCanvas.getState(); await canvas.openFlow('f-alpha-123');
+  const realFetch = globalThis.fetch; let lost = false;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const result = await realFetch(url, init);
+    if (!lost && init?.method === 'PUT') { lost = true; throw new TypeError('Lost response'); }
+    return result;
+  }));
+  canvas.rename('Already saved'); expect(await canvas.flush()).toBe(false);
+  expect(await canvas.openFlow('f-other-123')).toBe(true);
+  expect(await canvas.openFlow('f-alpha-123')).toBe(true);
+  expect(useCanvas.getState()).toMatchObject({ flow: { name: 'Already saved', rev: 2 }, save: 'saved', error: null });
+  expect(localStorage.getItem('sp-canvas-draft:f-alpha-123')).toBeNull();
+  expect(writes).toHaveLength(1);
+});
+
+it('creating another flow parks a conflict and does not inherit its error or pending save', async () => {
+  const canvas = useCanvas.getState(); await canvas.openFlow('f-alpha-123'); canvas.rename('Parked draft');
+  flows.set('f-alpha-123', { ...flows.get('f-alpha-123')!, rev: 2 });
+  await canvas.newFlow({ name: 'New flow', nodes: [], edges: [] }); expect(await canvas.flush()).toBe(true);
+  expect(useCanvas.getState()).toMatchObject({ flow: { id: 'f-copy-123', name: 'New flow' }, error: null, save: 'saved' });
+  expect(JSON.parse(localStorage.getItem('sp-canvas-draft:f-alpha-123')!).name).toBe('Parked draft');
+});
