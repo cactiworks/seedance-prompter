@@ -8,6 +8,9 @@ import path from 'node:path';
 import { Hono, type Context } from 'hono';
 import { AccountError, type Accounts } from './accounts/service.ts';
 import { accountRoutes } from './accounts/routes.ts';
+import { createCanvasAi, type CanvasAi } from './canvasAi/service.ts';
+import { canvasAiRoutes } from './canvasAi/routes.ts';
+import { CanvasAiError } from './canvasAi/types.ts';
 import { asyncRequests } from './asyncRequests.ts';
 import { archiveDirectory, downloadRoutes } from './downloads.ts';
 import { APP_NAME, APP_VERSION } from '../core/meta.ts';
@@ -87,6 +90,7 @@ export interface AppOptions {
   writerModel?: string;
   production?: ProductionRuntime;
   characters?: Characters;
+  canvasAi?: CanvasAi;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
   /** Генерация и библиотека. По умолчанию — живые провайдеры, фоновый опрос не запущен (его запускает index.ts). */
@@ -167,6 +171,7 @@ export function createApp(options: AppOptions) {
   downloadRoutes(app, options.dataDir);
 
   app.onError((error, c) => {
+    if (error instanceof CanvasAiError) return c.json({ error: error.code, messageRu: error.message }, error.status);
     if (error instanceof z.ZodError) return c.json({ error: 'INVALID', messageRu: 'Некорректные поля запроса.', details: error.issues }, 422);
     if (error instanceof AccountError) return c.json({ error: 'ACCOUNT_REQUIRED', messageRu: error.message }, error.status);
     if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
@@ -179,6 +184,8 @@ export function createApp(options: AppOptions) {
 
   const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
   app.route('/api/characters', characterRoutes(characters));
+  const canvasAi = options.canvasAi ?? createCanvasAi({ dataDir: options.dataDir, rootDir: options.rootDir, flows, gen, characters, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor });
+  app.route('/api/canvas-ai', canvasAiRoutes(canvasAi, options.accounts));
   const production = options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor, gen });
   app.route('/api/production', productionRoutes(production, characters, options.accounts));
   const seriesCanvas = createProductionCanvas({ ...options, production, gen, flows, store, pack: () => loadPack(options.rootDir, 'cinema-doc') });
@@ -550,7 +557,11 @@ export function createApp(options: AppOptions) {
     .get('/api/gen/styles', async (c) => c.json(await gen.styles(c.req.query('provider') === 'higgsfield' ? 'higgsfield' : 'kie')))
     // Только по клику: сервер сверяет подтверждённую сумму с оценкой и согласие на отправку рефов.
     .post('/api/gen/quote', async c => c.json(await gen.quote(await c.req.json())))
-    .post('/api/gen/jobs', async (c) => c.json(await gen.submit(await c.req.json()), 202))
+    .post('/api/gen/jobs', async (c) => {
+      const body = await c.req.json();
+      const canvas = await canvasAi.validateSubmission(body);
+      return c.json(await gen.submit(canvas ? { ...body, canvas } : body), 202);
+    })
     // Замер входа апскейла (длинная сторона, секунды видео) — тот же, что при запуске: цена на кнопке = гейт. Бесплатно, локально.
     .post('/api/gen/measure', async (c) => c.json(await gen.measure(await c.req.json())))
     .get('/api/gen/jobs', async (c) => {

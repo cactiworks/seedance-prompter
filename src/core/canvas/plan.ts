@@ -1,6 +1,7 @@
 import { estimate, findModel, paramsFor, upscaleModelOf, validateGen, type Estimate, type GenModel, type GenParams, type RefRole } from '../gen/models.ts';
 import { isJobNode, outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
 import type { JobRef, RefSource } from '../model/media.ts';
+import { aiPromptProblems } from './ai.ts';
 
 /** Что уйдёт в модель при запуске ноды-генератора. Считается из графа, без сети. */
 export interface RunPlan {
@@ -12,9 +13,11 @@ export interface RunPlan {
   problems: string[];
 }
 
-const ROLE_OF: Record<Exclude<InputPort, 'prompt' | 'video' | 'media'>, RefRole> = { ref: 'ref', start: 'start', end: 'end' };
+const ROLE_OF: Record<Exclude<InputPort, 'context' | 'idea' | 'prompt' | 'video' | 'media'>, RefRole> = { ref: 'ref', start: 'start', end: 'end' };
 
 export const nodeTitle = (node: CanvasNode): string => {
+  if (node.type === 'comment') return node.label || 'Комментарий';
+  if (node.type === 'ai') return 'AI';
   if (node.type === 'prompt') return 'Промпт';
   if (node.type === 'image') return node.label !== '' ? node.label : 'Картинка';
   if (node.type === 'frame') return node.which === 'last' ? 'Последний кадр видео' : 'Первый кадр видео';
@@ -62,17 +65,21 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
   const incoming = flow.edges.filter((e) => e.to === node.id);
   const source = (id: string): CanvasNode | undefined => flow.nodes.find((n) => n.id === id);
 
-  const texts = incoming
+  const promptSources = incoming
     .filter((e) => e.port === 'prompt')
     .map((e) => source(e.from))
-    .filter((n): n is CanvasNode => n?.type === 'prompt')
-    .map((n) => n.text.trim())
+    .filter((n): n is CanvasNode => n?.type === 'prompt');
+  const aiAssisted = promptSources.some(n => n.aiSource !== undefined);
+  if (aiAssisted && promptSources.length !== 1) problems.push('Для AI-генерации оставь один одобренный промпт без дополнительных промпт-нод.');
+  if (aiAssisted && node.text.trim()) problems.push('Перенеси дополнительный текст генератора в комментарий AI и одобри новый промпт.');
+  const texts = promptSources
+    .map((n) => { problems.push(...aiPromptProblems(flow, n, node.id)); return n.text.trim(); })
     .filter((t) => t !== '');
-  const prompt = [...texts, node.text.trim()].filter((t) => t !== '').join('\n\n');
+  const prompt = [...texts, ...(aiAssisted ? [] : [node.text.trim()])].filter((t) => t !== '').join('\n\n');
 
   const refs: JobRef[] = [];
   for (const edge of incoming) {
-    if (edge.port === 'prompt' || edge.port === 'video' || edge.port === 'media') continue;
+    if (edge.port === 'context' || edge.port === 'idea' || edge.port === 'prompt' || edge.port === 'video' || edge.port === 'media') continue;
     const from = source(edge.from);
     if (from === undefined) continue;
     if (from.stale) { problems.push(`«${nodeTitle(from)}»: вход изменился, обнови результат.`); continue; }
@@ -93,6 +100,7 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
       const jobId = from.jobIds[from.selected];
       const mediaId = jobId === undefined ? null : mediaOf(jobId);
       if (mediaId === null) problems.push(`Сначала запусти «${nodeTitle(from)}» и дождись результата — сам он не запустится.`);
+      else if (aiAssisted && node.kind === 'video' && (from.acceptedJobId !== jobId || from.acceptedMediaId !== mediaId)) problems.push('Сначала прими выбранное фото для видео.');
       else refs.push({ label: nodeTitle(from), source: { type: 'media', mediaId }, role });
     }
   }

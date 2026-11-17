@@ -32,7 +32,7 @@ let seq = 0;
 export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
-export const NODE_WIDTH: Record<CanvasNodeType, number> = { prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
+export const NODE_WIDTH: Record<CanvasNodeType, number> = { comment: 280, ai: 300, prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
 /** Вертикаль портов: выход и первый вход — под шапкой, остальные входы — шагом PORT_STEP. */
 export const PORT_TOP = 58;
 export const PORT_STEP = 30;
@@ -54,6 +54,13 @@ export function blankNode(type: CanvasNodeType, x: number, y: number, kind: Medi
   });
 }
 
+/** Import/recovery copies keep material history, never a current AI approval from another graph. */
+export function remapCanvasCopy(node: CanvasNode, ids: ReadonlyMap<string, string>): CanvasNode {
+  return { ...node, id: ids.get(node.id) ?? node.id, production: undefined, ai: undefined, aiSource: node.aiSource ? { ...node.aiSource, aiNodeId: ids.get(node.aiSource.aiNodeId) ?? node.aiSource.aiNodeId } : undefined, aiApproval: undefined,
+    targetGeneratorId: node.targetGeneratorId ? ids.get(node.targetGeneratorId) ?? null : null,
+    acceptedJobId: null, acceptedMediaId: null, runInputFingerprint: undefined, ...cloneSeedance(node) };
+}
+
 interface CanvasState {
   flows: FlowListItem[];
   flow: Flow | null;
@@ -62,6 +69,11 @@ interface CanvasState {
   selected: string | null;
   /** Все выделенные ноды: Shift+клик, рамка Shift+протяжкой, ⌘A. Группа двигается, удаляется и копируется вместе. */
   selection: string[];
+  aiDrawer: { nodeId: string; stage: 'idea' | 'prompt' } | null;
+  openAi: (nodeId: string, stage?: 'idea' | 'prompt') => void;
+  closeAi: () => void;
+  /** A server operation may update approval/projection and flow revision. Never replace newer local edits. */
+  applyServerFlow: (flow: Flow, expected: Flow) => boolean;
   error: string | null;
   past: Flow[];
   future: Flow[];
@@ -99,6 +111,7 @@ interface CanvasState {
   /** Вставить ноды из текста буфера `sp-canvas:`; возвращает число вставленных. */
   pasteNodes: (text: string, at: { x: number; y: number }) => number;
   duplicateSelected: () => void;
+  createCorrectionBranch: (generatorId: string) => string | null;
   /**
    * «В canvas» из просмотра работы: файл библиотеки — новой нодой (картинка или видео) правее всего графа в
    * открытом flow; flow нет — создаётся. Вид сдвигается к новой ноде.
@@ -135,7 +148,9 @@ export const useCanvas = create<CanvasState>((set, get) => {
           if (pending === snapshot) {
             pending = null;
             try { localStorage.removeItem(draftKey(snapshot.id)); } catch { /* storage unavailable */ }
-            if (get().flow?.id === snapshot.id) set((state) => ({ flow: state.flow === null ? null : { ...state.flow, rev: saved.rev }, save: 'saved', error: null }));
+            // No edit has superseded this snapshot. Keep the complete canonical
+            // saved value, including updatedAt, for exact-snapshot AI actions.
+            if (get().flow?.id === snapshot.id) set({ flow: saved, save: 'saved', error: null });
           } else if (pending !== null) remember({ ...pending, rev: saved.rev });
         } catch (error) {
           if (get().flow?.id === snapshot.id) set({ save: 'error', error: error instanceof Error ? error.message : 'Не сохранилось. Черновик сохранён в этом браузере.' });
@@ -170,7 +185,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
   };
 
   /** Копия ноды без результатов: запуски принадлежат исходной ноде. Seedance-промптер получит копию черновика при открытии. */
-  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, production: undefined, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ...cloneSeedance(node) });
+  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, production: undefined, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ai: undefined, aiSource: undefined, aiApproval: undefined, targetGeneratorId: null, acceptedJobId: null, acceptedMediaId: null, ...cloneSeedance(node) });
 
   /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
   const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {
@@ -188,6 +203,12 @@ export const useCanvas = create<CanvasState>((set, get) => {
       ids.set(n.id, c.id);
       return c;
     });
+    for (let index = 0; index < copies.length; index += 1) {
+      const original = nodes[index];
+      const copy = copies[index];
+      if (original && copy && original.type === 'ai') copy.targetGeneratorId = original.targetGeneratorId ? ids.get(original.targetGeneratorId) ?? null : null;
+      if (original?.aiSource && copy) copy.aiSource = { ...original.aiSource, aiNodeId: ids.get(original.aiSource.aiNodeId) ?? original.aiSource.aiNodeId };
+    }
     const copiedEdges = edges.flatMap((e) => {
       const from = ids.get(e.from);
       const to = ids.get(e.to);
@@ -205,6 +226,17 @@ export const useCanvas = create<CanvasState>((set, get) => {
     save: 'saved',
     selected: null,
     selection: [],
+    aiDrawer: null,
+    openAi: (nodeId, stage = 'idea') => set({ aiDrawer: { nodeId, stage } }),
+    closeAi: () => set({ aiDrawer: null }),
+    applyServerFlow: (flow, expected) => {
+      const current = get().flow;
+      if (flow.id !== expected.id || pending !== null || get().save !== 'saved' || (flow.rev ?? 0) < (current?.rev ?? 0)) return false;
+      if (current !== expected) return current?.id === flow.id && JSON.stringify(current) === JSON.stringify(flow);
+      revisions.set(flow.id, flow.rev ?? 0);
+      set((state) => ({ flow, save: 'saved', error: null, flows: state.flows.map((item) => item.id === flow.id ? { ...item, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt } : item) }));
+      return true;
+    },
     error: null,
     past: [],
     future: [],
@@ -274,7 +306,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         // Recovery copies own their drafts; reusing slugs would edit the original
         // Prompter from a different flow. Saved media/jobs remain as history.
         const ids = new Map(draft.nodes.map(node => [node.id, newId('n')]));
-        const nodes = draft.nodes.map(node => ({ ...node, id:ids.get(node.id)!, production:undefined, ...cloneSeedance(node) }));
+        const nodes = draft.nodes.map(node => remapCanvasCopy(node, ids));
         const edges = draft.edges.map(edge => ({ ...edge, id:newId('e'), from:ids.get(edge.from)!, to:ids.get(edge.to)! }));
         // The original browser draft is retained until the new copy is confirmed on disk.
         navigation += 1;
@@ -375,7 +407,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (sourceNode === undefined || targetNode === undefined || !inputsOf(targetNode, ['ref', 'start', 'end']).includes(port) || !portAccepts(port, outputOf(sourceNode))) return 'Несовместимые порты.';
       if (wouldCycle(flow, from, to)) return 'Так получится цикл.';
       // Во входы «Старт», «Финал» и «Видео» — одна связь; повторная заменяет прежнюю.
-      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media');
+      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media' || port === 'idea');
       if (flow.edges.some((e) => e.from === from && e.to === to && e.port === port)) return null;
       // «Размер» и апскейл отдают то же, что получили: картинку или видео; прежний результат другого вида больше не годится
       // (у апскейла его запуски остаются в библиотеке, но выходом ноды быть не могут).
@@ -420,6 +452,21 @@ export const useCanvas = create<CanvasState>((set, get) => {
     duplicateSelected: () => {
       const copied = group();
       if (copied.nodes.length > 0) insertCopies(copied.nodes, copied.edges, 32, 32);
+    },
+    createCorrectionBranch: (generatorId) => {
+      const flow = get().flow;
+      const generator = flow?.nodes.find(n => n.id === generatorId && n.type === 'generator');
+      const ai = flow?.nodes.find(n => n.type === 'ai' && n.targetGeneratorId === generatorId);
+      if (!flow || !generator || !ai) return null;
+      const y = Math.max(...flow.nodes.map(n => n.y)) + 600;
+      const nextGenerator = { ...cloneNode(generator, 0, y - generator.y), label: generator.label ? `${generator.label} · правки` : '' };
+      const nextAi = { ...blankNode('ai', generator.x - 720, y, generator.kind), targetGeneratorId: nextGenerator.id };
+      const comment = { ...blankNode('comment', generator.x - 1080, y), text: `Правки к результату ${generator.label || generator.id}.\n${ai.ai?.idea?.text ? `Прежняя идея (исходный материал):\n${ai.ai.idea.text}\n\n` : ''}${ai.ai?.prompt?.text ? `Прежний prompt (исходный материал):\n${ai.ai.prompt.text}\n\n` : ''}Что сохранить и что изменить: ` };
+      const copiedInputs = flow.edges.filter(e => (e.to === ai.id && (e.port === 'context' || e.port === 'ref')) || (e.to === generator.id && e.port !== 'prompt'))
+        .map(e => ({ ...e, id: newId('e'), to: e.to === ai.id ? nextAi.id : nextGenerator.id }));
+      get().update(f => ({ ...f, nodes: [...f.nodes, comment, nextAi, nextGenerator], edges: [...f.edges, ...copiedInputs, { id: newId('e'), from: comment.id, to: nextAi.id, port: 'context' }], viewport: { ...f.viewport, x: 80 - comment.x * f.viewport.zoom, y: 80 - y * f.viewport.zoom } }));
+      set({ selected: comment.id, selection: [comment.id] });
+      return nextAi.id;
     },
     sendMedia: async (item) => {
       if (get().flow === null) await get().loadFlows();

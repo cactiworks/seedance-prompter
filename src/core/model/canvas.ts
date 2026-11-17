@@ -13,18 +13,46 @@ import { GenParamsSchema, RefSourceSchema } from './media.ts';
  * (data/projects/cv-<id>), картинки входа «Рефы» становятся панелью кадра, выход — сгенерированное видео.
  * upscale — апскейл Topaz (решение 39): картинка или видео на входе «Файл», выход того же вида; запуск платный, с гейтом.
  */
-export const CANVAS_NODE_TYPES = ['prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance', 'upscale'] as const;
+export const CANVAS_NODE_TYPES = ['comment', 'ai', 'prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance', 'upscale'] as const;
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[number];
 
 /** video — вход ноды «Кадр из видео»: принимает результат генератора видео. media — вход «Размера»: картинка или видео. */
-export const INPUT_PORTS = ['prompt', 'ref', 'start', 'end', 'video', 'media'] as const;
+export const INPUT_PORTS = ['context', 'idea', 'prompt', 'ref', 'start', 'end', 'video', 'media'] as const;
 export type InputPort = (typeof INPUT_PORTS)[number];
+
+/** Compact projections only; the server keeps authoritative attempts and their history. */
+export const CanvasAiApprovalSchema = z.object({
+  versionId: z.string().min(1), inputFingerprint: z.string().min(1), approvedAt: z.string().min(1),
+}).strict();
+export type CanvasAiApproval = z.infer<typeof CanvasAiApprovalSchema>;
+export const CanvasAiVersionSchema = z.object({
+  id: z.string().min(1), text: z.string(), inputFingerprint: z.string().min(1), createdAt: z.string().min(1),
+  parentVersionId: z.string().nullable().default(null), approval: CanvasAiApprovalSchema.nullable().default(null),
+}).strict();
+export type CanvasAiVersion = z.infer<typeof CanvasAiVersionSchema>;
+export const CanvasAiProjectionSchema = z.object({
+  runId: z.string().nullable().default(null),
+  status: z.enum(['idle', 'running', 'ready', 'failed', 'interrupted']).default('idle'),
+  stage: z.enum(['idea', 'prompt']).nullable().default(null),
+  idea: CanvasAiVersionSchema.nullable().default(null), prompt: CanvasAiVersionSchema.nullable().default(null),
+  errorRu: z.string().nullable().default(null),
+}).strict();
+export type CanvasAiProjection = z.infer<typeof CanvasAiProjectionSchema>;
+export const CanvasAiSourceSchema = z.object({
+  aiNodeId: z.string().min(1), versionId: z.string().min(1), inputFingerprint: z.string().min(1),
+}).strict();
 
 export const CanvasNodeSchema = z.object({
   id: z.string().min(1),
   production: z.object({ runId: z.string(), shotId: z.string(), artifactId: z.string() }).optional(),
   stale: z.boolean().optional(),
   runInputFingerprint: z.string().optional(),
+  /** AI reads model settings from this generator; this is not a reverse graph edge. */
+  targetGeneratorId: z.string().nullable().default(null),
+  ai: CanvasAiProjectionSchema.optional(),
+  /** A materialized prompt stays linked to the exact reviewed AI version. */
+  aiSource: CanvasAiSourceSchema.optional(),
+  aiApproval: CanvasAiApprovalSchema.optional(),
   type: z.enum(CANVAS_NODE_TYPES),
   x: z.number(),
   y: z.number(),
@@ -40,6 +68,9 @@ export const CanvasNodeSchema = z.object({
   /** Запуски ноды по порядку; выбранный вариант уходит дальше по графу. */
   jobIds: z.array(z.string()).default([]),
   selected: z.number().int().default(0),
+  /** Explicit photo selection for a new AI-assisted video branch. */
+  acceptedMediaId: z.string().nullable().default(null),
+  acceptedJobId: z.string().nullable().default(null),
   /** frame: какой кадр взять из видео и извлечённый файл библиотеки. Локально через ffmpeg, бесплатно. */
   which: z.enum(['first', 'last']).default('last'),
   /** frame, trim, video: файл библиотеки (кадр, обрезанное видео, своё видео). */
@@ -86,7 +117,7 @@ export const FlowSchema = z.object({
     if (from === undefined || to === undefined || e.from === e.to) { error('Связь ссылается на отсутствующую ноду или саму себя.'); continue; }
     const ports = inputsOf(to, ['ref', 'start', 'end']);
     if (!ports.includes(e.port) || !portAccepts(e.port, outputOf(from))) error('Несовместимые порты связи.');
-    const key = `${e.to}:${e.port}:${['start', 'end', 'video', 'media'].includes(e.port) ? '' : e.from}`;
+    const key = `${e.to}:${e.port}:${['idea', 'start', 'end', 'video', 'media'].includes(e.port) ? '' : e.from}`;
     if (used.has(key)) error('Повторная связь во входе.');
     used.add(key);
     adjacency.set(e.from, [...(adjacency.get(e.from) ?? []), e.to]);
@@ -108,6 +139,8 @@ export type Flow = z.infer<typeof FlowSchema>;
 
 /** Какие входы принимает нода. Промпт и картинка входов не имеют. */
 export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[] {
+  if (node.type === 'ai') return ['context', 'ref'];
+  if (node.type === 'prompt') return ['idea'];
   if (node.type === 'frame' || node.type === 'trim') return ['video'];
   if (node.type === 'resize' || node.type === 'upscale') return ['media'];
   // Seedance-промптер берёт сколько угодно картинок (модель — до 30): каждая становится картинкой панели.
@@ -117,8 +150,9 @@ export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[
 }
 
 /** Что отдаёт нода: текст, картинку или видео. Обрезка отдаёт видео — его можно резать дальше и брать из него кадр. */
-export const outputOf = (node: CanvasNode): 'text' | 'image' | 'video' =>
-  node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize' || node.type === 'upscale') && node.kind === 'video') ? 'video' : 'image';
+export type CanvasOutputType = 'context' | 'idea' | 'text' | 'image' | 'video';
+export const outputOf = (node: CanvasNode): CanvasOutputType =>
+  node.type === 'comment' ? 'context' : node.type === 'ai' ? 'idea' : node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize' || node.type === 'upscale') && node.kind === 'video') ? 'video' : 'image';
 
 /** Ноды, выход которых — выбранный вариант запусков (`jobIds[selected]`): генератор, Seedance-промптер, апскейл. */
 export const isJobNode = (node: CanvasNode): boolean => node.type === 'generator' || node.type === 'seedance' || node.type === 'upscale';
@@ -132,8 +166,8 @@ export const isCanvasRefKey = (key: string): boolean => key.startsWith('cv-');
 export const isCanvasDraft = (slug: string): boolean => slug.startsWith('cv-');
 
 /** Промпт — только во вход prompt, видео — во вход video, «Размер» берёт и то и другое, картинки — в ref / start / end. */
-export const portAccepts = (port: InputPort, output: 'text' | 'image' | 'video'): boolean =>
-  port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : port === 'media' ? output !== 'text' : output === 'image';
+export const portAccepts = (port: InputPort, output: CanvasOutputType): boolean =>
+  port === 'context' ? output === 'context' : port === 'idea' ? output === 'idea' : port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : port === 'media' ? output === 'image' || output === 'video' : output === 'image';
 
 /**
  * Связи из ноды, которые её выход больше не принимают. Выход «Размера» и апскейла меняет вид вслед за входом

@@ -83,6 +83,8 @@ export function createCharacters(options: { dataDir: string; provider?: SoulIdPr
   }
   return {
     list,
+    /** Read stored characters without recovery, writes or provider calls (input previews). */
+    listStored: readAll,
     async create(raw: CreateCharacterInput): Promise<Character> {
       const parsed = CreateCharacterSchema.safeParse(raw);
       if (!parsed.success) throw new SoulIdError('Нужны имя, 1–100 фото, согласие на отправку и подтверждение неизвестной стоимости.', 422);

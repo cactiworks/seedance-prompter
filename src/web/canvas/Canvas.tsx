@@ -11,10 +11,10 @@ import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
-import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
+import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, useCanvas } from './canvasStore.ts';
 import { NodeView, portsOf } from './NodeView.tsx';
 import { afterSeedanceClose } from './openSeedance.ts';
-import { cloneSeedance } from '../../core/canvas/seedance.ts';
+import { CanvasAiDrawer } from './CanvasAi.tsx';
 import { useStore, type ProjectHost } from '../store.ts';
 
 const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
@@ -116,7 +116,7 @@ export function Canvas() {
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [picker, setPicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
-  const [consent, setConsent] = useState<(() => void) | null>(null);
+  const [consent, setConsent] = useState<{ run: () => void; provider?: string } | null>(null);
 
   useEffect(() => {
     const dismiss = (event: PointerEvent): void => {
@@ -145,6 +145,7 @@ export function Canvas() {
     setKeyboardFrom(null);
     setPicker(null);
     setConsent(null);
+    useCanvas.getState().closeAi();
     const flush = (): void => { void useCanvas.getState().flush(); };
     window.addEventListener('pagehide', flush);
     return () => { window.removeEventListener('pagehide', flush); flush(); };
@@ -374,10 +375,12 @@ export function Canvas() {
   };
 
   /** Что можно создать на конце связи, отпущенной в пустоту, — по типу выхода. */
-  const linkOptions = (fromId: string): { label: string; type: 'generator' | 'frame' | 'trim' | 'resize' | 'seedance' | 'upscale'; kind: 'image' | 'video'; port: InputPort }[] => {
+  const linkOptions = (fromId: string): { label: string; type: CanvasNode['type']; kind: 'image' | 'video'; port: InputPort }[] => {
     const from = nodeById.get(fromId);
     if (from === undefined) return [];
     const out = outputOf(from);
+    if (out === 'context') return [{ label: 'Разработать идею с AI', type: 'ai', kind: 'image', port: 'context' }];
+    if (out === 'idea') return [];
     if (out === 'text')
       return [
         { label: 'Создать изображение', type: 'generator', kind: 'image', port: 'prompt' },
@@ -391,6 +394,7 @@ export function Canvas() {
         { label: 'Апскейл Topaz', type: 'upscale', kind: 'video', port: 'media' },
       ];
     return [
+      { label: 'Обсудить изображение с AI', type: 'ai', kind: 'image', port: 'ref' },
       { label: 'Создать изображение по референсу', type: 'generator', kind: 'image', port: 'ref' },
       { label: 'Оживить изображение', type: 'generator', kind: 'video', port: 'start' },
       { label: 'Добавить в Seedance-промптер', type: 'seedance', kind: 'image', port: 'ref' },
@@ -432,7 +436,7 @@ export function Canvas() {
       FlowSchema.parse({ ...parsed, id: 'import', createdAt: '', updatedAt: '' });
       // Новые id: импорт того же flow второй раз не должен делить с оригиналом ноды и черновики Seedance-промптеров.
       const ids = new Map(parsed.nodes.map((n) => [n.id, newId('n')]));
-      const nodes = parsed.nodes.map((n) => ({ ...n, production: undefined, id: ids.get(n.id) ?? n.id, ...cloneSeedance(n) }));
+      const nodes = parsed.nodes.map(n => remapCanvasCopy(n, ids));
       const edges = parsed.edges.flatMap((e) => {
         const from = ids.get(e.from);
         const to = ids.get(e.to);
@@ -507,9 +511,11 @@ export function Canvas() {
               <Text variant="caption" tone="tertiary">{ui("Материал")}</Text>
               <button type="button" onClick={() => addBlock('image')}><Icon name="image" size={1} />{ui("Изображение")}</button>
               <button type="button" onClick={() => addBlock('video')}><Icon name="video" size={1} />{ui("Видео")}</button>
+              <button type="button" onClick={() => addBlock('comment')}><Icon name="pencil" size={1} />{ui('Комментарий')}</button>
             </div>
             <div className={styles.addGroup} role="group" aria-label={ui("Создать")}>
               <Text variant="caption" tone="tertiary">{ui("Создать")}</Text>
+              <button type="button" onClick={() => addBlock('ai')}><Icon name="sparkles" size={1} />{ui('AI · идея и prompt')}</button>
               <button type="button" onClick={() => addBlock('generator', 'image')}><Icon name="sparkles" size={1} />{ui("Изображение")}</button>
               <button type="button" onClick={() => addBlock('generator', 'video')}><Icon name="video" size={1} />{ui("Видео")}</button>
               <button type="button" onClick={() => addBlock('seedance')}><Icon name="options" size={1} />{ui("Seedance-промптер")}</button>
@@ -594,7 +600,7 @@ export function Canvas() {
             {linkFrom !== undefined && act?.type === 'link' && <path d={curve(outPoint(linkFrom).x, outPoint(linkFrom).y, act.x, act.y)} className={styles.edgeDraft} />}
           </svg>
           {flow.nodes.map((node) => (
-            <NodeView key={`${flow.id}:${node.id}`} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} keyboardSource={keyboardFrom === node.id} onKeyboardOutput={() => { setKeyboardFrom(node.id); setHint('Выход выбран. Нажми Tab до нужного входа и Enter; Escape — отмена.'); }} onKeyboardInput={(port) => { if (keyboardFrom !== null) { setHint(connect(keyboardFrom, node.id, port) ?? 'Связь создана.'); setKeyboardFrom(null); } else setHint('Сначала выбери выход исходной ноды.'); }} onPickFromLibrary={setPicker} onNeedConsent={(runIt) => setConsent(() => runIt)} />
+            <NodeView key={`${flow.id}:${node.id}`} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} keyboardSource={keyboardFrom === node.id} onKeyboardOutput={() => { setKeyboardFrom(node.id); setHint('Выход выбран. Нажми Tab до нужного входа и Enter; Escape — отмена.'); }} onKeyboardInput={(port) => { if (keyboardFrom !== null) { setHint(connect(keyboardFrom, node.id, port) ?? 'Связь создана.'); setKeyboardFrom(null); } else setHint('Сначала выбери выход исходной ноды.'); }} onPickFromLibrary={setPicker} onNeedConsent={(runIt, provider) => setConsent({ run: runIt, provider })} />
           ))}
         </div>
 
@@ -721,7 +727,7 @@ export function Canvas() {
         open={consent !== null}
         onOpenChange={(open) => !open && setConsent(null)}
         title={ui("Отправить картинки провайдеру?")}
-        description={ui("Изображения этого блока уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки.")}
+        description={consent?.provider === 'higgsfield' ? ui('Изображения этого блока уйдут в Higgsfield и исполнителю выбранной модели. Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки.') : ui("Изображения этого блока уйдут в KIE, а оттуда — исполнителю модели (fal / replicate). Если на них есть лицо, оно тоже уйдёт. Согласие действует до закрытия вкладки.")}
         footer={
           <>
             <Button variant="ghost" size="s" onClick={() => setConsent(null)}>
@@ -730,7 +736,7 @@ export function Canvas() {
               variant="primary"
               size="s"
               onClick={() => {
-                consent?.();
+                consent?.run();
                 setConsent(null);
               }}
             >
@@ -741,6 +747,7 @@ export function Canvas() {
         <Text variant="label" tone="secondary">
           {ui("Запустится только этот блок.")}</Text>
       </Dialog>
+      <CanvasAiDrawer />
     </div>
   );
 }

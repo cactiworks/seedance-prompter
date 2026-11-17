@@ -1,8 +1,33 @@
 import type { CanvasNode, Flow } from '../model/canvas.ts';
 
-const config = (n: CanvasNode): string => JSON.stringify([n.type, n.type === 'seedance' ? null : n.text, n.source, n.modelId, n.params, n.which, n.start, n.end, n.width, n.height, n.fit, n.kind]);
-const output = (n: CanvasNode): string => JSON.stringify([config(n), n.mediaId, n.jobIds[n.selected], n.stale]);
-const processed = (n: CanvasNode): boolean => !['prompt', 'image', 'video'].includes(n.type);
+const config = (n: CanvasNode): string => JSON.stringify([n.type, n.type === 'seedance' ? null : n.text, n.source, n.modelId, n.params, n.which, n.start, n.end, n.width, n.height, n.fit, n.kind, n.type === 'ai' ? n.targetGeneratorId : null, n.aiSource]);
+const output = (n: CanvasNode): string => JSON.stringify([config(n), n.mediaId, n.jobIds[n.selected], n.stale, n.acceptedMediaId, n.acceptedJobId, n.ai?.idea, n.ai?.prompt, n.aiApproval]);
+const processed = (n: CanvasNode): boolean => !['comment', 'prompt', 'image', 'video'].includes(n.type);
+/** Settings are a dependency, while the target's generated result is not an AI input. */
+const targetConfig = (flow: Flow, node: CanvasNode): string => {
+  if (node.type !== 'ai') return '';
+  const target = flow.nodes.find(n => n.id === node.targetGeneratorId && n.type === 'generator');
+  if (!target) return 'null';
+  // Only provider-bound media inputs are reverse dependencies. Following the
+  // target's prompt edge would include this AI's own result and form a cycle.
+  const edges = flow.edges.filter(e => e.to === target.id && ['ref', 'start', 'end'].includes(e.port));
+  const queue = edges.map(e => e.from);
+  const seen = new Set<string>();
+  const sources: string[] = [];
+  const upstreamEdges = [...edges];
+  for (let i = 0; i < queue.length; i += 1) {
+    const id = queue[i]!;
+    if (seen.has(id) || id === node.id || id === target.id) continue;
+    seen.add(id);
+    const source = flow.nodes.find(n => n.id === id);
+    if (source) sources.push(`${id}:${output(source)}`);
+    for (const edge of flow.edges.filter(e => e.to === id)) {
+      if (edge.from === node.id || edge.from === target.id) continue;
+      upstreamEdges.push(edge); queue.push(edge.from);
+    }
+  }
+  return JSON.stringify([target.id, target.kind, target.modelId, target.params, target.text, upstreamEdges, sources.sort()]);
+};
 
 /** Keep old files as history, but never pass them downstream as a current result. */
 export function invalidateChanged(previous: Flow, next: Flow): Flow {
@@ -12,6 +37,7 @@ export function invalidateChanged(previous: Flow, next: Flow): Flow {
     const old = previous.nodes.find((n) => n.id === node.id);
     if (old === undefined) continue;
     if (config(old) !== config(node) && processed(node)) stale.add(node.id);
+    if (targetConfig(previous, old) !== targetConfig(next, node)) stale.add(node.id);
     if (output(old) !== output(node)) changed.add(node.id);
   }
   for (const edge of [...previous.edges, ...next.edges]) {
@@ -41,5 +67,5 @@ export function inputFingerprint(flow: Flow, id: string): string {
       if (from !== undefined && !seen.has(from.id)) { seen.add(from.id); upstream.push(`${from.id}:${output(from)}`); queue.push(from.id); }
     }
   }
-  return JSON.stringify([node === undefined ? null : config(node), flow.edges.filter((e) => seen.has(e.to) || e.to === id), upstream.sort()]);
+  return JSON.stringify([node === undefined ? null : config(node), flow.edges.filter((e) => seen.has(e.to) || e.to === id), upstream.sort(), node === undefined ? '' : targetConfig(flow, node)]);
 }

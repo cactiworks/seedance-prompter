@@ -5,6 +5,8 @@ import { ui } from '../language.ts';
 
 /** Translate tool names, retaining creator-supplied image/video labels verbatim. */
 export function nodeTitle(node: CanvasNode): string {
+  if (node.type === 'comment') return node.label || ui('Комментарий');
+  if (node.type === 'ai') return node.label || ui('AI · один шот');
   if ((node.type === 'image' || node.type === 'video') && node.label) return node.label;
   if (node.type === 'resize') return `${ui('Размер')} · ${node.width}×${node.height}`;
   if (node.type === 'upscale') return `${ui('Апскейл Topaz')} · ${String(paramsFor(upscaleModelOf(node.kind), node.params).upscaleFactor)}×`;

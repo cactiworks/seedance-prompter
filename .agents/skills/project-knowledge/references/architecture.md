@@ -64,6 +64,7 @@ rename. Конкурентные изменения проекта, Canvas, sess
 | задачи генерации | `data/jobs/<id>.json` |
 | готовые файлы | `data/library/<yyyy-mm>/<id>.<ext>` + `<id>.json` (промпт, модель, параметры, рефы, taskId, кредиты, sha256, исходная ссылка) |
 | flows canvas | `data/canvas/` |
+| история Canvas AI | `data/canvas-ai/`: отдельные durable runs, входы, версии, approvals, usage и сохранённые изображения; полный LLM input остаётся серверным |
 | серии Production (Codex, photos / mock) | `data/production-mock/<id>.json`: rev, preparation/calls, scenePlan, promptPlan, shots, artifacts, approvals и events; fixtures в `src/web/public/production-mock/` |
 | сессии студии | `data/studio/` |
 | свои мудборды, оценки, правила владельца | `data/moodboards.json`, `data/verdicts.json`, `data/learnings.json` |
@@ -73,6 +74,10 @@ rename. Конкурентные изменения проекта, Canvas, sess
 | исторические сырые выводы прежнего doctor | `data/logs/doctor/` (новый doctor сюда не пишет) |
 
 ## Модель кадра (главное)
+
+Canvas AI (17.11.2026): `comment` отдаёт context, `ai` получает context и прямые image refs, хранит явный `targetGeneratorId` и компактную проекцию текущих idea/prompt. Самостоятельный durable runtime — `src/server/canvasAi/`, публичные DTO — `src/core/model/canvasAi.ts`. Две ручные стадии idea → approval → prompt → approval; prompt материализуется отдельной нодой. Привязка к генератору — зависимость настроек без обратного data edge. История и authoritative approvals живут отдельно от Flow; API не отдаёт private account binding, полный Flow snapshot и точный LLM input. Generation jobs и library metadata сохраняют `canvas` lineage с версиями идеи/prompt.
+
+`/api/canvas-ai/runs` создаёт запуск только по клику; GET читает статус/историю, отдельные endpoints обслуживают cancel/retry/approve/revalidate и приёмку фото. Read-only `/preview` возвращает digest фактических входов; start/retry сверяют его до inference, включая смену байтов/identity refs вне Flow. Revalidate создаёт новую запись с `supersedesRunId` и собственными файлами, не переписывая старую. Завершение сохраняет свою попытку и применяет проекцию только к совпадающему контексту. Перезапуск не повторяет inference. Общий Resolver/fingerprint и gates находятся в `src/core/canvas/ai.ts` и `freshness.ts`. Модель роли — `SP_CANVAS_AI_MODEL`, затем общий `SP_LLM_MODEL`, затем обычное умолчание Runner. Runtime не получает контекст чата разработки или профиль владельца.
 
 - `Project` — общий мир ролика, формат `aspectRatio`, диалект ссылок, референсы, герои, предметы,
   кадры, непрерывность.

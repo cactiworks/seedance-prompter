@@ -2,7 +2,7 @@ import { createGenerationQuotes } from './quotes.ts';
 import { z } from 'zod';
 import { randomInt } from 'node:crypto';
 import { billedSeconds, estimate, findModel, formatCost, forProvider, paramsFor, resolveSeeds, validateGen, type Estimate, type GenModel, type GenParams, type MediaKind, type ParamDef, type ProviderId, type SentRef } from '../../core/gen/models.ts';
-import { GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
+import { CanvasOriginSchema, GenParamsSchema, OriginSchema, RefSourceSchema, type GenJob, type JobRef, type RefSource } from '../../core/model/media.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJobStore, newJobId } from '../storage/jobStore.ts';
 import { createLibrary, DownloadError, MIME_BY_EXT } from '../storage/library.ts';
@@ -36,6 +36,7 @@ export const SubmitRequestSchema = z.object({
   /** Согласие отправить рефы провайдеру. */
   refsConsent: z.boolean().optional(),
   origin: OriginSchema.optional(),
+  canvas: CanvasOriginSchema.optional(),
   sessionId: z.string().optional(),
   /** Метка запуска (калибровка). */
   tag: z.string().max(160).optional(),
@@ -267,6 +268,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
           params: jobParams,
           refs,
           origin,
+          ...(request.canvas === undefined ? {} : { canvas: request.canvas }),
           sessionId: session?.id ?? null,
           tag: request.tag ?? null,
           estimateCredits: cost.credits / count,
@@ -348,6 +350,7 @@ export function createGenRuntime(options: GenRuntimeOptions) {
         params: job.params,
         refs: job.refs,
         origin: job.origin,
+        ...(job.canvas === undefined ? {} : { canvas: job.canvas }),
         sessionId: job.sessionId,
         index,
         sourceUrl: url,

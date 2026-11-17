@@ -13,7 +13,7 @@ export interface FlowTemplate {
 }
 
 /** kind — для нод без модели, чей выход зависит от входа (апскейл, «Размер»): должен совпасть с тем, что придёт. */
-type Spec = { key: string; type: CanvasNodeType; x: number; y: number; modelId?: string; text?: string; which?: 'first' | 'last'; label?: string; kind?: 'image' | 'video' };
+type Spec = { key: string; type: CanvasNodeType; x: number; y: number; modelId?: string; text?: string; which?: 'first' | 'last'; label?: string; kind?: 'image' | 'video'; targetKey?: string };
 
 /** Ноды по описанию + рёбра по ключам: `[из, в, порт]`. */
 function assemble(newId: (prefix: string) => string, specs: Spec[], links: [string, string, InputPort][]): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
@@ -31,6 +31,7 @@ function assemble(newId: (prefix: string) => string, specs: Spec[], links: [stri
       modelId: model?.id ?? '',
       params: model === undefined ? {} : paramsFor(model, {}),
       which: s.which ?? 'last',
+      targetGeneratorId: s.targetKey === undefined ? null : ids.get(s.targetKey) ?? null,
     });
   });
   const edges = links.map(([from, to, port]) => ({ id: newId('e'), from: ids.get(from) ?? '', to: ids.get(to) ?? '', port }));
@@ -40,7 +41,46 @@ function assemble(newId: (prefix: string) => string, specs: Spec[], links: [stri
 const COL = 360;
 const ROW = 420;
 
+/** Empty editable branches. Creating a template never calls AI or media providers. */
+function brollBranches(newId: (prefix: string) => string, count: number): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  const specs: Spec[] = [{ key: 'common', type: 'comment', x: -COL - 60, y: 0, label: 'Общая концепция и ограничения' }];
+  const links: [string, string, InputPort][] = [];
+  for (let i = 1; i <= count; i += 1) {
+    const y = (i - 1) * 1100;
+    const key = (part: string): string => `${part}-${i}`;
+    specs.push(
+      { key: key('photo-comment'), type: 'comment', x: 0, y, label: `B-roll ${i} · пожелания к фото` },
+      { key: key('photo-ai'), type: 'ai', x: COL, y, label: `B-roll ${i} · идея фото`, targetKey: key('photo') },
+      { key: key('photo'), type: 'generator', x: COL * 3, y, modelId: 'higgsfield/soul-2', label: `B-roll ${i} · фото` },
+      { key: key('video-comment'), type: 'comment', x: COL * 3, y: y + 650, label: `B-roll ${i} · движение и события` },
+      { key: key('video-ai'), type: 'ai', x: COL * 4, y, kind: 'video', label: `B-roll ${i} · идея видео`, targetKey: key('video') },
+      { key: key('video'), type: 'generator', x: COL * 6, y, modelId: 'higgsfield/seedance-2-5', label: `B-roll ${i} · видео` },
+    );
+    links.push(
+      ['common', key('photo-ai'), 'context'],
+      [key('photo-comment'), key('photo-ai'), 'context'],
+      ['common', key('video-ai'), 'context'],
+      [key('video-comment'), key('video-ai'), 'context'],
+      [key('photo'), key('video-ai'), 'ref'],
+      [key('photo'), key('video'), 'start'],
+    );
+  }
+  return assemble(newId, specs, links);
+}
+
 export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
+  {
+    id: 'managed-broll',
+    titleRu: 'B-roll с AI: фото → видео',
+    descriptionRu: 'Comments → идея → prompt → Soul 2 → принятое фото → идея движения → prompt → Seedance. Каждый шаг вручную.',
+    build: (newId) => brollBranches(newId, 1),
+  },
+  {
+    id: 'managed-five-broll',
+    titleRu: 'Пять B-roll с AI',
+    descriptionRu: 'Общая концепция и пять независимых веток Soul 2 → Seedance. Prompts появятся после одобрения идей.',
+    build: (newId) => brollBranches(newId, 5),
+  },
   {
     id: 'storyboard-seedance',
     titleRu: 'Снять видео по раскадровке',

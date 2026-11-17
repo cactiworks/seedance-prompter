@@ -18,8 +18,9 @@ import styles from './Canvas.module.css';
 import { NODE_WIDTH, PORT_STEP, PORT_TOP, useCanvas } from './canvasStore.ts';
 import { jobLookup, openSeedanceNode } from './openSeedance.ts';
 import { submissionIssue } from '../../core/gen/jobStatus.ts';
+import { AiNodeCard, ManagedGenerationActions, ManagedPromptCard } from './CanvasAi.tsx';
 
-export const PORT_RU: Record<InputPort, string> = { prompt: 'Промпт', ref: 'Реф', start: 'Старт', end: 'Финал', video: 'Видео', media: 'Файл' };
+export const PORT_RU: Record<InputPort, string> = { context: 'Контекст', idea: 'Идея', prompt: 'Промпт', ref: 'Реф', start: 'Старт', end: 'Финал', video: 'Видео', media: 'Файл' };
 
 /** Входы ноды с учётом ролей выбранной модели. */
 export function portsOf(node: CanvasNode): InputPort[] {
@@ -458,7 +459,7 @@ interface NodeViewProps {
   onKeyboardInput: (port: InputPort) => void;
   keyboardSource: boolean;
   onPickFromLibrary: (nodeId: string) => void;
-  onNeedConsent: (run: () => void) => void;
+  onNeedConsent: (run: () => void, provider: string | undefined) => void;
 }
 
 export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp, onKeyboardOutput, onKeyboardInput, keyboardSource, onPickFromLibrary, onNeedConsent }: NodeViewProps) {
@@ -482,6 +483,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   };
 
   const plan = flow === null || (node.type !== 'generator' && node.type !== 'upscale') ? null : planRun(flow, node.id, mediaOf);
+  const managed = flow?.nodes.some(n => n.type === 'ai' && n.targetGeneratorId === node.id) ?? false;
 
   // Запускается только эта нода: ниже по графу ничего само не стартует (у connxn стартовало — и тратило деньги).
   const start = async (consent: boolean): Promise<void> => {
@@ -490,7 +492,10 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     setError(null);
     const finish = useCanvas.getState().captureResult(node.id);
     try {
-      const created = await run({ modelId: plan.modelId, prompt: plan.prompt, params: plan.params, refs: plan.refs, count: 1, confirmCredits: plan.estimate.credits, refsConsent: plan.refs.length > 0 && consent ? true : undefined });
+      if (managed && !await useCanvas.getState().flush()) throw new Error('Сначала сохрани изменения холста.');
+      const current = useCanvas.getState().flow;
+      if (managed && current?.id !== flow?.id) throw new Error('Холст изменился. Запусти нужный блок из его текущей версии.');
+      const created = await run({ modelId: plan.modelId, prompt: plan.prompt, params: plan.params, refs: plan.refs, count: 1, confirmCredits: plan.estimate.credits, refsConsent: plan.refs.length > 0 && consent ? true : undefined, ...(managed && current ? { canvas: { flowId: current.id, nodeId: node.id } } : {}) });
       finish({ jobIds: [...node.jobIds, ...created.map((j) => j.id)], selected: node.jobIds.length });
       setError(submissionIssue(created));
     } catch (e) {
@@ -500,7 +505,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
     }
   };
   const onRun = (): void => {
-    if (plan !== null && plan.refs.length > 0 && !hasRefsConsent()) onNeedConsent(() => void start(true));
+    if (plan !== null && plan.refs.length > 0 && !hasRefsConsent()) onNeedConsent(() => void start(true), findModel(plan.modelId)?.provider);
     else void start(plan !== null && plan.refs.length > 0);
   };
 
@@ -528,10 +533,11 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
   const runOutput = (
     <>
       <VariantResult node={node} kind={node.kind} emptyRu={ui("Результата пока нет")} />
+      {node.type === 'generator' && <ManagedGenerationActions node={node} />}
 
       {plan !== null && plan.problems.length > 0 && (
         <Text variant="caption" tone="secondary" className={styles.nodeProblems}>
-          {plan.problems.slice(0, 2).join(' ')}
+          {plan.problems.slice(0, 2).map(problem => ui(problem)).join(' ')}
         </Text>
       )}
       <Button variant="dark" size="s" loading={busy} disabled={plan === null || plan.problems.length > 0 || plan.estimate === null} icon={<Icon name={node.type === 'upscale' ? 'push' : 'sparkle'} size={1} />} onClick={onRun}>
@@ -567,7 +573,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       }}
     >
       <header className={styles.nodeHead} onPointerDown={(event) => onHeaderDown(event, node)}>
-        <Icon name={node.type === 'prompt' ? 'pencil' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.type === 'video' ? 'upload' : node.type === 'resize' ? 'apps' : node.type === 'seedance' ? 'options' : node.type === 'upscale' ? 'push' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
+        <Icon name={node.type === 'comment' || node.type === 'prompt' ? 'pencil' : node.type === 'ai' ? 'sparkles' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.type === 'video' ? 'upload' : node.type === 'resize' ? 'apps' : node.type === 'seedance' ? 'options' : node.type === 'upscale' ? 'push' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
         <Text variant="label" medium className={styles.nodeTitle}>
           {nodeTitle(node)}
         </Text>
@@ -594,7 +600,9 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
 
       <div className={styles.nodeBody} onPointerDown={(event) => event.stopPropagation()}>
         {node.stale && (node.mediaId !== null || node.jobIds.length > 0) && <div role="status"><Text variant="caption" tone="accent">{ui("Вход изменился. Прежний результат устарел; выполни этот шаг заново.")}</Text></div>}
-        {node.type === 'prompt' && <textarea className={styles.nodeText} rows={5} value={node.text} placeholder={ui("Текст промпта. Соедини выход со входом «Промпт» генератора.")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />}
+        {node.type === 'comment' && <><input className={styles.nodeSelect} value={node.label} aria-label={ui('Название комментария')} placeholder={ui('Название комментария')} onChange={event => patchNode(node.id, { label: event.target.value }, `label:${node.id}`)} /><textarea className={styles.nodeText} rows={5} value={node.text} aria-label={ui('Комментарий для AI')} placeholder={ui('Замысел, сценарий, настроение, композиция или правки — по-русски.')} onChange={event => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} /><Text variant="caption" tone="tertiary">{ui('Подключи к «Контексту» AI.')}</Text></>}
+        {node.type === 'ai' && <AiNodeCard node={node} />}
+        {node.type === 'prompt' && (node.aiSource ? <ManagedPromptCard node={node} /> : <textarea className={styles.nodeText} rows={5} value={node.text} placeholder={ui("Текст промпта. Соедини выход со входом «Промпт» генератора.")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />)}
 
         {node.type === 'image' && (
           <>
@@ -679,7 +687,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
                 ))}
               </div>
             )}
-            <textarea className={styles.nodeText} rows={2} value={node.text} placeholder={ui("Доп. текст — допишется после входящих промптов")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />
+            {managed ? <><Text variant="caption" tone="secondary">{ui('Изменяй prompt в обсуждении AI. Дополнительный текст требует нового одобрения.')}</Text>{node.text.trim() && <><Text variant="caption" tone="accent">{node.text}</Text><Button variant="border" size="xs" onClick={() => patchNode(node.id, { text: '' })}>{ui('Убрать дополнительный текст')}</Button></>}</> : <textarea className={styles.nodeText} rows={2} value={node.text} placeholder={ui("Доп. текст — допишется после входящих промптов")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />}
             {runOutput}
           </>
         )}

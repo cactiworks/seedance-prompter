@@ -22,6 +22,17 @@ export type JobRef = z.infer<typeof JobRefSchema>;
 export const OriginSchema = z.object({ projectSlug: z.string(), shotId: z.string(), attemptN: z.number().int().nullable() }).nullable();
 export type Origin = z.infer<typeof OriginSchema>;
 
+/** Immutable lineage of a manually launched Canvas AI generation. The server resolves version IDs. */
+export const CanvasOriginSchema = z.object({
+  flowId: z.string().min(1).max(128),
+  nodeId: z.string().min(1).max(128),
+  aiNodeId: z.string().min(1).max(128).optional(),
+  ideaVersionId: z.string().min(1).max(128).optional(),
+  promptVersionId: z.string().min(1).max(128).optional(),
+  inputFingerprint: z.string().optional(),
+});
+export type CanvasOrigin = z.infer<typeof CanvasOriginSchema>;
+
 /**
  * submitting → queued / running → downloading → saved.
  * failed — провайдер отказал, не приняли задачу или не дождались результата;
@@ -43,6 +54,7 @@ export const GenJobSchema = z.object({
   params: GenParamsSchema,
   refs: z.array(JobRefSchema),
   origin: OriginSchema,
+  canvas: CanvasOriginSchema.optional(),
   /** Сессия студии (Картинки / Видео), из которой запущено; null — запуск из кадра или canvas. */
   sessionId: z.string().nullable().default(null),
   /** Метка запуска: `cal:<запуск>:<набор>:<случай>:<модель>` у калибровки; null — обычная генерация. */
@@ -87,6 +99,7 @@ export const MediaItemSchema = z.object({
   params: GenParamsSchema,
   refs: z.array(JobRefSchema),
   origin: OriginSchema,
+  canvas: CanvasOriginSchema.optional(),
   sessionId: z.string().nullable().default(null),
   /** Номер файла в ответе провайдера (0 — первый). */
   index: z.number().int(),
