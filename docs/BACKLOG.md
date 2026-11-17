@@ -5,6 +5,18 @@
 
 ## Статус этапов
 
+17.11.2026 (деплой Canvas AI на VPS): runtime `872affe` развёрнут на существующем VPS, прежний
+`9faf229` сохранён для отката. Перед stop активных generation/Production/LLM не было. Backup
+812 файлов передан потоком на Mac и проверен по SHA-256. После cutover все 812 исходных файлов
+совпали, changed=0/added=0. После smoke исходные файлы также неизменны; единственное добавление —
+восстанавливаемый trash тестового Flow. Активных холстов осталось 18, остальные счётчики прежние.
+Direct HTTPS smoke: 21 базовая и 12 feature checks PASS; проверены новые routes/assets, серверное
+сохранение и reload графа пяти B-roll (31 нода, 10 AI), затем cleanup тестового холста. Chromium
+показал новые templates и comment/AI actions, ready около 3,4 с, JavaScript page errors=0.
+Три отсутствующих job metadata из старого холста отсутствовали и в pre-deploy backup; новых
+пропавших файлов нет. Yab не ответил в timeout, браузерная проверка выполнена Chromium.
+Caddy и seedance active. Подключения и credentials не переносились, AI/media calls=0.
+
 17.11.2026 (Canvas AI pipeline): добавлены comment/AI-ноды, двухэтапное обсуждение русской идеи и
 отдельная сборка managed prompt. Approvals привязаны к версии и входам; изменения требуют review.
 Перед первым вызовом read-only preview показывает direct AI refs, конкретные фото выбранного Soul ID
@@ -23,7 +35,7 @@ RU/EN и обеих темах, отдельно inputs preview и comment/promp
 живой inference, сходство внешности и качество реальных Soul 2/Seedance результатов не подтверждены.
 Start/retry сверяют digest показанного preview; замена байтов reference или набора Soul ID после
 preview отклоняется до LLM-вызова, UI снимает согласие и загружает новый набор без auto-retry.
-Платный live-проход выполняет владелец. Обновление рабочего VPS этим локальным внедрением не заявляется.
+Платный live-проход выполняет владелец. Результаты отдельного deploy приведены выше.
 Схема и границы — `docs/CANVAS-AI-PIPELINE.md`.
 
 15.11.2026 (переключение Canvas): воспроизведён 409 CONFLICT, из-за которого старый dirty Flow

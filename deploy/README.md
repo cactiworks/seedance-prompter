@@ -9,6 +9,15 @@ Netlify — прежний optional gateway, не участвующий в пр
 `netlify.toml.example` сохранён только для legacy/отката. Прямой cutover проверен 06.11.2026.
 Vercel не внедрён и для этой topology не требуется. Режим browser auth не меняется: по решению владельца 19.10.2026 вход открыт без логина.
 
+## Текущий runtime — 17.11.2026
+
+Обновление runtime 17.11.2026: Canvas AI release `872affe` развёрнут на том же VPS; старый `9faf229`
+сохранён для отката. Backup 812 файлов скачан на Mac и проверен по SHA-256. Все исходные файлы
+совпали до/после запуска; после canary добавился только trash временного тестового Flow.
+Базовый direct smoke (21 checks), новый Canvas AI smoke (12 checks), сохранение/reload графа
+пяти B-roll и Chromium UI прошли без AI/media calls. Реальное качество генераций проверяет владелец.
+Подробный результат — `docs/BACKLOG.md`; конкретные operational paths остаются в приватном runbook.
+
 ## Статус cutover — 06.11.2026
 
 Прямой вход проверен: HTTPS UI и JS/CSS отвечают 200, `/api/health` показывает release
