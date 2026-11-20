@@ -22,6 +22,12 @@ Approved история сохраняется: после cancelled/failed за
 на 1440×1000/1280×900/1024×640/769×900/767×900/390×844, RU/light и EN/dark. Реальные платные
 генерации и оценка качества не выполнялись. Общий `npm run check`: 703 tests / 63 files,
 TypeScript, ESLint, Stylelint и build PASS. Независимое code review после исправлений clean.
+Независимое layout review: 20 captures панелей/карточек на шести размерах и desktop add chooser —
+clean. Release `602ba59` развёрнут на рабочем VPS, прежний `872affe` сохранён. Перед stop не было
+активных generation/AI, backup 858 файлов скачан на Mac и сверён по SHA-256. После cutover
+858/858 неизменны; direct smoke21checks PASS. Затем из истории возвращена ранее одобренная
+идея в существующем пользовательском Flow: тот же текст и approval, прежний prompt-блок reused,
+число нод осталось4. Это единственное намеренное изменение данных, AI/media calls=0.
 
 17.11.2026 (деплой Canvas AI на VPS): runtime `872affe` развёрнут на существующем VPS, прежний
 `9faf229` сохранён для отката. Перед stop активных generation/Production/LLM не было. Backup

@@ -1,8 +1,10 @@
 # Запуск
 
-Последнее обновление runtime: 17.11.2026, release `872affe` с Canvas AI. Direct VPS smoke и
-Chromium UI проверены без inference/media submit; 812 исходных data files сохранены, backup
-проверен на Mac, предыдущий release `9faf229` оставлен для отката. Проверки и границы — `docs/BACKLOG.md`.
+Последнее обновление runtime: 20.11.2026, release `602ba59` с отдельными нодами идеи и AI-промптинга.
+Direct VPS smoke проверен без inference/media submit; 858 исходных data files сохранены после
+cutover, backup проверен на Mac, предыдущий release `872affe` оставлен для отката. После запуска
+в существующий Flow возвращена прежняя одобренная идея без нового approval/AI-вызова; остальные
+данные и история сохранены. Проверки и границы — `docs/BACKLOG.md`.
 
 Рабочая студия с 19.10.2026 находится на Linux VPS. По решению 06.11.2026 основной вход —
 прямой HTTPS через Caddy на существующем VPS; cutover проверен 06.11.2026. Netlify остаётся
