@@ -9,7 +9,7 @@ import { withLearnings } from '../../core/gen/calibration.ts';
 import { findModel, paramsFor } from '../../core/gen/models.ts';
 import { cardFile, EMPTY_SHOT, validatePrompter, type PrompterRef } from '../../core/llm/buildPrompter.ts';
 import type { CanvasAiPreview } from '../../core/model/canvasAi.ts';
-import { CanvasNodeSchema, FlowSchema, type CanvasAiVersion, type Flow } from '../../core/model/canvas.ts';
+import { CanvasNodeSchema, FlowSchema, type CanvasAiVersion, type CanvasNode, type Flow } from '../../core/model/canvas.ts';
 import type { CanvasOrigin, RefSource } from '../../core/model/media.ts';
 import { characterReady } from '../../core/production/character.ts';
 import { imageSize } from '../gen/imageSize.ts';
@@ -78,6 +78,7 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
     const input = aiInputContext(flow, nodeId, mediaOf);
     if (input.problems.length) return fail('INVALID_CONTEXT', input.problems.join(' '));
     const node = flow.nodes.find(n => n.id === nodeId)!;
+    if (stage === 'prompt') promptNode(flow, node);
     const target = input.target!;
     const model = findModel(target.modelId)!;
     if (!['higgsfield/soul-2', 'higgsfield/seedance-2-5'].includes(model.id) || model.kind !== target.kind || model.tool) return fail('BAD_MODEL', 'Выбери модель нужного вида для генератора.');
@@ -123,12 +124,46 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
     return { snapshot, images, modelCard, inputFingerprint: input.inputFingerprint, parentRunId };
   }
 
+  /** Creating a visible prompting block does not call AI or invent a prompt version. */
+  function promptNode(flow: Flow, ai: CanvasNode, version?: CanvasAiVersion): Flow {
+    const target = flow.nodes.find(n => n.id === ai.targetGeneratorId && n.type === 'generator');
+    if (!target) return fail('TARGET_REQUIRED', 'Выбери целевой генератор перед созданием ноды промптинга.', 409);
+    const linked = flow.edges.filter(e => e.from === ai.id && e.port === 'idea').flatMap(e => flow.nodes.filter(n => n.id === e.to && n.type === 'prompt'));
+    const managed = flow.nodes.filter(n => n.type === 'prompt' && n.aiSource?.aiNodeId === ai.id);
+    const empty = linked.filter(n => !n.aiSource && !n.text.trim());
+    if (managed.length > 1 || (!managed.length && empty.length > 1)) return fail('PROMPT_NODE_CONFLICT', 'К этой идее подключено несколько нод промптинга. Оставь одну перед продолжением.', 409);
+    const existing = managed[0] ?? empty[0];
+    if (existing && flow.edges.some(e => e.to === existing.id && e.port === 'idea' && e.from !== ai.id)) return fail('PROMPT_NODE_CONFLICT', 'Нода промптинга подключена к другой идее. Верни её связь или выбери отдельную пустую ноду перед запуском.', 409);
+    if (!existing && linked.some(n => n.text.trim())) return fail('MANUAL_PROMPT_CONFLICT', 'Подключённый ручной промпт содержит текст. Сохрани его отдельно или подключи пустую ноду промптинга — ручной текст не перезаписывается.', 409);
+    const id = existing?.id ?? `p-${randomUUID()}`;
+    const prompt = version ? CanvasNodeSchema.parse({ ...existing, id, type: 'prompt', x: existing?.x ?? ai.x + 370, y: existing?.y ?? ai.y,
+      label: existing?.label || 'AI · промпт', text: version.text, stale: false,
+      aiSource: { aiNodeId: ai.id, versionId: version.id, inputFingerprint: version.inputFingerprint }, aiApproval: version.approval ?? undefined })
+      : existing ?? CanvasNodeSchema.parse({ id, type: 'prompt', x: ai.x + 370, y: ai.y, label: 'AI · промпт' });
+    const nodes = existing ? flow.nodes.map(n => n.id === id ? prompt : n) : [...flow.nodes, prompt];
+    // A managed prompt is compiled for exactly one target. Retargeting cannot
+    // leave the old generator silently connected to text for another model.
+    const edges = flow.edges.filter(e => !(e.from === id && e.port === 'prompt' && e.to !== target.id));
+    if (!edges.some(e => e.from === ai.id && e.to === id && e.port === 'idea')) edges.push({ id: `e-${ai.id}-${id}`, from: ai.id, to: id, port: 'idea' });
+    if (!edges.some(e => e.from === id && e.to === target.id && e.port === 'prompt')) edges.push({ id: `e-${id}-${target.id}`, from: id, to: target.id, port: 'prompt' });
+    return { ...flow, nodes, edges };
+  }
+
   async function project(run: StoredCanvasAiRun, materialize = false, setCurrent = false): Promise<Flow> {
     return options.flows.ensureProduction(run.flowId, '', flow => {
       const node = flow.nodes.find(n => n.id === run.nodeId && n.type === 'ai');
       if (!node || inputFingerprint(flow, node.id) !== run.inputFingerprint) return flow;
       // An older call may finish after a newer request; it cannot become the current projection.
       if (!setCurrent && node.ai?.runId && node.ai.runId !== run.id) return flow;
+      if (materialize && run.stage === 'prompt' && run.version) {
+        try { promptNode(flow, node, run.version); }
+        catch (error) {
+          if (!(error instanceof CanvasAiError) || !['MANUAL_PROMPT_CONFLICT', 'PROMPT_NODE_CONFLICT'].includes(error.code)) throw error;
+          // A connection may change in another window while inference runs.
+          // Keep the completed version in history and preserve that graph edit.
+          return { ...flow, nodes: flow.nodes.map(n => n.id === node.id ? { ...n, ai: { runId: run.id, status: 'ready' as const, stage: 'prompt' as const, idea: n.ai?.idea ?? null, prompt: null, errorRu: error.message } } : n) };
+        }
+      }
       const ai = { runId: run.id, status: run.status === 'running' ? 'running' as const : run.status === 'failed' ? 'failed' as const : run.status === 'interrupted' || run.status === 'cancelled' ? 'interrupted' as const : 'ready' as const,
         stage: run.stage, idea: node.ai?.idea ?? null, prompt: node.ai?.prompt ?? null, errorRu: run.errorRu };
       if (run.version) ai[run.stage] = run.version;
@@ -136,18 +171,18 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
       if (run.stage === 'idea') ai.prompt = null;
       let nodes = flow.nodes.map(n => n.id === node.id ? { ...n, ai, stale: false } : n.aiSource?.aiNodeId === node.id && (run.stage === 'idea' || run.status === 'running') ? { ...n, stale: true, aiApproval: undefined } : n);
       if (run.stage === 'idea' || run.status === 'running') nodes = nodes.map(n => n.id === node.targetGeneratorId ? { ...n, stale: true, acceptedJobId: null, acceptedMediaId: null } : n);
-      let edges = flow.edges;
-      if (materialize && run.stage === 'prompt' && run.version && node.targetGeneratorId) {
-        const existing = nodes.find(n => n.type === 'prompt' && n.aiSource?.aiNodeId === node.id);
-        const id = existing?.id ?? `p-${randomUUID()}`;
-        const prompt = CanvasNodeSchema.parse({ ...existing, id, type: 'prompt', x: existing?.x ?? node.x + 370, y: existing?.y ?? node.y,
-          text: run.version.text, stale: false, aiSource: { aiNodeId: node.id, versionId: run.version.id, inputFingerprint: run.inputFingerprint },
-          aiApproval: run.version.approval ?? undefined });
-        nodes = existing ? nodes.map(n => n.id === id ? prompt : n) : [...nodes, prompt];
-        edges = flow.edges.filter(e => !(e.from === id && e.port === 'prompt') && !(e.to === id && e.port === 'idea'));
-        edges = [...edges, { id: `e-${node.id}-${id}`, from: node.id, to: id, port: 'idea' as const }, { id: `e-${id}-${node.targetGeneratorId}`, from: id, to: node.targetGeneratorId, port: 'prompt' as const }];
+      const projected = { ...flow, nodes };
+      if (materialize && run.stage === 'prompt' && run.version) return promptNode(projected, node, run.version);
+      if (run.stage === 'idea' && run.status === 'approved') {
+        try { return promptNode(projected, node); }
+        catch (error) {
+          // Approval of the idea remains valid when a manual prompt needs resolving.
+          // The explicit prompt-node action reports that conflict without losing either text.
+          if (error instanceof CanvasAiError && ['MANUAL_PROMPT_CONFLICT', 'PROMPT_NODE_CONFLICT'].includes(error.code)) return projected;
+          throw error;
+        }
       }
-      return { ...flow, nodes, edges };
+      return projected;
     });
   }
 
@@ -276,6 +311,32 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
       return { run: publicRun(updated), flow: projected };
     });
   }
+
+  async function reviewedProjection(id: string, raw: Flow, expectedRevision: number, action: 'restore' | 'prompt-node') {
+    const flow = await savedSnapshot(raw);
+    return store.exclusive(`${flow.id}-approval`, async () => {
+      const run = await recover(id);
+      if (run.flowId !== flow.id) return fail('FLOW_CONFLICT', 'AI-запуск относится к другому холсту.', 409);
+      if (run.revision !== expectedRevision) return fail('RUN_CONFLICT', 'Версия AI изменилась. Обнови историю перед продолжением.', 409);
+      if (run.status !== 'approved' || !run.version?.approval || run.version.approval.versionId !== run.version.id || run.version.approval.inputFingerprint !== run.inputFingerprint) return fail('APPROVAL_REQUIRED', 'Вернуть можно только одобренную версию.', 409);
+      if (action === 'prompt-node' && run.stage !== 'idea') return fail('IDEA_REQUIRED', 'Нода промптинга создаётся из одобренной идеи.', 409);
+      for (const attempt of await store.list(flow.id, run.nodeId)) {
+        if (attempt.status === 'running' && (await recover(attempt.id)).status === 'running') return fail('ALREADY_RUNNING', 'Дождись текущего AI-вызова или останови его перед возвратом версии.', 409);
+      }
+      const current = await context(flow, run.nodeId, run.stage);
+      if (current.inputFingerprint !== run.inputFingerprint || current.snapshot.contextDigest !== run.snapshot.contextDigest) return fail('STALE_VERSION', 'Входы изменились. Перепроверь и одобри эту версию для новых входов.', 409);
+      const node = flow.nodes.find(n => n.id === run.nodeId && n.type === 'ai') ?? fail('NOT_FOUND', 'AI-нода не найдена.', 404);
+      if (action === 'prompt-node') {
+        if (node.ai?.idea?.id !== run.version.id) return fail('RESTORE_REQUIRED', 'Сначала верни эту одобренную идею из истории.', 409);
+        const saved = await options.flows.ensureProduction(flow.id, '', latest => {
+          if (latest.rev !== flow.rev) return fail('FLOW_CONFLICT', 'Холст изменился. Обнови его перед продолжением.', 409);
+          return promptNode(latest, node);
+        });
+        return { run: publicRun(run), flow: saved };
+      }
+      return { run: publicRun(run), flow: await project(run, true, true) };
+    });
+  }
   async function validateSubmission(body: unknown): Promise<CanvasOrigin | undefined> {
     if (!body || typeof body !== 'object' || !('canvas' in body) || !body.canvas) return;
     const raw = body as { canvas: { flowId?: unknown; nodeId?: unknown }; modelId?: unknown; prompt?: unknown; params?: unknown; refs?: unknown; count?: unknown };
@@ -303,6 +364,8 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
   }
   return {
     start, approve,
+    promptNode: (id: string, flow: Flow, revision: number) => reviewedProjection(id, flow, revision, 'prompt-node'),
+    restore: (id: string, flow: Flow, revision: number) => reviewedProjection(id, flow, revision, 'restore'),
     async preview(flowId: string, nodeId: string): Promise<CanvasAiPreview> {
       const flow = await options.flows.get(flowId);
       if (!flow) return fail('NOT_FOUND', 'Холст не найден.', 404);

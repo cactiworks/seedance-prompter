@@ -834,3 +834,20 @@
   display: block;
   margin-top: var(--lab-space-1);
 }
+
+.promptMenu {
+  padding: var(--lab-space-3);
+  border-radius: var(--lab-radius-s);
+}
+
+.promptMenu > summary {
+  padding: var(--lab-space-3);
+  cursor: pointer;
+  font-size: var(--lab-type-label-size);
+  line-height: var(--lab-type-label-line);
+}
+
+.promptMenu > summary:focus-visible {
+  outline: 2px solid var(--lab-accent);
+  outline-offset: 2px;
+}

@@ -2,7 +2,7 @@ import { Dialog as RadixDialog } from 'radix-ui';
 import { useEffect, useRef, useState } from 'react';
 import type { CanvasAiRun, CanvasAiPreview } from '../../core/model/canvasAi.ts';
 import type { CanvasAiVersion, CanvasNode, Flow } from '../../core/model/canvas.ts';
-import { aiInputContext, aiPromptProblems } from '../../core/canvas/ai.ts';
+import { aiInputContext, aiPromptProblems, promptIdeaSource } from '../../core/canvas/ai.ts';
 import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { findModel } from '../../core/gen/models.ts';
 import { savedMediaOf, thumbOf, useGen } from '../gen/genStore.ts';
@@ -46,33 +46,45 @@ export function AiNodeCard({ node }: { node: CanvasNode }) {
   }, [flow?.id, node.ai?.status]);
   const target = flow?.nodes.find(n => n.id === node.targetGeneratorId);
   const version = node.ai?.idea;
+  const promptNode = flow?.nodes.find(n => n.type === 'prompt' && promptIdeaSource(flow, n)?.id === node.id);
   const changed = !!node.stale && !!(node.ai?.idea || node.ai?.prompt);
   return <>
     <Text variant="caption" tone="secondary">{target ? nodeTitle(target) : ui('Выбери целевую генерацию')}</Text>
     <Text variant="label" className={styles.cardSummary}>{version?.text || ui('Подключи комментарий и предложи AI разработать один шот.')}</Text>
     <Text variant="caption" tone={changed ? 'accent' : 'secondary'} role="status">{
       changed ? ui('Вход изменился · нужна повторная проверка')
-        : node.ai?.status === 'running' ? ui('AI работает')
-          : node.ai?.errorRu || (flow && approved(node.ai?.prompt, flow, node) ? ui('Prompt одобрен')
-            : node.ai?.prompt ? ui('Prompt ждёт твоей проверки')
-            : flow && approved(node.ai?.idea, flow, node) ? ui('Идея одобрена · можно собрать prompt')
-              : node.ai?.idea ? ui('Идея ждёт твоего решения') : ui('Идея ещё не подготовлена'))
+        : node.ai?.status === 'running' && node.ai.stage === 'idea' ? ui('AI разрабатывает идею')
+          : node.ai?.stage === 'idea' && node.ai.errorRu ? node.ai.errorRu
+            : flow && approved(node.ai?.idea, flow, node) ? ui('Идея одобрена · следующий шаг: AI · промпт')
+              : node.ai?.idea ? ui('Идея ждёт твоего решения') : ui('Идея ещё не подготовлена')
     }</Text>
-    <Button variant="border" size="s" onClick={() => openAi(node.id, node.ai?.stage ?? 'idea')}>
-      {ui('Открыть обсуждение')}
+    <Button variant="border" size="s" onClick={() => openAi(node.id, 'idea')}>
+      {ui('Обсудить идею')}
     </Button>
+    {flow && approved(node.ai?.idea, flow, node) && <Button variant="dark" size="s" onClick={() => {
+      const id = promptNode?.id ?? useCanvas.getState().addAiPrompt(node.id);
+      if (id) { useCanvas.getState().focusNode(id); openAi(node.id, 'prompt'); }
+    }}>{ui('Перейти к AI · промпт')}</Button>}
   </>;
 }
 
 export function ManagedPromptCard({ node }: { node: CanvasNode }) {
   const { flow, openAi } = useCanvas();
+  const source = flow ? promptIdeaSource(flow, node) : undefined;
   const problems = flow ? aiPromptProblems(flow, node) : [];
+  const working = source?.ai?.stage === 'prompt' && source.ai.status === 'running';
+  const promptError = source?.ai?.stage === 'prompt' ? source.ai.errorRu : null;
+  const idea = source?.ai?.idea;
+  const ideaCurrent = !!flow && !!source && approved(idea, flow, source);
   return <>
-    <Text variant="caption" tone={problems.length ? 'accent' : 'secondary'} role="status">{problems[0] ? ui(problems[0]) : ui('Точная версия prompt одобрена')}</Text>
-    <pre className={styles.promptPreview}>{node.text}</pre>
-    <Button variant="border" size="s" disabled={!node.aiSource || !flow?.nodes.some(n => n.id === node.aiSource?.aiNodeId)} onClick={() => node.aiSource && openAi(node.aiSource.aiNodeId, 'prompt')}>
-      {ui('Проверить prompt')}
+    <Text variant="caption" tone="secondary">{ui('Вход: одобренная идея → выход: prompt для модели')}</Text>
+    {idea && <div className={styles.ideaPreview}><Text variant="caption" tone="secondary">{ui('Идея из связанной ноды')}</Text><Text variant="label" className={styles.cardSummary}>{idea.text}</Text></div>}
+    <Text variant="caption" tone={problems.length ? 'accent' : 'secondary'} role="status">{working ? ui('AI собирает промпт') : promptError || (problems[0] ? ui(problems[0]) : ui('Точная версия prompt одобрена'))}</Text>
+    {node.text ? <pre className={styles.promptPreview}>{node.text}</pre> : <Text variant="label" tone="secondary">{ui(ideaCurrent ? 'Идея одобрена. Открой этот блок, чтобы собрать промпт для модели.' : 'Prompt ещё не собран. Открой этот блок после одобрения идеи.')}</Text>}
+    <Button variant={node.text ? 'border' : 'dark'} size="s" disabled={!source} onClick={() => source && openAi(source.id, 'prompt')}>
+      {ui(node.text ? 'Обсудить промпт' : 'Открыть AI · промпт')}
     </Button>
+    {!ideaCurrent && source && <Button variant="ghost" size="s" onClick={() => { useCanvas.getState().focusNode(source.id); openAi(source.id, 'idea'); }}>{ui('Перейти к идее')}</Button>}
     <Text variant="caption" tone="tertiary">{ui('Правки — в обсуждении по-русски. Генерация запускается отдельно.')}</Text>
   </>;
 }
@@ -109,7 +121,7 @@ export function ManagedGenerationActions({ node }: { node: CanvasNode }) {
 
 /** Reading status never starts or retries a model call. Closing the drawer does not cancel a run. */
 export function CanvasAiDrawer() {
-  const { flow, aiDrawer, closeAi, patchNode } = useCanvas();
+  const { flow, aiDrawer, closeAi, openAi, patchNode } = useCanvas();
   const save = useCanvas(s => s.save);
   const node = flow?.nodes.find(n => n.id === aiDrawer?.nodeId && n.type === 'ai');
   const jobs = useGen(s => s.jobs);
@@ -189,6 +201,10 @@ export function CanvasAiDrawer() {
       setRuns(previous => [result.run, ...previous.filter(run => run.id !== result.run.id)]);
       if (clearDraft) setDrafts(previous => ({ ...previous, [draftKey]: '' }));
       setRefresh(value => value + 1);
+      if (result.run.stage === 'idea' && result.run.status === 'approved' && /\/(approve|revalidate|restore|prompt-node)$/.test(path)) {
+        const prompt = result.flow.nodes.find(n => n.type === 'prompt' && promptIdeaSource(result.flow, n)?.id === node.id);
+        if (prompt) useCanvas.getState().focusNode(prompt.id);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Действие не выполнено.');
       if (e instanceof CanvasAiApiError && e.code === 'PREVIEW_CHANGED') {
@@ -204,7 +220,6 @@ export function CanvasAiDrawer() {
     }), true);
   };
   const review = (run: CanvasAiRun, revalidate = false) => void mutate(`/api/canvas-ai/runs/${encodeURIComponent(run.id)}/${revalidate ? 'revalidate' : 'approve'}`, snapshot => ({ flow: snapshot, expectedRevision: run.revision }));
-  const chooseStage = (value: 'idea' | 'prompt') => useCanvas.getState().openAi(node.id, value);
   const shown = runs.filter(run => run.stage === stage).reverse();
 
   return <RadixDialog.Root open onOpenChange={open => { if (!open) closeAi(); }}>
@@ -214,13 +229,13 @@ export function CanvasAiDrawer() {
         onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
         onCloseAutoFocus={event => { if (opener.current?.isConnected) { event.preventDefault(); opener.current.focus({ preventScroll: true }); } }}>
         <header className={styles.header}>
-          <div><RadixDialog.Title asChild><Text as="h2" variant="title-s">{ui('Обсуждение шота')}</Text></RadixDialog.Title><Text variant="caption" tone="secondary">{node.label || ui('Один шот · идея → prompt')}</Text></div>
+          <div><RadixDialog.Title asChild><Text as="h2" variant="title-s">{ui(stage === 'idea' ? 'AI · идея' : 'AI · промпт')}</Text></RadixDialog.Title><Text variant="caption" tone="secondary">{stage === 'idea' ? node.label || ui('Разработка одного шота') : ui('Промпт по одобренной идее')}</Text></div>
           <RadixDialog.Close asChild><Button variant="ghost" size="s" iconOnly aria-label={ui('Закрыть обсуждение')} icon={<Icon name="close" />} /></RadixDialog.Close>
         </header>
         <div className={styles.body}>
           <section className={styles.context} aria-label={ui('Контекст AI')}>
             <label className={styles.field}><Text as="span" variant="caption" tone="secondary">{ui('Целевая генерация')}</Text>
-              <select value={node.targetGeneratorId ?? ''} disabled={busy || !!activeRun} onChange={event => patchNode(node.id, { targetGeneratorId: event.target.value || null })}>
+              <select value={node.targetGeneratorId ?? ''} disabled={stage === 'prompt' || busy || !!activeRun} onChange={event => patchNode(node.id, { targetGeneratorId: event.target.value || null })}>
                 <option value="">{ui('Выбери ноду генерации')}</option>
                 {flow.nodes.filter(n => n.type === 'generator' && (n.modelId.includes('soul') || n.modelId.includes('seedance'))).map(n => <option key={n.id} value={n.id}>{nodeTitle(n)} · {n.label || n.id.slice(-5)}</option>)}
               </select>
@@ -245,13 +260,9 @@ export function CanvasAiDrawer() {
             {context.problems.map((problem, i) => <Text key={`${problem}:${i}`} variant="caption" tone="accent">{ui(problem)}</Text>)}
           </section>
 
-          <nav className={styles.stages} aria-label={ui('Этап подготовки')}>
-            <Button variant={stage === 'idea' ? 'dark' : 'ghost'} size="s" aria-pressed={stage === 'idea'} onClick={() => chooseStage('idea')}>{ui('1 · идея')}</Button>
-            <Button variant={stage === 'prompt' ? 'dark' : 'ghost'} size="s" aria-pressed={stage === 'prompt'} onClick={() => chooseStage('prompt')}>{ui('2 · prompt')}</Button>
-          </nav>
-          {stage === 'prompt' && !ideaApproved && <Text variant="caption" tone="secondary">{ui('Сначала одобри актуальную идею. Сборка prompt — отдельный AI-запуск.')}</Text>}
+          {stage === 'prompt' && !ideaApproved && <div className={styles.nextStep}><Text variant="caption" tone="secondary">{ui('Сначала одобри актуальную идею в связанной AI-ноде.')}</Text><Button variant="border" size="s" onClick={() => { useCanvas.getState().focusNode(node.id); openAi(node.id, 'idea'); }}>{ui('Перейти к идее')}</Button></div>}
 
-          <section className={styles.history} aria-label={ui('История обсуждения')}>
+          <section className={styles.history} aria-label={ui(stage === 'idea' ? 'История идей' : 'История промптов')}>
             {shown.length === 0 && <Text variant="label" tone="secondary">{stage === 'idea' ? ui('AI сначала предложит решение. Все дополнения будут видны, а качество ты проверишь сам.') : ui('Prompt ещё не собран. Нажми «Собрать prompt», чтобы перевести одобренную идею для выбранной модели.')}</Text>}
             {shown.map(run => <article className={styles.message} key={run.id}>
               {run.feedbackRu && <div className={styles.ownerMessage}><Text variant="caption" tone="secondary">{ui('Ты · {0}', run.stage === 'idea' ? ui('идея') : 'prompt')}</Text><Text variant="label" className={styles.preserve}>{run.feedbackRu}</Text></div>}
@@ -264,7 +275,9 @@ export function CanvasAiDrawer() {
               {run.snapshot.identity && <Text variant="caption" tone="secondary">{ui('Персонаж: {0} · фото внешности: {1}', run.snapshot.identity.name, run.snapshot.identity.uploadIds.length)}</Text>}
               {!!run.calls.length && <details className={styles.details}><summary>{ui('Ход выполнения')}</summary>{run.calls.map((call, i) => <Text key={i} variant="caption" tone="secondary">{call.stage} · {call.status}{call.errorRu ? ` · ${call.errorRu}` : ''}</Text>)}</details>}
               {latest?.id === run.id && run.status === 'ready' && run.inputFingerprint === context.inputFingerprint && !node.stale && <Button variant="border" size="s" disabled={busy || !!activeRun || (run.stage === 'prompt' && !ideaApproved)} onClick={() => review(run)}>{run.stage === 'idea' ? ui('Одобрить идею') : ui('Одобрить точный prompt')}</Button>}
-              {latest?.id === run.id && ['ready', 'approved'].includes(run.status) && (node.stale || run.inputFingerprint !== context.inputFingerprint) && <Button variant="border" size="s" disabled={busy || !!activeRun || (run.stage === 'prompt' && !ideaApproved)} onClick={() => review(run, true)}>{ui('Перепроверил · одобрить для новых входов')}</Button>}
+              {(run.status === 'approved' || (latest?.id === run.id && run.status === 'ready')) && (node.stale || run.inputFingerprint !== context.inputFingerprint) && <Button variant="border" size="s" disabled={busy || !!activeRun || (run.stage === 'prompt' && !ideaApproved)} onClick={() => review(run, true)}>{ui('Перепроверил · одобрить для новых входов')}</Button>}
+              {run.status === 'approved' && run.version && run.inputFingerprint === context.inputFingerprint && node.ai?.[run.stage]?.id !== run.version.id && <Button variant="border" size="s" disabled={busy || !!activeRun} onClick={() => void mutate(`/api/canvas-ai/runs/${encodeURIComponent(run.id)}/restore`, snapshot => ({ flow: snapshot, expectedRevision: run.revision }))}>{ui(run.stage === 'idea' ? 'Вернуть одобренную идею' : 'Вернуть одобренный промпт')}</Button>}
+              {run.stage === 'idea' && run.status === 'approved' && run.version?.id === node.ai?.idea?.id && ideaApproved && <Button variant="dark" size="s" disabled={busy || !!activeRun} onClick={() => { const id = useCanvas.getState().addAiPrompt(node.id); if (id) { useCanvas.getState().focusNode(id); openAi(node.id, 'prompt'); } }}>{ui('Перейти к AI · промпт')}</Button>}
               {latest?.id === run.id && ['failed', 'cancelled', 'interrupted'].includes(run.status) && <Button variant="border" size="s" disabled={busy || !consent || !canStart || !!activeRun} onClick={() => {
                 if (!previewCurrent || !preview) return;
                 void mutate(`/api/canvas-ai/runs/${encodeURIComponent(run.id)}/retry`, snapshot => ({ flow: snapshot, requestId: crypto.randomUUID(), previewDigest: preview.snapshot.contextDigest, consent: true }));

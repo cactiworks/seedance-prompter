@@ -1,7 +1,7 @@
 import { estimate, findModel, paramsFor, upscaleModelOf, validateGen, type Estimate, type GenModel, type GenParams, type RefRole } from '../gen/models.ts';
 import { isJobNode, outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
 import type { JobRef, RefSource } from '../model/media.ts';
-import { aiPromptProblems } from './ai.ts';
+import { aiPromptProblems, isAiPromptNode } from './ai.ts';
 
 /** Что уйдёт в модель при запуске ноды-генератора. Считается из графа, без сети. */
 export interface RunPlan {
@@ -69,7 +69,7 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
     .filter((e) => e.port === 'prompt')
     .map((e) => source(e.from))
     .filter((n): n is CanvasNode => n?.type === 'prompt');
-  const aiAssisted = promptSources.some(n => n.aiSource !== undefined);
+  const aiAssisted = promptSources.some(n => isAiPromptNode(flow, n));
   if (aiAssisted && promptSources.length !== 1) problems.push('Для AI-генерации оставь один одобренный промпт без дополнительных промпт-нод.');
   if (aiAssisted && node.text.trim()) problems.push('Перенеси дополнительный текст генератора в комментарий AI и одобри новый промпт.');
   const texts = promptSources

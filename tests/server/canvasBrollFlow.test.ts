@@ -53,6 +53,7 @@ it('five independent B-roll branches complete manual idea/prompt/photo acceptanc
   const phase = async (nodeId: string) => {
     for (const stage of ['idea', 'prompt'] as const) {
       await reload();
+      const existingPrompt = flow.nodes.find(n => n.type === 'prompt' && flow.edges.some(e => e.from === nodeId && e.to === n.id && e.port === 'idea'));
       const preview = await checked<{ snapshot: { contextDigest: string } }>(await app.request(`/api/canvas-ai/preview?flowId=${flow.id}&nodeId=${nodeId}`, { headers }));
       const started = await checked<{ run: CanvasAiRun }>(await post('/api/canvas-ai/runs', { flowId: flow.id, nodeId, stage, requestId: randomUUID(), flow, consent: true, previewDigest: preview.snapshot.contextDigest }), 202);
       await canvasAi.wait(started.run.id);
@@ -61,6 +62,9 @@ it('five independent B-roll branches complete manual idea/prompt/photo acceptanc
       await reload();
       if (stage === 'prompt') expect(flow.nodes.find(n => n.aiSource?.versionId === run.version?.id)?.aiApproval).toBeUndefined();
       await checked(await post(`/api/canvas-ai/runs/${run.id}/approve`, { flow, expectedRevision: run.revision }));
+      await reload();
+      if (existingPrompt) expect(flow.nodes.find(n => n.id === existingPrompt.id)?.type).toBe('prompt');
+      expect(flow.nodes.filter(n => n.type === 'prompt')).toHaveLength(10);
     }
     await reload();
   };
@@ -86,6 +90,7 @@ it('five independent B-roll branches complete manual idea/prompt/photo acceptanc
     flow = await flows.create('Five B-roll fixture');
     flow = (await flows.save(flow.id, { ...flow, ...graph, nodes: graph.nodes.map(n => n.type === 'comment' ? { ...n, text: `${n.label}: спокойный cinematic кадр у окна.` } : n) }))!;
     expect(aiCalls).toBe(0); expect(mediaCalls).toBe(0);
+    expect(flow.nodes).toHaveLength(41);
     const photoAis = flow.nodes.filter(n => n.type === 'ai' && n.kind === 'image');
     expect(photoAis).toHaveLength(5);
     for (const photoAi of photoAis) {

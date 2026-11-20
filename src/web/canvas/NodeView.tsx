@@ -2,6 +2,7 @@ import { formatCost } from '../formatCost.ts';
 import { nodeTitle } from './nodeTitle.ts';
 import { ui } from '../language.ts';
 import { SeriesNodeStatus } from '../series/SeriesPreparation.tsx';
+import { isAiPromptNode } from '../../core/canvas/ai.ts';
 import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { frameInput, mediaInput, planRun, sourceKey, trimProblems } from '../../core/canvas/plan.ts';
@@ -575,7 +576,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
       <header className={styles.nodeHead} onPointerDown={(event) => onHeaderDown(event, node)}>
         <Icon name={node.type === 'comment' || node.type === 'prompt' ? 'pencil' : node.type === 'ai' ? 'sparkles' : node.type === 'image' ? 'image' : node.type === 'frame' ? 'layers' : node.type === 'trim' ? 'time' : node.type === 'video' ? 'upload' : node.type === 'resize' ? 'apps' : node.type === 'seedance' ? 'options' : node.type === 'upscale' ? 'push' : node.kind === 'video' ? 'video' : 'sparkles'} size={1} />
         <Text variant="label" medium className={styles.nodeTitle}>
-          {nodeTitle(node)}
+          {node.type === 'prompt' && flow && isAiPromptNode(flow, node) ? ui('AI · промпт') : nodeTitle(node)}
         </Text>
         <button type="button" className={styles.nodeIcon} title={ui("Удалить ноду")} onPointerDown={(event) => event.stopPropagation()} onClick={() => removeNode(node.id)}>
           <Icon name="close" size={0.875} />
@@ -602,7 +603,7 @@ export function NodeView({ node, selected, onHeaderDown, onOutputDown, onInputUp
         {node.stale && (node.mediaId !== null || node.jobIds.length > 0) && <div role="status"><Text variant="caption" tone="accent">{ui("Вход изменился. Прежний результат устарел; выполни этот шаг заново.")}</Text></div>}
         {node.type === 'comment' && <><input className={styles.nodeSelect} value={node.label} aria-label={ui('Название комментария')} placeholder={ui('Название комментария')} onChange={event => patchNode(node.id, { label: event.target.value }, `label:${node.id}`)} /><textarea className={styles.nodeText} rows={5} value={node.text} aria-label={ui('Комментарий для AI')} placeholder={ui('Замысел, сценарий, настроение, композиция или правки — по-русски.')} onChange={event => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} /><Text variant="caption" tone="tertiary">{ui('Подключи к «Контексту» AI.')}</Text></>}
         {node.type === 'ai' && <AiNodeCard node={node} />}
-        {node.type === 'prompt' && (node.aiSource ? <ManagedPromptCard node={node} /> : <textarea className={styles.nodeText} rows={5} value={node.text} placeholder={ui("Текст промпта. Соедини выход со входом «Промпт» генератора.")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />)}
+        {node.type === 'prompt' && (flow && isAiPromptNode(flow, node) ? <ManagedPromptCard node={node} /> : <textarea className={styles.nodeText} rows={5} value={node.text} placeholder={ui("Текст промпта. Соедини выход со входом «Промпт» генератора.")} onChange={(event) => patchNode(node.id, { text: event.target.value }, `text:${node.id}`)} />)}
 
         {node.type === 'image' && (
           <>

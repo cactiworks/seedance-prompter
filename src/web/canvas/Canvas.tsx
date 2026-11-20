@@ -101,7 +101,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number): string => {
 
 /** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
 export function Canvas() {
-  const { flow, save, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
+  const { flow, save, selected, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
   const { library, loadJobs, loadLibrary } = useGen();
   const board = useRef<HTMLDivElement>(null);
   const importer = useRef<HTMLInputElement>(null);
@@ -380,7 +380,7 @@ export function Canvas() {
     if (from === undefined) return [];
     const out = outputOf(from);
     if (out === 'context') return [{ label: 'Разработать идею с AI', type: 'ai', kind: 'image', port: 'context' }];
-    if (out === 'idea') return [];
+    if (out === 'idea') return [{ label: 'Подготовить промпт с AI', type: 'prompt', kind: from.kind, port: 'idea' }];
     if (out === 'text')
       return [
         { label: 'Создать изображение', type: 'generator', kind: 'image', port: 'prompt' },
@@ -404,6 +404,11 @@ export function Canvas() {
   };
   const createLinked = (opt: ReturnType<typeof linkOptions>[number]): void => {
     if (linkMenu === null) return;
+    if (opt.port === 'idea') {
+      const id = useCanvas.getState().addAiPrompt(linkMenu.from);
+      if (id) { useCanvas.getState().focusNode(id); useCanvas.getState().openAi(linkMenu.from, 'prompt'); }
+      setLinkMenu(null); return;
+    }
     const id = addNode(opt.type, linkMenu.x, linkMenu.y - PORT_TOP, opt.kind);
     // Порт «Старт» у генератора видео — второй вход, а модель по умолчанию его поддерживает (Kling / Seedance).
     setHint(connect(linkMenu.from, id, opt.port));
@@ -456,6 +461,14 @@ export function Canvas() {
       addMenu.current.open = false;
       addMenu.current.querySelector('summary')?.focus();
     }
+  };
+
+  const addAiPromptBlock = (aiId?: string): void => {
+    const chosen = aiId ?? flow.nodes.find(n => n.id === selected && n.type === 'ai')?.id;
+    if (!chosen) return;
+    const id = useCanvas.getState().addAiPrompt(chosen);
+    if (id) { useCanvas.getState().focusNode(id); useCanvas.getState().openAi(chosen, 'prompt'); }
+    if (addMenu.current) addMenu.current.open = false;
   };
 
   const linkFrom = act?.type === 'link' ? nodeById.get(act.from) : undefined;
@@ -515,7 +528,8 @@ export function Canvas() {
             </div>
             <div className={styles.addGroup} role="group" aria-label={ui("Создать")}>
               <Text variant="caption" tone="tertiary">{ui("Создать")}</Text>
-              <button type="button" onClick={() => addBlock('ai')}><Icon name="sparkles" size={1} />{ui('AI · идея и prompt')}</button>
+              <button type="button" onClick={() => addBlock('ai')}><Icon name="sparkles" size={1} />{ui('AI · идея')}</button>
+              <details className={styles.promptMenu}><summary>{ui('AI · промпт')}</summary>{flow.nodes.some(n => n.type === 'ai') ? flow.nodes.filter(n => n.type === 'ai').map(n => <button key={n.id} type="button" onClick={() => addAiPromptBlock(n.id)}>{ui('Из идеи: {0}', n.label || n.id.slice(-5))}</button>) : <Text variant="caption" tone="secondary">{ui('Сначала добавь ноду AI · идея.')}</Text>}</details>
               <button type="button" onClick={() => addBlock('generator', 'image')}><Icon name="sparkles" size={1} />{ui("Изображение")}</button>
               <button type="button" onClick={() => addBlock('generator', 'video')}><Icon name="video" size={1} />{ui("Видео")}</button>
               <button type="button" onClick={() => addBlock('seedance')}><Icon name="options" size={1} />{ui("Seedance-промптер")}</button>

@@ -62,8 +62,12 @@ describe('Canvas AI durable explicit stages', () => {
     await expect(s.start('prompt')).rejects.toMatchObject({ code: 'IDEA_APPROVAL_REQUIRED' });
     await s.runtime.approve(prepared.id, await s.saved(), prepared.revision);
     expect(s.calls).toHaveLength(1);
+    const shell = (await s.saved()).nodes.find(n => n.type === 'prompt')!;
+    expect(shell.text).toBe(''); expect(shell.aiSource).toBeUndefined(); expect(shell.aiApproval).toBeUndefined();
+    expect((await s.saved()).nodes.find(n => n.id === 'ai')?.ai?.idea?.approval).toEqual((await s.runtime.get(prepared.id)).version?.approval);
     const compiled = await s.ready('prompt');
     const materialized = (await s.saved()).nodes.find(n => n.type === 'prompt')!;
+    expect(materialized.id).toBe(shell.id);
     expect(materialized.text).toBe(prompt.prompt);
     expect(materialized.aiApproval).toBeUndefined();
     await expect(s.runtime.validateSubmission(submission(await s.saved()))).rejects.toMatchObject({ code: 'CANVAS_BLOCKED' });
@@ -75,6 +79,140 @@ describe('Canvas AI durable explicit stages', () => {
     expect(await s.gen.jobs.all()).toEqual([]);
     expect((await s.runtime.list(s.flow.id, 'ai')).length).toBe(2);
     expect(JSON.stringify(await s.runtime.get(compiled.id))).not.toContain('codexAccountId');
+  });
+
+  it('reuses a manually connected empty prompt and keeps shell creation idempotent without AI', async () => {
+    const s = await setup(); const before = await s.saved();
+    await s.flows.save(before.id, { ...before, nodes: [...before.nodes, node('existing-shell', 'prompt', { x: 700, y: 45 })], edges: [...before.edges,
+      { id: 'idea-shell', from: 'ai', to: 'existing-shell', port: 'idea' }, { id: 'shell-gen', from: 'existing-shell', to: 'gen', port: 'prompt' }] });
+    const approved = await s.approvedIdea();
+    const stableVersion = approved.run.version;
+    expect(approved.flow.nodes.filter(n => n.type === 'prompt').map(n => n.id)).toEqual(['existing-shell']);
+    const response = await s.send('POST', `/api/canvas-ai/runs/${approved.run.id}/prompt-node`, { flow: await s.saved(), expectedRevision: approved.run.revision });
+    expect(response.status).toBe(200);
+    const duplicate = await s.runtime.promptNode(approved.run.id, await s.saved(), approved.run.revision);
+    expect(duplicate.flow.nodes.filter(n => n.type === 'prompt')).toHaveLength(1);
+    expect(duplicate.run.version).toEqual(stableVersion);
+    expect(duplicate.flow.nodes.find(n => n.id === 'ai')?.ai?.idea).toEqual(stableVersion);
+    const result = await s.ready('prompt');
+    expect((await s.saved()).nodes.find(n => n.id === 'existing-shell')?.text).toBe(result.version?.text);
+    expect((await s.saved()).nodes.filter(n => n.type === 'prompt')).toHaveLength(1);
+    expect(s.calls).toHaveLength(2);
+  });
+
+  it('preserves an approved idea and existing manual prompt without overwriting its text', async () => {
+    const s = await setup(); const before = await s.saved();
+    await s.flows.save(before.id, { ...before, nodes: [...before.nodes, node('manual', 'prompt', { text: 'Keep my written prompt.' })], edges: [...before.edges,
+      { id: 'idea-manual', from: 'ai', to: 'manual', port: 'idea' }, { id: 'manual-gen', from: 'manual', to: 'gen', port: 'prompt' }] });
+    const approved = await s.approvedIdea();
+    expect(approved.run.status).toBe('approved');
+    expect(approved.flow.nodes.find(n => n.id === 'ai')?.ai?.idea?.id).toBe(approved.run.version?.id);
+    await expect(s.runtime.promptNode(approved.run.id, await s.saved(), approved.run.revision)).rejects.toMatchObject({ code: 'MANUAL_PROMPT_CONFLICT' });
+    await expect(s.start('prompt')).rejects.toMatchObject({ code: 'MANUAL_PROMPT_CONFLICT' });
+    expect((await s.saved()).nodes.find(n => n.id === 'manual')?.text).toBe('Keep my written prompt.');
+    expect(s.calls).toHaveLength(1);
+  });
+
+  it('restores a prior approved idea after a failed later attempt without inference or renewed approval', async () => {
+    const s = await setup([idea, { textRu: 'English invalid output', assumptionsRu: [], referenceNotesRu: [] }]);
+    const approved = await s.approvedIdea(); const original = await s.runtime.get(approved.run.id);
+    const failed = await s.ready('idea'); expect(failed.status).toBe('failed');
+    expect((await s.saved()).nodes.find(n => n.id === 'ai')?.ai?.idea).toBeNull();
+    const response = await s.send('POST', `/api/canvas-ai/runs/${original.id}/restore`, { flow: await s.saved(), expectedRevision: original.revision });
+    expect(response.status).toBe(200);
+    const restored = await s.saved();
+    expect(restored.nodes.find(n => n.id === 'ai')?.ai?.idea).toEqual(original.version);
+    expect(restored.nodes.filter(n => n.type === 'prompt')).toHaveLength(1);
+    expect(await s.runtime.get(original.id)).toEqual(original);
+    expect(s.calls).toHaveLength(2);
+    await expect(s.runtime.restore(failed.id, restored, failed.revision)).rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
+    await s.flows.save(restored.id, { ...restored, nodes: restored.nodes.map(n => n.id === 'comment' ? { ...n, text: 'Изменённый контекст' } : n) });
+    await expect(s.runtime.restore(original.id, await s.saved(), original.revision)).rejects.toMatchObject({ code: 'STALE_VERSION' });
+  });
+
+  it('restores the same approved idea after cancelling a newer idea without losing history', async () => {
+    let callCount = 0;
+    let began!: () => void; const startedCall = new Promise<void>(r => { began = r; });
+    const runner: Runner = async <T>(request: LlmRequest) => {
+      if (++callCount === 1) return { data: idea as T, meta };
+      began();
+      return new Promise((_, reject) => request.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }));
+    };
+    const s = await setup([], { run: runner }); const approved = await s.approvedIdea();
+    const original = await s.runtime.get(approved.run.id);
+    const replacement = await s.start('idea'); await startedCall;
+    await s.runtime.cancel(replacement.run.id, await s.saved()); await s.runtime.wait(replacement.run.id);
+    expect((await s.saved()).nodes.find(n => n.id === 'ai')?.ai?.idea).toBeNull();
+    const restored = await s.runtime.restore(original.id, await s.saved(), original.revision);
+    expect(restored.flow.nodes.find(n => n.id === 'ai')?.ai?.idea).toEqual(original.version);
+    expect((await s.runtime.get(replacement.run.id)).status).toBe('cancelled');
+    expect(await s.runtime.get(original.id)).toEqual(original);
+    expect(callCount).toBe(2);
+  });
+
+  it('restores an approved prompt after a failed replacement and refuses to restore during an active call', async () => {
+    let resolvePending!: (value: unknown) => void;
+    let began!: () => void; const startedCall = new Promise<void>(r => { began = r; });
+    const queue: unknown[] = [idea, prompt, { prompt: 'Invalid prompt без кавычек', summaryRu: 'Ошибка', referenceNotesRu: [] }];
+    const runner: Runner = async <T>() => {
+      if (queue.length) return { data: queue.shift() as T, meta };
+      began(); return { data: await new Promise<unknown>(r => { resolvePending = r; }) as T, meta };
+    };
+    const s = await setup([], { run: runner }); await s.approvedIdea();
+    const compiled = await s.ready('prompt'); await s.runtime.approve(compiled.id, await s.saved(), compiled.revision);
+    const original = await s.runtime.get(compiled.id);
+    expect((await s.ready('prompt')).status).toBe('failed');
+    const restored = await s.runtime.restore(original.id, await s.saved(), original.revision);
+    expect(restored.flow.nodes.find(n => n.type === 'prompt')?.aiApproval).toEqual(original.version?.approval);
+    expect(await s.runtime.validateSubmission(submission(restored.flow))).toMatchObject({ promptVersionId: original.version?.id });
+    const active = await s.start('prompt'); await startedCall;
+    await expect(s.runtime.restore(original.id, await s.saved(), original.revision)).rejects.toMatchObject({ code: 'ALREADY_RUNNING' });
+    resolvePending(prompt); await s.runtime.wait(active.run.id);
+  });
+
+  it('rejects a prompt rebound to another idea before inference and preserves the owner connection', async () => {
+    const s = await setup(); await s.approvedIdea(); await s.ready('prompt');
+    const flow = await s.saved(); const output = flow.nodes.find(n => n.type === 'prompt')!;
+    const changed = (await s.flows.save(flow.id, { ...flow, nodes: [...flow.nodes, node('other-ai', 'ai', { targetGeneratorId: 'gen' })],
+      edges: flow.edges.map(e => e.to === output.id && e.port === 'idea' ? { ...e, from: 'other-ai' } : e) }))!;
+    await expect(s.start('prompt')).rejects.toMatchObject({ code: 'PROMPT_NODE_CONFLICT' });
+    expect(s.calls).toHaveLength(2);
+    expect(await s.saved()).toEqual(changed);
+  });
+
+  it('keeps a late compiled result in history when its prompt is rebound while the call runs', async () => {
+    let resolvePending!: (value: unknown) => void;
+    let began!: () => void; const startedCall = new Promise<void>(r => { began = r; });
+    const queue: unknown[] = [idea, prompt];
+    const runner: Runner = async <T>() => {
+      if (queue.length) return { data: queue.shift() as T, meta };
+      began(); return { data: await new Promise<unknown>(r => { resolvePending = r; }) as T, meta };
+    };
+    const s = await setup([], { run: runner }); await s.approvedIdea(); await s.ready('prompt');
+    const pending = await s.start('prompt'); await startedCall;
+    const flow = await s.saved(); const output = flow.nodes.find(n => n.type === 'prompt')!;
+    await s.flows.save(flow.id, { ...flow, nodes: [...flow.nodes, node('other-ai', 'ai', { targetGeneratorId: 'gen' })],
+      edges: flow.edges.map(e => e.to === output.id && e.port === 'idea' ? { ...e, from: 'other-ai' } : e) });
+    resolvePending({ ...prompt, prompt: prompt.prompt + ' A new camera angle.' }); await s.runtime.wait(pending.run.id);
+    const result = await s.runtime.get(pending.run.id); expect(result.status).toBe('ready');
+    expect(result.version?.text).toContain('new camera angle');
+    const saved = await s.saved();
+    expect(saved.edges.find(e => e.to === output.id && e.port === 'idea')?.from).toBe('other-ai');
+    expect(saved.nodes.find(n => n.id === output.id)?.text).toBe(output.text);
+    expect(saved.nodes.find(n => n.id === 'ai')?.ai?.status).toBe('ready');
+    expect(saved.nodes.find(n => n.id === 'ai')?.ai?.errorRu).toContain('другой идее');
+    await expect(s.runtime.approve(result.id, saved, result.revision)).rejects.toMatchObject({ code: 'PROMPT_NODE_CONFLICT' });
+  });
+
+  it('moves the managed prompt output to the current target without leaving the old binding', async () => {
+    const s = await setup(); const approved = await s.approvedIdea(); const flow = await s.saved();
+    const output = flow.nodes.find(n => n.type === 'prompt')!;
+    // A prompt can have been exported or manually wired to another generator.
+    await s.flows.save(flow.id, { ...flow, nodes: [...flow.nodes, node('old-gen', 'generator', { modelId: 'higgsfield/soul-2' })],
+      edges: [...flow.edges, { id: 'old-output', from: output.id, to: 'old-gen', port: 'prompt' }] });
+    const result = await s.runtime.promptNode(approved.run.id, await s.saved(), approved.run.revision);
+    expect(result.flow.edges.filter(e => e.from === output.id && e.port === 'prompt').map(e => e.to)).toEqual(['gen']);
+    expect(s.calls).toHaveLength(1);
   });
 
   it('invalid structured output records the failed call and usage without repair or auto retry', async () => {

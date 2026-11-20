@@ -72,6 +72,9 @@ interface CanvasState {
   aiDrawer: { nodeId: string; stage: 'idea' | 'prompt' } | null;
   openAi: (nodeId: string, stage?: 'idea' | 'prompt') => void;
   closeAi: () => void;
+  /** Create/reuse a visible prompt step; never runs AI or changes an approved idea. */
+  addAiPrompt: (aiNodeId: string) => string | null;
+  focusNode: (nodeId: string) => void;
   /** A server operation may update approval/projection and flow revision. Never replace newer local edits. */
   applyServerFlow: (flow: Flow, expected: Flow) => boolean;
   error: string | null;
@@ -229,6 +232,26 @@ export const useCanvas = create<CanvasState>((set, get) => {
     aiDrawer: null,
     openAi: (nodeId, stage = 'idea') => set({ aiDrawer: { nodeId, stage } }),
     closeAi: () => set({ aiDrawer: null }),
+    addAiPrompt: (aiNodeId) => {
+      const flow = get().flow;
+      const ai = flow?.nodes.find(n => n.id === aiNodeId && n.type === 'ai');
+      if (!flow || !ai) return null;
+      const existingEdge = flow.edges.find(e => e.from === ai.id && e.port === 'idea' && flow.nodes.some(n => n.id === e.to && n.type === 'prompt'));
+      const existing = flow.nodes.find(n => n.id === existingEdge?.to) ?? flow.nodes.find(n => n.type === 'prompt' && n.aiSource?.aiNodeId === ai.id);
+      if (existing) return existing.id;
+      const prompt = { ...blankNode('prompt', ai.x + NODE_WIDTH.ai + 60, ai.y, ai.kind), label: 'AI · промпт' };
+      const edges: CanvasEdge[] = [{ id: newId('e'), from: ai.id, to: prompt.id, port: 'idea' }];
+      if (ai.targetGeneratorId && flow.nodes.some(n => n.id === ai.targetGeneratorId && n.type === 'generator')) edges.push({ id: newId('e'), from: prompt.id, to: ai.targetGeneratorId, port: 'prompt' });
+      get().update(f => ({ ...f, nodes: [...f.nodes, prompt], edges: [...f.edges, ...edges] }));
+      return prompt.id;
+    },
+    focusNode: (nodeId) => {
+      const flow = get().flow;
+      const node = flow?.nodes.find(n => n.id === nodeId);
+      if (!flow || !node) return;
+      set({ selected: nodeId, selection: [nodeId] });
+      get().setViewport({ ...flow.viewport, x: 80 - node.x * flow.viewport.zoom, y: 120 - node.y * flow.viewport.zoom });
+    },
     applyServerFlow: (flow, expected) => {
       const current = get().flow;
       if (flow.id !== expected.id || pending !== null || get().save !== 'saved' || (flow.rev ?? 0) < (current?.rev ?? 0)) return false;
@@ -464,7 +487,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const comment = { ...blankNode('comment', generator.x - 1080, y), text: `Правки к результату ${generator.label || generator.id}.\n${ai.ai?.idea?.text ? `Прежняя идея (исходный материал):\n${ai.ai.idea.text}\n\n` : ''}${ai.ai?.prompt?.text ? `Прежний prompt (исходный материал):\n${ai.ai.prompt.text}\n\n` : ''}Что сохранить и что изменить: ` };
       const copiedInputs = flow.edges.filter(e => (e.to === ai.id && (e.port === 'context' || e.port === 'ref')) || (e.to === generator.id && e.port !== 'prompt'))
         .map(e => ({ ...e, id: newId('e'), to: e.to === ai.id ? nextAi.id : nextGenerator.id }));
-      get().update(f => ({ ...f, nodes: [...f.nodes, comment, nextAi, nextGenerator], edges: [...f.edges, ...copiedInputs, { id: newId('e'), from: comment.id, to: nextAi.id, port: 'context' }], viewport: { ...f.viewport, x: 80 - comment.x * f.viewport.zoom, y: 80 - y * f.viewport.zoom } }));
+      const prompt = { ...blankNode('prompt', nextAi.x + NODE_WIDTH.ai + 60, y, generator.kind), label: 'AI · промпт' };
+      get().update(f => ({ ...f, nodes: [...f.nodes, comment, nextAi, prompt, nextGenerator], edges: [...f.edges, ...copiedInputs, { id: newId('e'), from: comment.id, to: nextAi.id, port: 'context' }, { id: newId('e'), from: nextAi.id, to: prompt.id, port: 'idea' }, { id: newId('e'), from: prompt.id, to: nextGenerator.id, port: 'prompt' }], viewport: { ...f.viewport, x: 80 - comment.x * f.viewport.zoom, y: 80 - y * f.viewport.zoom } }));
       set({ selected: comment.id, selection: [comment.id] });
       return nextAi.id;
     },

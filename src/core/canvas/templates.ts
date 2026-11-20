@@ -51,16 +51,22 @@ function brollBranches(newId: (prefix: string) => string, count: number): { node
     specs.push(
       { key: key('photo-comment'), type: 'comment', x: 0, y, label: `B-roll ${i} · пожелания к фото` },
       { key: key('photo-ai'), type: 'ai', x: COL, y, label: `B-roll ${i} · идея фото`, targetKey: key('photo') },
+      { key: key('photo-prompt'), type: 'prompt', x: COL * 2, y, label: `B-roll ${i} · AI-промпт фото` },
       { key: key('photo'), type: 'generator', x: COL * 3, y, modelId: 'higgsfield/soul-2', label: `B-roll ${i} · фото` },
       { key: key('video-comment'), type: 'comment', x: COL * 3, y: y + 650, label: `B-roll ${i} · движение и события` },
       { key: key('video-ai'), type: 'ai', x: COL * 4, y, kind: 'video', label: `B-roll ${i} · идея видео`, targetKey: key('video') },
+      { key: key('video-prompt'), type: 'prompt', x: COL * 5, y, kind: 'video', label: `B-roll ${i} · AI-промпт видео` },
       { key: key('video'), type: 'generator', x: COL * 6, y, modelId: 'higgsfield/seedance-2-5', label: `B-roll ${i} · видео` },
     );
     links.push(
       ['common', key('photo-ai'), 'context'],
       [key('photo-comment'), key('photo-ai'), 'context'],
+      [key('photo-ai'), key('photo-prompt'), 'idea'],
+      [key('photo-prompt'), key('photo'), 'prompt'],
       ['common', key('video-ai'), 'context'],
       [key('video-comment'), key('video-ai'), 'context'],
+      [key('video-ai'), key('video-prompt'), 'idea'],
+      [key('video-prompt'), key('video'), 'prompt'],
       [key('photo'), key('video-ai'), 'ref'],
       [key('photo'), key('video'), 'start'],
     );
@@ -78,7 +84,7 @@ export const FLOW_TEMPLATES: readonly FlowTemplate[] = [
   {
     id: 'managed-five-broll',
     titleRu: 'Пять B-roll с AI',
-    descriptionRu: 'Общая концепция и пять независимых веток Soul 2 → Seedance. Prompts появятся после одобрения идей.',
+    descriptionRu: 'Общая концепция и пять независимых веток. AI · идея → AI · промпт → Soul 2 или Seedance, каждый шаг отдельно.',
     build: (newId) => brollBranches(newId, 5),
   },
   {

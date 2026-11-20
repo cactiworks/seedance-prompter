@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aiApprovalCurrent, aiInputContext, aiPromptProblems } from '../../src/core/canvas/ai.ts';
+import { aiApprovalCurrent, aiInputContext, aiPromptProblems, isAiPromptNode, promptIdeaSource } from '../../src/core/canvas/ai.ts';
 import { inputFingerprint, invalidateChanged } from '../../src/core/canvas/freshness.ts';
 import { planRun } from '../../src/core/canvas/plan.ts';
 import { CanvasAiProjectionSchema, CanvasNodeSchema, FlowSchema, inputsOf, outputOf, portAccepts, type CanvasNode, type Flow } from '../../src/core/model/canvas.ts';
@@ -25,6 +25,22 @@ function approved(flow: Flow = graph()): Flow {
 }
 
 describe('Canvas AI contracts', () => {
+  it('treats an idea-connected prompt shell as managed before compilation and never sends its manual text', () => {
+    const flow = graph();
+    const prompt = flow.nodes.find(n => n.id === 'prompt')!;
+    expect(isAiPromptNode(flow, prompt)).toBe(true);
+    expect(promptIdeaSource(flow, prompt)?.id).toBe('ai');
+    expect(aiPromptProblems(flow, prompt)).toEqual(['Сначала собери и одобри промпт в ноде AI · промпт.']);
+    const manual = { ...flow, nodes: flow.nodes.map(n => n.id === prompt.id ? { ...n, text: 'Unreviewed text' } : n.id === 'gen' ? { ...n, text: 'Another unreviewed addition' } : n) };
+    const plan = planRun(manual, 'gen', () => null);
+    expect(plan.problems).toContain('Сначала собери и одобри промпт в ноде AI · промпт.');
+    expect(plan.problems.some(p => p.includes('дополнительный текст'))).toBe(true);
+    expect(plan.prompt).not.toContain('Another unreviewed addition');
+    const legacy = { ...flow, edges: flow.edges.filter(e => e.port !== 'idea') };
+    expect(isAiPromptNode(legacy, prompt)).toBe(false);
+    expect(aiPromptProblems(legacy, prompt)).toEqual([]);
+  });
+
   it('loads legacy nodes with safe defaults and keeps draft nodes valid before choosing a target', () => {
     const old = node('old', 'prompt', { text: 'Legacy prompt' });
     expect(old.targetGeneratorId).toBeNull();

@@ -112,3 +112,33 @@ it('a server projection cannot overwrite newer local edits and accepted revision
   expect(JSON.parse(String(request?.body)).rev).toBe(7);
   expect(canvas.useCanvas.getState().flow?.updatedAt).toBe('server-canonical-time');
 });
+
+
+it('creates and reuses a separate prompt step without changing the existing approved idea', () => {
+  const original = canvas.useCanvas.getState().flow!;
+  const idea = JSON.stringify(original.nodes.find(n => n.id === 'ai')?.ai?.idea);
+  const reused = canvas.useCanvas.getState().addAiPrompt('ai');
+  expect(reused).toBe('prompt');
+  expect(canvas.useCanvas.getState().flow).toBe(original);
+  canvas.useCanvas.getState().removeNode('prompt');
+  const id = canvas.useCanvas.getState().addAiPrompt('ai')!;
+  const flow = canvas.useCanvas.getState().flow!;
+  expect(flow.nodes.find(n => n.id === id)?.type).toBe('prompt');
+  expect(flow.edges).toContainEqual(expect.objectContaining({ from: 'ai', to: id, port: 'idea' }));
+  expect(flow.edges).toContainEqual(expect.objectContaining({ from: id, to: 'gen', port: 'prompt' }));
+  expect(JSON.stringify(flow.nodes.find(n => n.id === 'ai')?.ai?.idea)).toBe(idea);
+  expect(canvas.useCanvas.getState().addAiPrompt('ai')).toBe(id);
+  expect(canvas.useCanvas.getState().flow!.nodes.filter(n => n.type === 'prompt')).toHaveLength(1);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('opens each visible AI block at its own stage and focuses the prompt node without running a model', () => {
+  const state = canvas.useCanvas.getState();
+  state.openAi('ai', 'idea');
+  expect(canvas.useCanvas.getState().aiDrawer).toEqual({ nodeId: 'ai', stage: 'idea' });
+  state.focusNode('prompt');
+  state.openAi('ai', 'prompt');
+  expect(canvas.useCanvas.getState().selected).toBe('prompt');
+  expect(canvas.useCanvas.getState().aiDrawer).toEqual({ nodeId: 'ai', stage: 'prompt' });
+  expect(fetch).not.toHaveBeenCalled();
+});

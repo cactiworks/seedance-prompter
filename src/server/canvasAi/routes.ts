@@ -32,6 +32,14 @@ export function canvasAiRoutes(runtime: CanvasAi, accounts?: Accounts) {
       const input = Approval.parse(await c.req.json());
       return c.json(await runtime.revalidate(c.req.param('id'), input.flow, input.expectedRevision));
     })
+    .post('/runs/:id/prompt-node', async c => {
+      const input = Approval.parse(await c.req.json());
+      return c.json(await runtime.promptNode(c.req.param('id'), input.flow, input.expectedRevision));
+    })
+    .post('/runs/:id/restore', async c => {
+      const input = Approval.parse(await c.req.json());
+      return c.json(await runtime.restore(c.req.param('id'), input.flow, input.expectedRevision));
+    })
     .post('/accept-media', async c => {
       const input = z.object({ flowId: z.string(), nodeId: z.string(), flow: FlowSchema, jobId: z.string(), mediaId: z.string() }).strict().parse(await c.req.json());
       return c.json(await runtime.acceptMedia(input));

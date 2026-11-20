@@ -11,6 +11,16 @@ export interface CanvasAiInputContext {
   problems: string[];
 }
 
+/** A visible prompt block is managed as soon as an idea is connected, before compilation. */
+export function promptIdeaSource(flow: Flow, prompt: CanvasNode): CanvasNode | undefined {
+  if (prompt.type !== 'prompt') return;
+  const edge = flow.edges.find(e => e.to === prompt.id && e.port === 'idea');
+  return flow.nodes.find(n => n.id === edge?.from && n.type === 'ai');
+}
+
+export const isAiPromptNode = (flow: Flow, prompt: CanvasNode): boolean =>
+  prompt.type === 'prompt' && (prompt.aiSource !== undefined || promptIdeaSource(flow, prompt) !== undefined);
+
 /** Server and UI resolve the same graph inputs; no model calls or provider requests. */
 export function aiInputContext(flow: Flow, nodeId: string, mediaOf: (jobId: string) => string | null): CanvasAiInputContext {
   const node = flow.nodes.find(n => n.id === nodeId && n.type === 'ai');
@@ -48,11 +58,12 @@ export function aiInputContext(flow: Flow, nodeId: string, mediaOf: (jobId: stri
 
 /** Persisted approval is a projection; this gate only checks its current graph binding. */
 export function aiPromptProblems(flow: Flow, prompt: CanvasNode, targetGeneratorId?: string): string[] {
-  if (!prompt.aiSource) return [];
-  const source = flow.nodes.find(n => n.id === prompt.aiSource?.aiNodeId && n.type === 'ai');
+  if (!isAiPromptNode(flow, prompt)) return [];
+  if (!prompt.aiSource) return ['Сначала собери и одобри промпт в ноде AI · промпт.'];
+  const source = promptIdeaSource(flow, prompt);
   const version = source?.ai?.prompt;
   const approval = prompt.aiApproval;
-  if (!source || !version || !flow.edges.some(e => e.from === source.id && e.to === prompt.id && e.port === 'idea')) return ['Связанный AI-промпт недоступен. Подготовь его заново.'];
+  if (!source || source.id !== prompt.aiSource.aiNodeId || !version) return ['Связанный AI-промпт недоступен. Подготовь его заново.'];
   if (source.stale || prompt.stale || prompt.aiSource.inputFingerprint !== inputFingerprint(flow, source.id)) return ['Входы AI-промпта изменились. Перепроверь и одобри его заново.'];
   if (targetGeneratorId !== undefined && source.targetGeneratorId !== targetGeneratorId) return ['AI-промпт подготовлен для другого генератора.'];
   const idea = source.ai?.idea;
