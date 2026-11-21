@@ -6,7 +6,7 @@ import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace, WorkspaceOverlay } from './features/Workspace.tsx';
 import { Library } from './library/Library.tsx';
-import { referenceLibraryStatus } from './references/api.ts';
+import { referenceLibraryStatus, type ReferenceLibraryStatus } from './references/api.ts';
 import { useGen } from './gen/genStore.ts';
 import { Production, ProductionList } from './production/Production.tsx';
 import { Prompter } from './prompter/Prompter.tsx';
@@ -31,7 +31,7 @@ export function App() {
   }, []);
   const { pack, project, host, loadPack, error } = useStore();
   const [requestedRoute, setRoute] = useRoute();
-  const [referenceStatus, setReferenceStatus] = useState<{ enabled: boolean; graph?: boolean }>();
+  const [referenceStatus, setReferenceStatus] = useState<ReferenceLibraryStatus>();
   const referenceLibraryEnabled = referenceStatus?.enabled;
   const route = requestedRoute === 'references' && referenceLibraryEnabled === false ? 'canvas' : requestedRoute;
   const tasksVisit = useGen((s) => s.tasksVisit);
@@ -73,7 +73,7 @@ export function App() {
         {route === 'canvas' && <Canvas referenceLibraryEnabled={referenceLibraryEnabled} />}
         {route === 'library' && <Library key={tasksVisit} />}
         {route === 'references' && <Suspense fallback={<Text tone="secondary">{ui('Открываю библиотеку…')}</Text>}>
-          {referenceLibraryEnabled ? <ReferenceLibrary showGraph={referenceStatus?.graph === true} /> : <Text tone="secondary">{ui('Открываю библиотеку…')}</Text>}
+          {referenceLibraryEnabled ? <ReferenceLibrary showGraph={referenceStatus?.graph === true} shared={referenceStatus?.shared === true} /> : <Text tone="secondary">{ui('Открываю библиотеку…')}</Text>}
         </Suspense>}
         {route === 'calibration' && <Calibration />}
         {route === 'shots' && (

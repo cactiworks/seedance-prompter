@@ -20,9 +20,22 @@ const FeedbackSchema = z.object({
 const EditSchema = z.object({ folder: ReferenceFolderSchema.nullable().optional(), tags: ReferenceTagsSchema.optional() });
 const AnalyzeSchema = z.object({ maxPending: z.number().int().positive().optional() });
 
-export function referenceRoutes(root: string, library: ReferenceLibrary | undefined, runFor: (c: Context) => Promise<Runner>, graph = false) {
+interface ReferenceRouteOptions {
+  graph?: boolean;
+  sharedAccount?: (c: Context) => Promise<{ id: string; runner: Runner }>;
+}
+
+// The slash belongs to the server namespace and is rejected by ThreadKeySchema.
+const storageKey = (key: string, accountId?: string) =>
+  key === 'library' && accountId ? `account/${accountId}/library` : key;
+
+export function referenceRoutes(root: string, library: ReferenceLibrary | undefined, runFor: (c: Context) => Promise<Runner>, options: ReferenceRouteOptions) {
   const app = new Hono();
-  app.get('/status', (c) => c.json({ enabled: library !== undefined, ...(library && graph ? { graph: true } : {}) }));
+  app.get('/status', (c) => c.json({
+    enabled: library !== undefined,
+    ...(library && options.graph ? { graph: true } : {}),
+    ...(library && options.sharedAccount ? { shared: true } : {}),
+  }));
   if (!library) return app;
   const chat = createReferenceChat(root, library);
   const missing = (c: Context) => c.json({ error: 'NOT_FOUND', messageRu: 'Кадр не найден.' }, 404);
@@ -57,11 +70,29 @@ export function referenceRoutes(root: string, library: ReferenceLibrary | undefi
     return c.json({ job: await library.startAnalysis(await runFor(c), options.maxPending) });
   });
   app.post('/analysis/cancel', async (c) => c.json({ job: await library.stopAnalysis() }));
-  app.get('/threads/:key', async (c) => c.json({ thread: await chat.get(keyOf(c)) }));
-  app.post('/threads/:key', async (c) => c.json({ thread: await chat.search(keyOf(c), ChatInputSchema.parse(await c.req.json()), () => runFor(c), c.req.raw.signal) }));
-  app.patch('/threads/:key', async (c) => c.json({ thread: await chat.setSelection(keyOf(c), SelectionSchema.parse(await c.req.json()).selection) }));
+  app.get('/threads/:key', async (c) => {
+    const key = keyOf(c);
+    const account = key === 'library' ? await options.sharedAccount?.(c) : undefined;
+    return c.json({ thread: await chat.get(storageKey(key, account?.id)) });
+  });
+  app.post('/threads/:key', async (c) => {
+    const key = keyOf(c);
+    const body = ChatInputSchema.parse(await c.req.json());
+    const account = await options.sharedAccount?.(c);
+    return c.json({ thread: await chat.search(storageKey(key, account?.id), body, async () => account?.runner ?? await runFor(c),
+      { signal: c.req.raw.signal, accountId: account?.id }) });
+  });
+  app.patch('/threads/:key', async (c) => {
+    const key = keyOf(c);
+    const { selection } = SelectionSchema.parse(await c.req.json());
+    const account = key === 'library' ? await options.sharedAccount?.(c) : undefined;
+    return c.json({ thread: await chat.setSelection(storageKey(key, account?.id), selection) });
+  });
   app.post('/threads/:key/feedback', async (c) => {
-    await chat.recordFeedback(keyOf(c), FeedbackSchema.parse(await c.req.json()));
+    const key = keyOf(c);
+    const body = FeedbackSchema.parse(await c.req.json());
+    const account = await options.sharedAccount?.(c);
+    await chat.recordFeedback(storageKey(key, account?.id), body, account?.id);
     return c.body(null, 204);
   });
   return app;

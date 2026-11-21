@@ -167,6 +167,10 @@ loopback-экземпляре без публичных origins. `data/reference
 кадров, версии и назначение, а медиа-входы генератора остаются отдельными. Изображения уходят
 в AI · идея, AI · промпт использует текстовые приёмы из одобренной версии.
 
+В общей студии `SP_SHARED_REFERENCE_LIBRARY=1` включает тот же модуль на её `SP_DATA_DIR`.
+Все посетители видят каталог и Canvas-подборки. Поиск запускается под своим AI-подключением,
+к которому привязаны standalone-чат и сигналы пригодности кадров. Пилот хранится отдельно.
+
 Группы маршрутов в `src/server/app.ts`: `projects`, `llm/*` (fields, plan, write, critique, fix,
 vision, prompter, region-edit), `gen/*` (jobs, quote, measure, status, styles), `library/*` (файлы, папки,
 избранное, кадр, обрезка, импорт, выгрузка), `canvas/flows`, `studio/sessions`, `media/resize`,

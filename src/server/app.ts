@@ -93,8 +93,7 @@ export interface AppOptions {
   production?: ProductionRuntime;
   characters?: Characters;
   canvasAi?: CanvasAi;
-  /** Enabled only for a dedicated loopback instance reached through an SSH tunnel. */
-  referenceLibrary?: boolean;
+  referenceLibrary?: 'private' | 'shared';
   referenceGraph?: boolean;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
@@ -148,13 +147,18 @@ export function createApp(options: AppOptions) {
   const journal = createJournal(options.dataDir);
   const app = new Hono();
   const publicOrigins = options.publicOrigins ?? (process.env.SP_PUBLIC_ORIGINS ?? '').split(',').filter(Boolean);
-  if (options.referenceLibrary && (HOST !== '127.0.0.1' || publicOrigins.length)) {
-    throw new Error('Reference Library requires a loopback-only instance without public origins');
+  if (options.referenceLibrary === 'private' && (HOST !== '127.0.0.1' || publicOrigins.length)) {
+    throw new Error('Private Reference Library requires a loopback-only instance without public origins');
   }
   const allowedOrigins = new Set([...ALLOWED_ORIGINS, ...publicOrigins]);
   for (const origin of allowedOrigins) {
     const url = new URL(origin);
     if (url.origin !== origin || (url.protocol !== 'https:' && !ALLOWED_ORIGINS.has(origin))) throw new Error('SP_PUBLIC_ORIGINS requires exact HTTPS origins');
+  }
+  const sharedReferenceAccounts = options.referenceLibrary === 'shared' ? options.accounts : undefined;
+  if (options.referenceLibrary === 'shared' && (HOST !== '127.0.0.1' ||
+    !publicOrigins.some(origin => origin.startsWith('https://')) || !sharedReferenceAccounts)) {
+    throw new Error('Shared Reference Library requires loopback, configured HTTPS origins and AI accounts');
   }
 
   // Сервер локальный, но любая веб-страница в браузере владельца может стучаться в localhost.
@@ -196,7 +200,13 @@ export function createApp(options: AppOptions) {
   app.route('/api/characters', characterRoutes(characters));
   const referenceRoot = path.join(options.dataDir, 'references');
   const references = options.referenceLibrary ? createReferenceLibrary(referenceRoot) : undefined;
-  app.route('/api/references', referenceRoutes(path.join(referenceRoot, 'chat'), references, runFor, options.referenceGraph));
+  app.route('/api/references', referenceRoutes(path.join(referenceRoot, 'chat'), references, runFor, {
+    graph: options.referenceGraph,
+    sharedAccount: sharedReferenceAccounts && (async (c) => {
+      const id = await sharedReferenceAccounts.requireAccount(c);
+      return { id, runner: sharedReferenceAccounts.runnerFor(id) };
+    }),
+  }));
   const canvasAi = options.canvasAi ?? createCanvasAi({
     dataDir: options.dataDir, rootDir: options.rootDir, flows, gen, characters,
     runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor,

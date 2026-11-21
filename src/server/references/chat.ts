@@ -35,6 +35,7 @@ type Query = { brief: string; query: string };
 type FeedbackInput = { turnId: string; refId: string; value: 'used' | 'dismissed'; role?: string };
 type Preference = FeedbackInput & { thread: string; terms: string[] };
 type LibraryIndex = { list(): Promise<ReferenceCard[]>; get(id: string, version?: number): Promise<ReferenceCard | undefined> };
+type SearchOptions = { signal?: AbortSignal; accountId?: string };
 const NO_MATCH = 'Подходящих кадров пока нет. Попробуй назвать конкретный приём или добавить референсы в библиотеку.';
 
 export class ReferenceChatError extends Error {
@@ -103,12 +104,15 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
 }
 
 export function createReferenceChat(root: string, library: LibraryIndex) {
-  const preferencesFile = path.join(root, 'preferences.json');
   const pending = new Set<string>();
-  const fileFor = (key: string) => path.join(root, 'threads', `${createHash('sha256').update(key).digest('hex')}.json`);
+  const filename = (key: string) => `${createHash('sha256').update(key).digest('hex')}.json`;
+  const fileFor = (key: string) => path.join(root, 'threads', filename(key));
+  const preferencesFor = (accountId?: string) => accountId === undefined
+    ? path.join(root, 'preferences.json')
+    : path.join(root, 'account-preferences', filename(accountId));
   const get = (key: string) => readJson<ReferenceThread>(fileFor(key), { turns: [], selection: [] });
 
-  async function search(key: string, input: Query, run: () => Promise<Runner>, signal?: AbortSignal): Promise<ReferenceThread> {
+  async function search(key: string, input: Query, run: () => Promise<Runner>, { signal, accountId }: SearchOptions = {}): Promise<ReferenceThread> {
     if (pending.has(key)) throw new ReferenceChatError(409, 'Подборка уже собирается.');
     pending.add(key);
     try {
@@ -129,7 +133,7 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
           model, effort: 'low', taskRu: 'Разобрать запрос референсов', timeoutMs: 120_000, signal,
         });
         const plan = QueryPlanSchema.parse(planned.data);
-        const candidates = shortlist(cards, plan.aspects, await readJson<Preference[]>(preferencesFile, []));
+        const candidates = shortlist(cards, plan.aspects, await readJson<Preference[]>(preferencesFor(accountId), []));
         signal?.throwIfAborted();
         if (candidates.length) {
           const ranked = await runner<unknown>({
@@ -169,11 +173,12 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
     });
   }
 
-  async function recordFeedback(key: string, input: FeedbackInput): Promise<void> {
+  async function recordFeedback(key: string, input: FeedbackInput, accountId?: string): Promise<void> {
     const turn = (await get(key)).turns.find(item => item.id === input.turnId);
     const match = turn?.matches.find(item => item.refId === input.refId);
     if (!match) throw new ReferenceChatError(404, 'Кадр отсутствует в этой подборке.');
     const terms = [...new Set(termsOf(`${match.role} ${input.role ?? ''}`).filter(term => term.length >= 4))];
+    const preferencesFile = preferencesFor(accountId);
     await serialize(preferencesFile, async () => {
       const all = await readJson<Preference[]>(preferencesFile, []);
       const rest = all.filter(item => item.thread !== key || item.turnId !== input.turnId || item.refId !== input.refId);

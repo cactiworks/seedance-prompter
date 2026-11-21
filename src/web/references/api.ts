@@ -25,7 +25,13 @@ function data(method: 'POST' | 'PATCH', body: unknown, signal?: AbortSignal): Re
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal };
 }
 
-export function referenceLibraryStatus(signal?: AbortSignal): Promise<{ enabled: boolean; graph?: boolean }> {
+export interface ReferenceLibraryStatus {
+  enabled: boolean;
+  graph?: boolean;
+  shared?: boolean;
+}
+
+export function referenceLibraryStatus(signal?: AbortSignal): Promise<ReferenceLibraryStatus> {
   return json(`${ROOT}/status`, { signal });
 }
 

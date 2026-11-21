@@ -32,16 +32,20 @@ async function isAlreadyRunning(): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
+  const privateReferences = process.env.SP_PRIVATE_REFERENCE_LIBRARY === '1';
+  const sharedReferences = process.env.SP_SHARED_REFERENCE_LIBRARY === '1';
+  if (privateReferences && sharedReferences) throw new Error('Private and shared Reference Library modes are mutually exclusive');
+
   if (await isAlreadyRunning()) {
     console.log(`Уже запущен: ${URL_BASE}`);
     openBrowser(URL_BASE);
     return;
   }
 
-  const referenceLibrary = process.env.SP_PRIVATE_REFERENCE_LIBRARY === '1';
+  const referenceLibrary = privateReferences ? 'private' : sharedReferences ? 'shared' : undefined;
   const dataDir = process.env.SP_DATA_DIR ?? path.join(ROOT, 'data');
-  if (referenceLibrary && (!process.env.SP_DATA_DIR?.trim() || HOST !== '127.0.0.1' || process.env.SP_PUBLIC_ORIGINS?.trim())) {
-    throw new Error('Reference Library requires its own SP_DATA_DIR, loopback and no public origins');
+  if (privateReferences && (!process.env.SP_DATA_DIR?.trim() || HOST !== '127.0.0.1' || process.env.SP_PUBLIC_ORIGINS?.trim())) {
+    throw new Error('Private Reference Library requires its own SP_DATA_DIR, loopback and no public origins');
   }
   const releaseDataLock = await acquireDataLock(dataDir);
   const productionMode = process.env.SP_SERVE_STATIC === '1';

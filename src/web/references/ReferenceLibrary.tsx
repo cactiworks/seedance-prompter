@@ -69,7 +69,7 @@ function EditReferenceDialog({ card, onClose, onEdited }: { card: ReferenceCard;
   );
 }
 
-export function ReferenceLibrary({ showGraph = false }: { showGraph?: boolean }) {
+export function ReferenceLibrary({ showGraph = false, shared = false }: { showGraph?: boolean; shared?: boolean }) {
   const [language] = useLanguage();
   const [cards, setCards] = useState<ReferenceCard[]>([]);
   const [job, setJob] = useState<ReferenceAnalysisJob | null>(null);
@@ -186,6 +186,7 @@ export function ReferenceLibrary({ showGraph = false }: { showGraph?: boolean })
           <div className={styles.title}>
             <Text as="h1" variant="title-l" medium>{ui('Референсы')}</Text>
             <Text variant="label" tone="secondary">{ui('Кадры: {0} · Разобрано: {1}', format.format(cards.length), format.format(cards.length - pending))}</Text>
+            {shared && <Text id="reference-upload-visibility" variant="label" tone="secondary">{ui('Загруженные кадры видят все пользователи студии.')}</Text>}
           </div>
           <div className={styles.pageActions}>
             <input ref={files} hidden type="file" multiple accept={FILE_TYPES} aria-label={ui('Фото и видео')} onChange={(event) => {
@@ -197,7 +198,7 @@ export function ReferenceLibrary({ showGraph = false }: { showGraph?: boolean })
               : pending > 0 && <Button variant="border" loading={jobAction === 'start'} disabled={upload !== null} onClick={() => void controlJob('start')}>
                 {job?.status === 'stopped' || job?.status === 'error' ? ui('Продолжить анализ') : ui('Проанализировать')}
               </Button>}
-            <Button variant="primary" size="m" loading={upload !== null} icon={<Icon name="plus" size={1} />} onClick={() => files.current?.click()}>{ui('Загрузить')}</Button>
+            <Button variant="primary" size="m" loading={upload !== null} icon={<Icon name="plus" size={1} />} aria-describedby={shared ? 'reference-upload-visibility' : undefined} onClick={() => files.current?.click()}>{ui('Загрузить')}</Button>
           </div>
         </header>
 

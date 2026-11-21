@@ -5,6 +5,7 @@
   "Добавь первые кадры": "Add your first frames",
   "Загрузи фото или видео. Из ролика останутся стоп-кадры с таймкодами.": "Upload photos or videos. Videos will be kept as still frames with timecodes.",
   "Кадры: {0} · Разобрано: {1}": "Frames: {0} · Analyzed: {1}",
+  "Загруженные кадры видят все пользователи студии.": "All studio users can see uploaded frames.",
   "Анализ идёт": "Analyzing",
   "Анализ остановлен": "Analysis stopped",
   "Анализ завершён": "Analysis complete",
