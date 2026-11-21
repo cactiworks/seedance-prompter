@@ -88,9 +88,10 @@ Caddy остаётся единственным reverse proxy к Node; exact dir
 На Mac игнорируемый `.seedance-remote.json` направляет обычный launcher на прямой HTTPS origin общей студии;
 start:offline, dev и явные SP_PORT/SP_DATA_DIR остаются локальными. Старую data нельзя
 синхронизировать поверх серверной после cutover. Смена только входного URL не переносит data
-и не требует второго scheduler. Cookies и localStorage привязаны к hostname/origin: browser drafts
-сохраняются до смены адреса, на новом origin каждый пользователь при необходимости подключает свой
-AI заново. Consent и private account profiles между браузерами/origins не копируются.
+и не требует второго scheduler. Cookies и localStorage привязаны к origin. Прежние Canvas-черновики
+переносятся в серверную историю при открытии Canvas на том origin, где браузер их сохранил.
+На новом origin каждый пользователь при необходимости подключает свой AI заново.
+Consent и private account profiles между браузерами/origins не копируются.
 
 
 С 20.10.2026 в server mode каждый браузер подключает собственный ChatGPT кнопкой в header
