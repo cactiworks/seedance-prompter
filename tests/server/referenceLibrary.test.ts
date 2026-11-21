@@ -79,6 +79,15 @@ it('extracts distinct shot frames with decoded timestamps rather than retaining 
   expect(colors[1]?.[2]).toBeGreaterThan(220);
 });
 
+it('omits blank videos and cleans their staged originals', async () => {
+  const { dir, root, library } = await fixture();
+  const file = path.join(dir, 'blank.mp4');
+  await runFfmpeg(['-f', 'lavfi', '-i', 'color=black:s=160x90:r=10:d=2', '-c:v', 'libx264', '-threads', '1', file]);
+  await expect(library.importFile('blank.mp4', body(await readFile(file)))).rejects.toMatchObject({ status: 422 });
+  expect(await library.list()).toEqual([]);
+  expect(await readdir(path.join(root, 'sources'))).toEqual([]);
+});
+
 function reply<T>(request: LlmRequest): LlmResult<T> {
   const { imageIdsInOrder } = JSON.parse(request.user) as { imageIdsInOrder: string[] };
   return {

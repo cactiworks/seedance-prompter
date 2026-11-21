@@ -88,7 +88,8 @@ function usable(sample: Sample): boolean {
 
 function selectTimes(samples: Sample[], cuts: number[], duration: number): number[] {
   const visible = samples.filter(usable);
-  if (!visible.length) return [duration / 2];
+  if (!samples.length) return [duration / 2];
+  if (!visible.length) throw new ReferenceLibraryError(422, 'В ролике нет кадров с различимым изображением.');
   const boundaries = [0, ...cuts.filter((time, index) => time > 0 && time < duration && time > (cuts[index - 1] ?? -1)), duration];
   const representatives = boundaries.slice(0, -1).flatMap((start, index) => {
     const end = boundaries[index + 1]!;
