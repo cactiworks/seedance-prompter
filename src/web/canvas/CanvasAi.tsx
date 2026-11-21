@@ -34,7 +34,7 @@ export function AiNodeCard({ node }: { node: CanvasNode }) {
       const state = useCanvas.getState();
       const captured = state.flow;
       try {
-        if (captured?.id === flow.id && state.save === 'saved') {
+        if (captured?.id === flow.id) {
           const saved = await currentCanvasFlow(flow.id);
           if (!stopped && (saved.rev ?? 0) > (captured.rev ?? 0)) useCanvas.getState().applyServerFlow(saved, captured);
         }
@@ -163,10 +163,10 @@ export function CanvasAiDrawer() {
         const list = await canvasAiRuns(flowId, nodeId);
         if (stopped) return;
         setRuns(list); setPollError('');
-        // Completion may materialize a prompt on the server. Adopt only if no local edit raced with this read.
+        // Completion may materialize a prompt on the server. The store rebases pending browser edits.
         const local = useCanvas.getState();
         const captured = local.flow;
-        if (captured?.id === flowId && local.save === 'saved') {
+        if (captured?.id === flowId) {
           const saved = await currentCanvasFlow(flowId);
           if (!stopped && (saved.rev ?? 0) > (captured.rev ?? 0)) useCanvas.getState().applyServerFlow(saved, captured);
         }

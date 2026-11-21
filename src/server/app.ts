@@ -41,7 +41,7 @@ import { createProductionRuntime, type ProductionRuntime } from './production/ru
 import { productionRoutes } from './production/routes.ts';
 import { createCharacters, type Characters } from './production/characters.ts';
 import { characterRoutes } from './production/characterRoutes.ts';
-import { createFlows } from './storage/flows.ts';
+import { createFlows, FlowMergeError } from './storage/flows.ts';
 import { createJournal } from './storage/journal.ts';
 import { createMoodboards } from './storage/moodboards.ts';
 import { createStore, StoreError } from './storage/fsStore.ts';
@@ -175,6 +175,7 @@ export function createApp(options: AppOptions) {
     if (error instanceof z.ZodError) return c.json({ error: 'INVALID', messageRu: 'Некорректные поля запроса.', details: error.issues }, 422);
     if (error instanceof AccountError) return c.json({ error: 'ACCOUNT_REQUIRED', messageRu: error.message }, error.status);
     if (error instanceof SyntaxError) return c.json({ error: 'BAD_JSON', messageRu: 'Некорректный JSON запроса.' }, 400);
+    if (error instanceof FlowMergeError) return c.json({ error: error.code, messageRu: error.message, current: error.current, historyId: error.historyId }, 409);
     if (error instanceof StoreError) return c.json({ error: error.code, messageRu: error.message }, STATUS[error.code]);
     if (error instanceof SubmitError) return c.json({ error: error.code, messageRu: error.messageRu, ...error.details }, error.status);
     if (error instanceof GenError) return c.json({ error: error.code, messageRu: error.messageRu }, GEN_HTTP[error.code]);
@@ -573,11 +574,16 @@ export function createApp(options: AppOptions) {
           .filter((job, index) => index < 300 || isActive(job) || needsAttention(job)),
       );
     })
-    // Canvas: flows пишет клиент (автосейв), сервер хранит. Генерации из нод идут тем же /api/gen/jobs.
+    // Canvas canonical state and revision history are kept on the server.
     .get('/api/canvas/flows', async (c) => c.json(await flows.list()))
     .post('/api/canvas/flows', async (c) => {
       const body = (await c.req.json()) as { name?: string };
       return c.json(await flows.create(body.name ?? ''), 201);
+    })
+    .post('/api/canvas/legacy-drafts', async (c) => {
+      const body = await c.req.json() as { flow?: unknown };
+      const saved = await flows.archiveLegacy(body.flow);
+      return saved === null ? c.json({ error: 'INVALID', messageRu: 'Старый черновик не сохранён: неверная структура.' }, 422) : c.json(saved);
     })
     .get('/api/canvas/flows/:id', async (c) => {
       const flow = await flows.get(c.req.param('id'));
@@ -586,6 +592,20 @@ export function createApp(options: AppOptions) {
     .put('/api/canvas/flows/:id', async (c) => {
       const saved = await flows.save(c.req.param('id'), await c.req.json());
       return saved === null ? c.json({ error: 'INVALID', messageRu: 'Flow не сохранён: неверная структура.' }, 422) : c.json(saved);
+    })
+    .patch('/api/canvas/flows/:id', async (c) => {
+      const saved = await flows.patch(c.req.param('id'), await c.req.json());
+      return saved === null ? c.json({ error: 'INVALID', messageRu: 'Холст не сохранён: неверная структура изменений.' }, 422) : c.json(saved);
+    })
+    .get('/api/canvas/flows/:id/history', async (c) => c.json(await flows.listHistory(c.req.param('id'))))
+    .get('/api/canvas/flows/:id/history/:version', async (c) => {
+      const flow = await flows.history(c.req.param('id'), c.req.param('version'));
+      return flow === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Версия холста не найдена.' }, 404) : c.json(flow);
+    })
+    .post('/api/canvas/flows/:id/history/:version/restore', async (c) => {
+      const body = await c.req.json() as { rev?: unknown; requestId?: unknown };
+      const flow = await flows.restoreVersion(c.req.param('id'), c.req.param('version'), body.rev, body.requestId);
+      return flow === undefined ? c.json({ error: 'NOT_FOUND', messageRu: 'Версия холста не найдена.' }, 404) : c.json(flow);
     })
     .post('/api/canvas/flows/:id/restore', async (c) => {
       const flow = await flows.restore(c.req.param('id'));

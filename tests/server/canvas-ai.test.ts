@@ -281,6 +281,23 @@ describe('Canvas AI durable explicit stages', () => {
     expect(approved.run.status).toBe('approved');
   });
 
+  it('restoring Canvas history interrupts its projection and a late response stays in AI history', async () => {
+    let finish!: (value: unknown) => void; let began!: () => void;
+    const pending = new Promise<void>(resolve => { began = resolve; });
+    const run: Runner = async <T>() => ({ data: await new Promise<unknown>(resolve => { finish = resolve; began(); }) as T, meta });
+    const s = await setup([], { run });
+    const started = await s.start('idea'); await pending;
+    const running = await s.saved();
+    // A normal edit archives the revision containing that active run.
+    await s.flows.patch(running.id, { base: running, flow: { ...running, viewport: { x: 10, y: 0, zoom: 1 } } });
+    const version = (await s.flows.listHistory(running.id)).find(entry => entry.rev === running.rev)!;
+    const restored = (await s.flows.restoreVersion(running.id, version.id, (await s.saved()).rev))!;
+    expect(restored.nodes.find(n => n.id === 'ai')?.ai).toMatchObject({ runId: null, status: 'interrupted', idea: null });
+    finish(idea); await s.runtime.wait(started.run.id);
+    expect((await s.runtime.get(started.run.id)).version?.text).toBeTruthy();
+    expect((await s.saved()).nodes.find(n => n.id === 'ai')?.ai).toMatchObject({ runId: null, status: 'interrupted', idea: null });
+  });
+
   it('cancel, restart recovery and retry require an explicit action; account stays captured per request', async () => {
     const seen: (string | undefined)[] = [];
     let began!: () => void; const startedCall = new Promise<void>(r => { began = r; });

@@ -5,13 +5,13 @@ import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { z } from 'zod';
 import { flowCost } from '../../core/canvas/plan.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
-import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, useCanvas } from './canvasStore.ts';
+import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, useCanvas, type FlowHistoryItem } from './canvasStore.ts';
 import { NodeView, portsOf } from './NodeView.tsx';
 import { afterSeedanceClose } from './openSeedance.ts';
 import { CanvasAiDrawer } from './CanvasAi.tsx';
@@ -19,7 +19,7 @@ import { useStore, type ProjectHost } from '../store.ts';
 
 const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
 
-const SAVE_RU = { saved: 'Сохранено', dirty: 'Изменено', saving: 'Сохраняю…', error: 'Не сохранилось' } as const;
+const SAVE_RU = { saved: 'Сохранено на сервере', dirty: 'Ожидает сохранения на сервере', saving: 'Сохраняю…', error: 'Не сохранилось' } as const;
 
 /** Список flows в сайдбаре оболочки — как «Projects» в connxn. */
 export function FlowList() {
@@ -99,6 +99,65 @@ const curve = (x1: number, y1: number, x2: number, y2: number): string => {
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 };
 
+/** Server revisions are reviewed before restoring; browsing never changes the flow. */
+function FlowHistoryDialog({ flowId, open, onOpenChange }: { flowId: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [history, setHistory] = useState<FlowHistoryItem[]>([]);
+  const [version, setVersion] = useState<Flow | null>(null);
+  const [versionId, setVersionId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = useRef(0);
+  useEffect(() => {
+    const token = ++request.current;
+    if (!open) return;
+    setBusy(true); setError(null); setVersion(null); setVersionId(null);
+    void useCanvas.getState().loadHistory(flowId).then(items => {
+      if (token === request.current) setHistory(items);
+    }).catch(() => { if (token === request.current) setError(ui('Не удалось загрузить историю.')); })
+      .finally(() => { if (token === request.current) setBusy(false); });
+    return () => { request.current += 1; };
+  }, [flowId, open]);
+  const inspect = async (id: string): Promise<void> => {
+    const token = ++request.current;
+    setBusy(true); setError(null);
+    try {
+      const result = await useCanvas.getState().loadHistoryVersion(flowId, id);
+      if (token === request.current) { setVersion(result); setVersionId(id); }
+    } catch { if (token === request.current) setError(ui('Не удалось загрузить историю.')); }
+    finally { if (token === request.current) setBusy(false); }
+  };
+  const restore = async (): Promise<void> => {
+    if (!versionId) return;
+    setRestoring(true); setError(null);
+    try { if (await useCanvas.getState().restoreHistoryVersion(flowId, versionId)) onOpenChange(false); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : ui('Не удалось восстановить версию.')); }
+    finally { setRestoring(false); }
+  };
+  const kind = (item: FlowHistoryItem): string => ui(item.kind === 'legacy' ? 'Прежний черновик' : item.kind === 'recovery' ? 'Неотправленные изменения' : 'Сохранение');
+  return <Dialog open={open} onOpenChange={onOpenChange} title={ui('История сохранений')}
+    description={ui('Версии и прежние черновики хранятся на сервере. Восстановление заменит содержимое этого холста. Идею, промпт и фото нужно будет одобрить заново.')}
+    footer={version ? <><Button variant="ghost" size="s" disabled={restoring} onClick={() => { setVersion(null); setVersionId(null); }}>{ui('К истории')}</Button><Button variant="primary" size="s" disabled={restoring || busy} onClick={() => void restore()}>{ui(restoring ? 'Восстанавливаю…' : 'Восстановить эту версию')}</Button></> : undefined}>
+    <div className={styles.nodeBody}>
+      {error && <Text tone="secondary">{error}</Text>}
+      {busy && <Text tone="tertiary">{ui('Загружаю историю…')}</Text>}
+      {!busy && version === null && history.length === 0 && <Text tone="tertiary">{ui('История пока пуста.')}</Text>}
+      {version === null ? history.map(item => <div key={item.id} className={styles.nodeBody}>
+        <Text medium>{item.name}</Text>
+        <Text variant="caption" tone="secondary">{kind(item)} · {ui('Версия {0} · {1} нод', item.rev, item.nodes)} · {new Date(item.createdAt).toLocaleString()}</Text>
+        <Button variant="border" size="s" disabled={busy} onClick={() => void inspect(item.id)}>{ui('Посмотреть версию')}</Button>
+      </div>) : <>
+        <Text medium>{version.name}</Text>
+        <Text variant="caption" tone="secondary">{ui('Версия {0} · {1} нод', version.rev ?? 0, version.nodes.length)}</Text>
+        {version.nodes.map(node => <div key={node.id} className={styles.nodeBody}>
+          <Text variant="label">{nodeTitle(node)}</Text>
+          {(node.text || node.ai?.idea?.text) && <Text variant="caption" tone="secondary">{node.text || node.ai?.idea?.text}</Text>}
+        </div>)}
+      </>}
+    </div>
+  </Dialog>;
+}
+
 /** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
 export function Canvas() {
   const { flow, save, selected, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
@@ -114,6 +173,7 @@ export function Canvas() {
   const [hint, setHint] = useState<string | null>(null);
   const [keyboardFrom, setKeyboardFrom] = useState<string | null>(null);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [picker, setPicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
   const [consent, setConsent] = useState<{ run: () => void; provider?: string } | null>(null);
@@ -143,6 +203,7 @@ export function Canvas() {
   }, [jobIdsKey]);
   useEffect(() => {
     setKeyboardFrom(null);
+    setHistoryOpen(false);
     setPicker(null);
     setConsent(null);
     useCanvas.getState().closeAi();
@@ -482,7 +543,7 @@ export function Canvas() {
             {ui(SAVE_RU[save])}{error !== null ? ` · ${error}` : ''}
           </Text>
         </div>
-        {error !== null && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().saveCopy()}>{ui("Сохранить копию")}</Button>}
+        {save === 'error' && <Button variant="border" size="xs" onClick={() => void useCanvas.getState().retrySave().catch(() => undefined)}>{ui("Повторить сохранение")}</Button>}
         <span className={styles.grow} />
         <details
           ref={moreMenu}
@@ -496,6 +557,7 @@ export function Canvas() {
         >
           <summary className={styles.moreTrigger}>{ui("Ещё")}</summary>
           <div className={styles.morePanel}>
+            <Button variant="ghost" size="xs" onClick={() => { if (moreMenu.current) { moreMenu.current.open = false; moreMenu.current.querySelector('summary')?.focus(); } setHistoryOpen(true); }}>{ui('История сохранений')}</Button>
             <Button variant="ghost" size="xs" onClick={() => setConnectionsOpen(true)}>{ui("Связи (")}{flow.edges.length})</Button>
             <Button variant="ghost" size="xs" data-guide="canvas-export" icon={<Icon name="download" size={0.875} />} onClick={exportFlow} title={ui("Скачать схему холста в JSON. Медиафайлы скачиваются из результата.")}>{ui("Сохранить схему")}</Button>
             <Button variant="ghost" size="xs" icon={<Icon name="upload" size={0.875} />} onClick={() => importer.current?.click()} title={ui("Открыть сохранённую схему холста из JSON")}>{ui("Открыть схему")}</Button>
@@ -708,6 +770,7 @@ export function Canvas() {
         </div>
       </div>
 
+      <FlowHistoryDialog flowId={flow.id} open={historyOpen} onOpenChange={setHistoryOpen} />
       <Dialog open={connectionsOpen} onOpenChange={setConnectionsOpen} title={ui("Связи холста")} description={ui("Клавиатура: выбери выход ноды, затем нужный вход. Здесь можно удалить связь.")}>
         {flow.edges.length === 0 && <Text>{ui("Связей пока нет.")}</Text>}
         {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {edge.port}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>{ui("Удалить связь")}</Button></div>)}

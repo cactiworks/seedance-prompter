@@ -28,7 +28,7 @@ beforeEach(async () => {
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
   vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-    const data = init?.body ? JSON.parse(String(init.body)) as Flow : graph();
+    const data = init?.body ? (JSON.parse(String(init.body)) as { flow: Flow }).flow : graph();
     return new Response(JSON.stringify({ ...data, rev: (data.rev ?? 0) + 1, updatedAt: 'server-canonical-time' }), { headers: { 'content-type': 'application/json' } });
   }));
   canvas = await import('../../src/web/canvas/canvasStore.ts');
@@ -67,7 +67,7 @@ it('a prompt copied alone remains an unapproved managed draft rather than silent
   expect(aiPromptProblems(result, copy).length).toBeGreaterThan(0);
 });
 
-it('import/recovery remapping retains media history while resetting AI approvals and remapping links', () => {
+it('import remapping retains media history while resetting AI approvals and remapping links', () => {
   const original = graph();
   const ids = new Map(original.nodes.map(n => [n.id, `copy-${n.id}`]));
   const nodes = original.nodes.map(n => canvas.remapCanvasCopy(n, ids));
@@ -105,11 +105,17 @@ it('a server projection cannot overwrite newer local edits and accepted revision
   expect(canvas.useCanvas.getState().applyServerFlow({ ...remote }, captured)).toBe(true);
   expect(canvas.useCanvas.getState().applyServerFlow({ ...remote, rev: 6 }, remote)).toBe(false);
   canvas.useCanvas.getState().patchNode('comment', { text: 'New local input' });
-  expect(canvas.useCanvas.getState().applyServerFlow({ ...remote, rev: 8 }, remote)).toBe(false);
+  const completed = { ...remote, rev: 8, nodes: remote.nodes.map(n => n.id === 'ai' ? { ...n, ai: CanvasAiProjectionSchema.parse({ ...n.ai, idea: { id: 'v-new', text: 'Новая серверная идея', inputFingerprint: 'fp', createdAt: 'now' } }) } : n) };
+  expect(canvas.useCanvas.getState().applyServerFlow(completed, remote)).toBe(true);
+  expect(canvas.useCanvas.getState().flow?.nodes.find(n => n.id === 'ai')?.ai?.idea?.text).toBe('Новая серверная идея');
   expect(canvas.useCanvas.getState().flow?.nodes[0]?.text).toBe('New local input');
   expect(await canvas.useCanvas.getState().flush()).toBe(true);
   const request = vi.mocked(fetch).mock.calls[0]?.[1];
-  expect(JSON.parse(String(request?.body)).rev).toBe(7);
+  const body = JSON.parse(String(request?.body)) as { base: Flow; flow: Flow };
+  expect(body.base.rev).toBe(8);
+  expect(body.base.nodes[0]?.text).toBe('Creative brief');
+  expect(body.flow.nodes[0]?.text).toBe('New local input');
+  expect(body.flow.nodes.find(n => n.id === 'ai')?.ai?.idea?.id).toBe('v-new');
   expect(canvas.useCanvas.getState().flow?.updatedAt).toBe('server-canonical-time');
 });
 
@@ -141,4 +147,49 @@ it('opens each visible AI block at its own stage and focuses the prompt node wit
   expect(canvas.useCanvas.getState().selected).toBe('prompt');
   expect(canvas.useCanvas.getState().aiDrawer).toEqual({ nodeId: 'ai', stage: 'prompt' });
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it('a late ACK and further typing preserve server projections received during an in-flight save', async () => {
+  const original = canvas.useCanvas.getState().flow!;
+  canvas.useCanvas.getState().applyServerFlow(original, original);
+  let release!: () => void; let entered!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const realFetch = globalThis.fetch; let first = true;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (first && init?.method === 'PATCH') {
+      first = false; entered(); await gate;
+      const sent = (JSON.parse(String(init.body)) as { flow: Flow }).flow;
+      return Response.json({ ...sent, rev: 1 });
+    }
+    return realFetch(url, init);
+  }));
+  canvas.useCanvas.getState().rename('First edit');
+  const saving = canvas.useCanvas.getState().flush(); await started;
+  const completed = { ...original, rev: 4, nodes: original.nodes.map(n => n.id === 'ai' ? { ...n, ai: CanvasAiProjectionSchema.parse({ ...n.ai, idea: { id: 'v-completed', text: 'Завершённая идея', inputFingerprint: 'fp', createdAt: 'now' } }) } : n) };
+  expect(canvas.useCanvas.getState().applyServerFlow(completed, original)).toBe(true);
+  canvas.useCanvas.getState().rename('Typed after server update');
+  release(); expect(await saving).toBe(true);
+  expect(canvas.useCanvas.getState().flow).toMatchObject({ name: 'Typed after server update' });
+  expect(canvas.useCanvas.getState().flow?.nodes.find(n => n.id === 'ai')?.ai?.idea?.id).toBe('v-completed');
+  const requests = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === 'PATCH');
+  expect((JSON.parse(String(requests[1]?.[1]?.body)) as { base: Flow }).base.rev).toBe(4);
+});
+
+it('undo and redo preserve server AI projections and server-added nodes while reverting user text', async () => {
+  const state = canvas.useCanvas.getState();
+  const original = state.flow!;
+  state.applyServerFlow(original, original);
+  state.rename('Local title');
+  state.patchNode('comment', { text: 'Edited brief' });
+  const completed = { ...original, rev: 4, nodes: [...original.nodes.map(n => n.id === 'ai' ? { ...n, ai: CanvasAiProjectionSchema.parse({ ...n.ai, idea: { id: 'v-current', text: 'Серверная идея', inputFingerprint: 'fp', createdAt: 'now' } }) } : n), node({ id: 'server-node', type: 'comment', text: 'Added on server' })] };
+  expect(state.applyServerFlow(completed, original)).toBe(true);
+  state.undo();
+  expect(canvas.useCanvas.getState().flow?.nodes[0]?.text).toBe('Creative brief');
+  expect(canvas.useCanvas.getState().flow?.name).toBe('Local title');
+  expect(canvas.useCanvas.getState().flow?.nodes.find(n => n.id === 'ai')?.ai?.idea?.id).toBe('v-current');
+  expect(canvas.useCanvas.getState().flow?.nodes.some(n => n.id === 'server-node')).toBe(true);
+  state.redo();
+  expect(canvas.useCanvas.getState().flow?.nodes[0]?.text).toBe('Edited brief');
+  expect(canvas.useCanvas.getState().flow?.nodes.find(n => n.id === 'ai')?.ai?.idea?.id).toBe('v-current');
 });

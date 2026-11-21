@@ -154,7 +154,7 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
       const node = flow.nodes.find(n => n.id === run.nodeId && n.type === 'ai');
       if (!node || inputFingerprint(flow, node.id) !== run.inputFingerprint) return flow;
       // An older call may finish after a newer request; it cannot become the current projection.
-      if (!setCurrent && node.ai?.runId && node.ai.runId !== run.id) return flow;
+      if (!setCurrent && node.ai?.runId !== run.id) return flow;
       if (materialize && run.stage === 'prompt' && run.version) {
         try { promptNode(flow, node, run.version); }
         catch (error) {

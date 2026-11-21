@@ -212,3 +212,15 @@ paid continuation is offered only after that check succeeds. Failed/interrupted 
 retried in the focus block. Prompter stays open after failed/conflicting save, displays the cause and
 provides retry for network errors plus JSON form download. Batch results refresh a saved open editor;
 manual changes remain protected. An unchanged Production handoff does not create a revision conflict.
+
+
+### Сохранение Canvas (20.11.2026)
+
+Статус «Сохранено на сервере» появляется после server ACK. Autosave объединяет правки с
+параллельными серверными AI-результатами. Постоянных browser drafts и «Сохранить копию» нет;
+при ошибке доступно «Повторить сохранение». Старые drafts переносятся на VPS один раз.
+В «Ещё → История сохранений» видны прежние версии, перенесённые черновики и несовместимые
+неотправленные изменения. Просмотр показывает текст перед восстановлением. Restore заменяет
+содержимое того же Flow, снимает прежние approvals/приёмку и не запускает AI/генерацию.
+Правки без ACK остаются в памяти вкладки и повторяются при восстановлении связи; закрытие
+с pending изменениями защищено browser warning, сохранение после offline reload не обещается.

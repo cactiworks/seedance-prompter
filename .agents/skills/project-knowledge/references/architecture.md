@@ -280,10 +280,12 @@ localStorage. Fixtures `scripts/production/build-mock-media.mjs` использ�
 
 ## Устойчивость Canvas и Production (14.10.2026)
 
-Canvas хранит `rev`, последовательные snapshots автосейва и локальный черновик
-`sp-canvas-draft:<id>`. Переход ждёт сохранения, включая правки во время загрузки следующего холста;
-409 сохраняет черновик и предлагает отдельную копию. Удаление переносит JSON в `canvas/trash/`,
-восстановление — POST `/api/canvas/flows/:id/restore`.
+Canvas хранит канонический Flow с `rev` на сервере. Browser autosave отправляет `PATCH` с
+подтверждённой базой и текущими правками; сервер объединяет их с новой версией, включая
+параллельные AI-изменения. `PUT` сохранён как strict revision API. Постоянных локальных Canvas
+черновиков нет. Предыдущие версии и recovery payloads хранятся на VPS; пользователь может
+просмотреть и восстановить их через «История сохранений». Удаление переносит JSON в
+`canvas/trash/`, восстановление — POST `/api/canvas/flows/:id/restore`.
 Граф проверяется на уникальные IDs, endpoints, совместимые порты, циклы и положительный zoom.
 `freshness.ts` помечает зависимые результаты устаревшими после изменения входа/настроек;
 async result привязан к flow/node/input fingerprint. Старые файлы остаются в библиотеке.
@@ -433,13 +435,24 @@ independent Seedance drafts and drop Production ownership. Terminal series polls
 idle editor only to a higher revision; dirty/saving/conflict and active editor agents are protected.
 Source-frame key and planned duration (unless manually protected) are checked before series criticism.
 
-Canvas navigation (15.11.2026): failed remote save no longer traps the user in one Flow. Switching
-or creating a Flow requires either acknowledged save or successful localStorage write of the latest
-pending draft under its own Flow ID and revision. Pending is detached only after the destination is
-loaded; failed GET retains the current draft. Returning/reloading restores conflicting drafts without
-overwriting the server. Equal payloads (ignoring revision/update time) are acknowledged as saved,
-including a lost PUT response. Ordinary PUT does not use keepalive: browser's 64 KiB quota otherwise
-rejects large graphs. Pagehide relies on the draft already persisted with each edit.
+Canvas saving (20.11.2026): acknowledged bases and per-Flow pending edits live in browser memory.
+PATCH `/api/canvas/flows/:id` carries `{base, flow}`; unchanged fields keep the current server value,
+changed browser fields win conflicts, and entities merge by ID. The server validates the merged DAG
+and freshness before atomic write. Lost-response retries retain the exact envelope and use durable server receipts, so replay
+cannot overwrite a later edit. A per-Flow journal closes the write/receipt crash window; compact
+receipt logs persist across restarts. Edits made during a request are rebased onto the canonical
+acknowledgement; server polls also rebase pending changes and undo/redo history. Transient save failures retry with backoff and on focus/online. No AI/media calls retry.
+Only a server acknowledgement means «Сохранено». Unsent data is retained in memory and closing
+with pending changes is guarded. It cannot survive closing an offline browser without storage.
+
+Each mutation preserves a prior snapshot under `data/canvas/history/<id>/` (50 recent revisions).
+Invalid merged graphs preserve the incoming payload as recovery and leave the canonical Flow intact.
+Legacy `sp-canvas-draft:*` entries migrate once via `/api/canvas/legacy-drafts`, then are removed
+only after server acknowledgement. A draft without a recoverable base is archived on the VPS;
+it never replaces current work automatically. History is listed/read under `/flows/:id/history`,
+restore is an explicit strict-revision operation on the same Flow, without inference. Its stable
+requestId makes a lost-response retry idempotent; the browser pauses the old queue until confirmed. Restoring
+interrupts active projections and removes old approvals/acceptance so they require review again.
 
 
 01.11.2026: POST /api/production/:id/photos/accept с ids/rev/requestId атомарно принимает только текущие сохранённые фото. Проверяет локальные файлы, revision и отсутствие активной работы; UUID записывается с usd=0, повтор идемпотентен. Невыбранные shots/jobs/budget/reports/artifacts не меняются. Photos.complete означает полное покрытие, но для handoff достаточно одного принятого фото. Canvas handoff вызывается после успешной приёмки отдельно; при сбое перехода сохранённые approvals остаются и действие повторяется без новых генераций.

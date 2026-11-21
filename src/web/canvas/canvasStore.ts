@@ -5,15 +5,23 @@ import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, inputsOf, 
 import { wouldCycle } from '../../core/canvas/plan.ts';
 import { inputFingerprint, invalidateChanged } from '../../core/canvas/freshness.ts';
 import { cloneSeedance } from '../../core/canvas/seedance.ts';
+import { mergeCanvasFlow } from '../../core/canvas/merge.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
 /** Префикс нод в системном буфере — чтобы вставка работала между flows и вкладками. */
 export const CLIPBOARD_PREFIX = 'sp-canvas:';
 
+class CanvasHttpError extends Error {
+  status: number;
+  recovery?: Flow;
+  constructor(message: string, status: number, recovery?: Flow) { super(message); this.status = status; this.recovery = recovery; }
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { messageRu?: string; error?: string };
-    throw new Error(body.messageRu ?? body.error ?? `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { messageRu?: string; error?: string; current?: unknown; historyId?: string };
+    const recovery = res.status === 409 && body.historyId ? FlowSchema.safeParse(body.current).data : undefined;
+    throw new CanvasHttpError(body.messageRu ?? body.error ?? `HTTP ${res.status}`, res.status, recovery);
   }
   return (await res.json()) as T;
 }
@@ -24,6 +32,15 @@ export interface FlowListItem {
   nodes: number;
   updatedAt: string;
   production?: Flow['production'];
+}
+
+export interface FlowHistoryItem {
+  id: string;
+  kind: 'revision' | 'legacy' | 'recovery';
+  rev: number;
+  name: string;
+  nodes: number;
+  createdAt: string;
 }
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
@@ -54,7 +71,7 @@ export function blankNode(type: CanvasNodeType, x: number, y: number, kind: Medi
   });
 }
 
-/** Import/recovery copies keep material history, never a current AI approval from another graph. */
+/** Imported copies keep material history, never a current AI approval from another graph. */
 export function remapCanvasCopy(node: CanvasNode, ids: ReadonlyMap<string, string>): CanvasNode {
   return { ...node, id: ids.get(node.id) ?? node.id, production: undefined, ai: undefined, aiSource: node.aiSource ? { ...node.aiSource, aiNodeId: ids.get(node.aiSource.aiNodeId) ?? node.aiSource.aiNodeId } : undefined, aiApproval: undefined,
     targetGeneratorId: node.targetGeneratorId ? ids.get(node.targetGeneratorId) ?? null : null,
@@ -85,8 +102,11 @@ interface CanvasState {
   newFlow: (from?: Pick<Flow, 'nodes' | 'edges' | 'name'>) => Promise<void>;
   deleteFlow: (id: string) => Promise<void>;
   restoreFlow: (id: string) => Promise<void>;
-  saveCopy: () => Promise<void>;
+  loadHistory: (id: string) => Promise<FlowHistoryItem[]>;
+  loadHistoryVersion: (id: string, version: string) => Promise<Flow>;
+  restoreHistoryVersion: (id: string, version: string) => Promise<boolean>;
   flush: () => Promise<boolean>;
+  retrySave: () => Promise<boolean>;
   captureResult: (id: string) => (patch: Partial<CanvasNode>) => boolean;
   /**
    * Единственный путь менять flow: чистая функция, автосейв сам. `historyKey` — правки с одним ключом подряд
@@ -126,56 +146,191 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastKey: { key: string; at: number } | null = null;
 
 export const useCanvas = create<CanvasState>((set, get) => {
-  let pending: Flow | null = null;
+  // Only server snapshots are durable. Unsaved edits stay in this tab's memory
+  // until acknowledged, independently for every flow visited in the session.
+  const pending = new Map<string, Flow>();
+  const acknowledgedBase = new Map<string, Flow>();
+  const failures = new Map<string, string>();
+  const recoveryNotes = new Map<string, string>();
+  const attempts = new Map<string, number>();
+  const restoring = new Set<string>();
+  const restoreBusy = new Set<string>();
+  const restoreRequests = new Map<string, { version: string; requestId: string; clicked: Flow; hadPending: boolean; archived: boolean; rev?: number }>();
+  const restoreEdits = new Map<string, { base: Flow; flow: Flow }[]>();
+  const inFlight = new Map<string, Promise<Flow>>();
+  const submissions = new Map<string, { base: Flow; flow: Flow; edits: { base: Flow; flow: Flow }[] }>();
   let writing: Promise<boolean> | null = null;
+  let migrating: Promise<void> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let navigation = 0;
-  const revisions = new Map<string, number>();
-  const draftKey = (id: string): string => `sp-canvas-draft:${id}`;
-  const remember = (flow: Flow): boolean => {
-    try { localStorage.setItem(draftKey(flow.id), JSON.stringify(flow)); return true; }
-    catch { return false; } // Navigation stays blocked if this is the only copy.
+  const retryDelays = [1_500, 5_000, 15_000, 30_000];
+  const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+  const listItem = (flow: Flow): FlowListItem => ({ id: flow.id, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt, production: flow.production });
+  const updateList = (flow: Flow): void => set(state => ({ flows: state.flows.map(item => item.id === flow.id ? listItem(flow) : item) }));
+  const rebaseHistory = (before: Flow | null, after: Flow): void => {
+    if (before?.id !== after.id || get().flow?.id !== after.id) return;
+    // History represents user changes relative to the visible graph, including
+    // deliberate deletions. Preserve those inverse changes over server results.
+    set(state => ({ past: state.past.map(snapshot => mergeCanvasFlow(before, snapshot, after)), future: state.future.map(snapshot => mergeCanvasFlow(before, snapshot, after)) }));
   };
-  const flush = async (): Promise<boolean> => {
-    if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
-    if (writing !== null) return writing;
-    writing = (async () => {
-      while (pending !== null) {
-        const snapshot = pending;
-        const outgoing = { ...snapshot, rev: revisions.get(snapshot.id) ?? snapshot.rev ?? 0 };
-        remember(outgoing);
-        if (get().flow?.id === snapshot.id) set({ save: 'saving' });
+  const rebaseEdit = (base: Flow, desired: Flow, canonical: Flow): Flow | null => {
+    const merged = mergeCanvasFlow(base, desired, canonical);
+    if (!FlowSchema.safeParse(merged).success) return null;
+    // Let the server receive the original edit if it would otherwise disappear
+    // behind a deletion or a competing addition during a client-side rebase.
+    const before = new Map(base.nodes.map(node => [node.id, node]));
+    const latest = new Map(canonical.nodes.map(node => [node.id, node]));
+    if (desired.nodes.some(node => {
+      const old = before.get(node.id); const current = latest.get(node.id);
+      return old ? !current && !same(old, node) : current && !same(current, node);
+    })) return null;
+    const oldEdges = new Map(base.edges.map(edge => [edge.id, edge]));
+    const mergedEdges = new Map(merged.edges.map(edge => [edge.id, edge]));
+    if (desired.edges.some(edge => !same(oldEdges.get(edge.id), edge) && !same(mergedEdges.get(edge.id), edge))) return null;
+    return merged;
+  };
+  const showCanonical = (canonical: Flow, base: Flow): Flow => {
+    const latestBase = acknowledgedBase.get(canonical.id);
+    if (latestBase && (latestBase.rev ?? 0) > (canonical.rev ?? 0)) return pending.get(canonical.id) ?? latestBase;
+    const desired = pending.get(canonical.id);
+    const merged = desired ? rebaseEdit(base, desired, canonical) : canonical;
+    if (!merged) return desired!;
+    rebaseHistory(get().flow, merged);
+    acknowledgedBase.set(canonical.id, canonical);
+    if (same(merged, canonical) && !submissions.has(canonical.id)) pending.delete(canonical.id); else pending.set(canonical.id, merged);
+    updateList(canonical);
+    return merged;
+  };
+  const acknowledge = (response: Flow, edits: { base: Flow; flow: Flow }[]): void => {
+    const id = response.id;
+    const previous = acknowledgedBase.get(id);
+    const canonical = previous && (previous.rev ?? 0) > (response.rev ?? 0) ? previous : response;
+    let merged = canonical;
+    submissions.delete(id);
+    for (const [index, edit] of edits.entries()) {
+      const rebased = rebaseEdit(edit.base, edit.flow, merged);
+      if (rebased) { merged = rebased; continue; }
+      // Send any successfully rebased edits first, then submit the original
+      // conflicting graph so the server can preserve it in recovery history.
+      if (same(merged, canonical)) submissions.set(id, { ...edit, edits: edits.slice(index + 1) });
+      else submissions.set(id, { base: canonical, flow: merged, edits: edits.slice(index) });
+      merged = pending.get(id) ?? merged;
+      break;
+    }
+    rebaseHistory(get().flow, merged);
+    acknowledgedBase.set(id, canonical);
+    if (same(merged, canonical) && !submissions.has(id)) pending.delete(id); else pending.set(id, merged);
+    failures.delete(id); attempts.delete(id);
+    updateList(canonical);
+    if (get().flow?.id === id) set({ flow: merged, save: pending.has(id) ? 'dirty' : 'saved', error: recoveryNotes.get(id) ?? null });
+  };
+  const transientFailure = (error: unknown): boolean => error instanceof CanvasHttpError ? error.status === 408 || error.status === 429 || error.status >= 500 : error instanceof TypeError;
+  const scheduleRetry = (id: string, error: unknown): void => {
+    const transient = transientFailure(error);
+    const attempt = attempts.get(id) ?? 0;
+    if (!transient || attempt >= retryDelays.length) return;
+    attempts.set(id, attempt + 1);
+    if (retryTimer !== null) return;
+    retryTimer = setTimeout(() => { retryTimer = null; void flush(); }, retryDelays[attempt]);
+  };
+  const migrateLegacyDrafts = async (): Promise<void> => {
+    if (migrating !== null) return migrating;
+    migrating = (async () => {
+      let keys: string[];
+      try { keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((key): key is string => key?.startsWith('sp-canvas-draft:') === true); }
+      catch { return; }
+      for (const key of keys) {
         try {
-          const saved = await json<Flow>(await fetch(`/api/canvas/flows/${snapshot.id}`, { method: 'PUT', headers: HEADERS, body: JSON.stringify(outgoing) }));
-          revisions.set(snapshot.id, saved.rev ?? outgoing.rev + 1);
-          set((state) => ({ flows: state.flows.map((item) => item.id === saved.id ? { id: saved.id, name: saved.name, nodes: saved.nodes.length, updatedAt: saved.updatedAt, production: saved.production } : item) }));
-          if (pending === snapshot) {
-            pending = null;
-            try { localStorage.removeItem(draftKey(snapshot.id)); } catch { /* storage unavailable */ }
-            // No edit has superseded this snapshot. Keep the complete canonical
-            // saved value, including updatedAt, for exact-snapshot AI actions.
-            if (get().flow?.id === snapshot.id) set({ flow: saved, save: 'saved', error: null });
-          } else if (pending !== null) remember({ ...pending, rev: saved.rev });
-        } catch (error) {
-          if (get().flow?.id === snapshot.id) set({ save: 'error', error: error instanceof Error ? error.message : 'Не сохранилось. Черновик сохранён в этом браузере.' });
-          return false;
+          const raw = localStorage.getItem(key);
+          if (raw === null) continue;
+          const legacy = FlowSchema.parse(JSON.parse(raw));
+          const result = await json<{ archived: boolean; flow: Flow | null }>(await fetch('/api/canvas/legacy-drafts', { method: 'POST', headers: HEADERS, body: JSON.stringify({ flow: legacy }) }));
+          if (!result.archived) continue;
+          // Never delete an old browser draft until the VPS confirms its archive.
+          if (localStorage.getItem(key) === raw) localStorage.removeItem(key);
+          if (result.flow !== null) {
+            const base = acknowledgedBase.get(result.flow.id) ?? result.flow;
+            const flow = showCanonical(result.flow, base);
+            if (get().flow?.id === flow.id) set({ flow, save: failures.has(flow.id) ? 'error' : pending.has(flow.id) ? 'dirty' : 'saved', error: failures.get(flow.id) ?? recoveryNotes.get(flow.id) ?? null });
+          }
+        } catch {
+          // A failed archive stays available for the next load/reconnect. It is
+          // never restored over a newer server flow or discarded on a GET error.
         }
       }
-      return true;
     })();
-    try { return await writing; } finally { writing = null; }
+    try { await migrating; } finally { migrating = null; }
+  };
+  const drain = async (): Promise<boolean> => {
+    if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+    if (retryTimer !== null) { clearTimeout(retryTimer); retryTimer = null; }
+    if (writing !== null) {
+      const saved = await writing;
+      return saved && [...pending.keys()].some(id => !restoring.has(id)) ? drain() : saved;
+    }
+    writing = (async () => {
+      const failed = new Set<string>();
+      while ([...pending.keys()].some(id => !failed.has(id) && !restoring.has(id))) {
+        const entry = [...pending.entries()].find(([id]) => !failed.has(id) && !restoring.has(id));
+        if (!entry) break;
+        const [id, snapshot] = entry;
+        const submission = submissions.get(id) ?? { base: acknowledgedBase.get(id) ?? snapshot, flow: snapshot, edits: [] };
+        submissions.set(id, submission);
+        if (get().flow?.id === id) set({ save: 'saving', error: null });
+        try {
+          const operation = fetch(`/api/canvas/flows/${id}`, { method: 'PATCH', headers: HEADERS, body: JSON.stringify({ base: submission.base, flow: submission.flow }) }).then(json<Flow>).then(value => FlowSchema.parse(value));
+          inFlight.set(id, operation);
+          // Apply only edits made after this request. The ACK may contain server
+          // AI results, added nodes and approvals absent from the submitted flow.
+          acknowledge(await operation, submission.edits);
+        } catch (error) {
+          if (error instanceof CanvasHttpError && error.recovery?.id === id) {
+            recoveryNotes.set(id, error.message);
+            acknowledge(error.recovery, submission.edits);
+            continue;
+          }
+          const message = error instanceof Error ? error.message : 'Не удалось сохранить на сервере. Повторим при восстановлении связи.';
+          if (!transientFailure(error)) submissions.delete(id);
+          failures.set(id, message); failed.add(id);
+          if (get().flow?.id === id) set({ save: 'error', error: message });
+          scheduleRetry(id, error);
+        } finally { inFlight.delete(id); }
+      }
+      return pending.size === 0;
+    })();
+    let saved: boolean;
+    try { saved = await writing; } finally { writing = null; }
+    // Another caller can enqueue an edit in the microtask between the empty
+    // drain completing and its Promise finally releasing the writer.
+    return saved && [...pending.keys()].some(id => !restoring.has(id)) ? drain() : saved;
+  };
+  const flush = async (): Promise<boolean> => {
+    const focused = get().flow?.id;
+    const allSaved = await drain();
+    return focused === undefined ? allSaved : !pending.has(focused) && !restoring.has(focused);
   };
   const persist = (): void => {
     const snapshot = get().flow;
     if (snapshot === null) return;
-    pending = snapshot;
-    remember(snapshot);
+    const before = pending.get(snapshot.id) ?? acknowledgedBase.get(snapshot.id);
+    if (before) {
+      submissions.get(snapshot.id)?.edits.push({ base: before, flow: snapshot });
+      if (restoring.has(snapshot.id)) restoreEdits.get(snapshot.id)?.push({ base: before, flow: snapshot });
+    }
+    pending.set(snapshot.id, snapshot);
+    failures.delete(snapshot.id); attempts.delete(snapshot.id);
     if (saveTimer !== null) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; void flush(); }, 600);
   };
-  /** Failed remote saves must not trap all flows. Park only a verified durable
-   * draft; leave its revision intact so it cannot overwrite newer server work. */
-  const canLeave = async (): Promise<boolean> => await flush()
-    || (pending !== null && remember({ ...pending, rev: revisions.get(pending.id) ?? pending.rev }));
+  if (typeof window !== 'undefined') {
+    const reconnect = (): void => { attempts.clear(); void migrateLegacyDrafts(); void flush(); };
+    window.addEventListener('online', reconnect);
+    window.addEventListener('focus', reconnect);
+    window.addEventListener('beforeunload', event => {
+      if (pending.size === 0 && restoring.size === 0) return;
+      event.preventDefault(); event.returnValue = '';
+    });
+  }
 
   const pushHistory = (flow: Flow, key: string | null): void => {
     const now = Date.now();
@@ -254,10 +409,11 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     applyServerFlow: (flow, expected) => {
       const current = get().flow;
-      if (flow.id !== expected.id || pending !== null || get().save !== 'saved' || (flow.rev ?? 0) < (current?.rev ?? 0)) return false;
-      if (current !== expected) return current?.id === flow.id && JSON.stringify(current) === JSON.stringify(flow);
-      revisions.set(flow.id, flow.rev ?? 0);
-      set((state) => ({ flow, save: 'saved', error: null, flows: state.flows.map((item) => item.id === flow.id ? { ...item, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt } : item) }));
+      if (flow.id !== expected.id || current?.id !== flow.id || (flow.rev ?? 0) < (acknowledgedBase.get(flow.id)?.rev ?? current.rev ?? 0)) return false;
+      const merged = showCanonical(flow, acknowledgedBase.get(flow.id) ?? expected);
+      if (acknowledgedBase.get(flow.id) !== flow) return false;
+      failures.delete(flow.id);
+      set({ flow: merged, save: pending.has(flow.id) ? 'dirty' : 'saved', error: recoveryNotes.get(flow.id) ?? null });
       return true;
     },
     error: null,
@@ -265,6 +421,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     future: [],
 
     loadFlows: async () => {
+      await migrateLegacyDrafts();
       try {
         const flows = await json<FlowListItem[]>(await fetch('/api/canvas/flows'));
         set({ flows });
@@ -272,6 +429,11 @@ export const useCanvas = create<CanvasState>((set, get) => {
       } catch (error) { set({ error: String(error) }); }
     },
     flush,
+    retrySave: async () => {
+      const id = get().flow?.id;
+      const intention = id ? restoreRequests.get(id) : undefined;
+      return id && intention ? get().restoreHistoryVersion(id, intention.version) : flush();
+    },
     captureResult: (id) => {
       const started = get().flow;
       const fingerprint = started === null ? null : inputFingerprint(started, id);
@@ -285,69 +447,31 @@ export const useCanvas = create<CanvasState>((set, get) => {
     openFlow: async (id, reload = false) => {
       const request = ++navigation;
       if (get().flow?.id === id && !reload) return true;
-      if (!await canLeave() || request !== navigation) return false;
+      await flush();
+      if (request !== navigation) return false;
       let saved: Flow;
       try { saved = FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${id}`))); }
       catch (error) { if (request === navigation) set({ error: error instanceof Error ? error.message : 'Не удалось открыть холст.' }); return false; }
-      if (request !== navigation || !await canLeave() || request !== navigation) return false;
-      // A forced refresh may race with typing into this same flow. Its newer
-      // acknowledged save is authoritative over the snapshot fetched earlier.
-      const current = get().flow;
-      if (current?.id === id && (current.rev ?? 0) > (saved.rev ?? 0)) saved = current;
-      revisions.set(id, saved.rev ?? 0);
-      let flow = saved;
-      try {
-        const raw = localStorage.getItem(draftKey(id));
-        if (raw !== null) {
-          const draft = FlowSchema.parse(JSON.parse(raw));
-          if (draft.id === id) {
-            // A successful PUT with a lost response may leave an older-revision
-            // browser draft. Equal content needs no recovery copy or overwrite.
-            const content = (f: Flow): string => JSON.stringify({ ...f, rev: 0, updatedAt: '' });
-            if (content(draft) === content(saved)) localStorage.removeItem(draftKey(id));
-            else flow = draft;
-          }
-        }
-      } catch { /* invalid browser draft must not hide the server copy */ }
+      if (request !== navigation) return false;
+      // Capture keystrokes made while the destination was loading. Failure does
+      // not block navigation: each flow keeps its own pending in-memory queue.
+      await flush();
+      if (request !== navigation) return false;
+      const base = acknowledgedBase.get(id) ?? saved;
+      const flow = showCanonical(saved, base);
       lastKey = null;
-      const restored = flow !== saved;
-      const conflict = restored && (flow.rev ?? 0) !== (saved.rev ?? 0);
-      if (conflict) revisions.set(id, flow.rev ?? 0);
-      pending = null; // The previous flow's failed draft stays under its own storage key.
-      set({ flow, selected: null, selection: [], save: conflict ? 'error' : restored ? 'dirty' : 'saved', past: [], future: [], error: conflict ? 'Есть локальный черновик и другая версия на сервере. Сохрани схему или создай копию, чтобы не потерять правки. Другие холсты можно открывать.' : null });
-      if (restored) { pending = flow; if (!conflict) persist(); }
+      set({ flow, selected: null, selection: [], save: failures.has(id) ? 'error' : pending.has(id) ? 'dirty' : 'saved', past: [], future: [], error: failures.get(id) ?? recoveryNotes.get(id) ?? null });
       return true;
-    },
-    saveCopy: async () => {
-      let draft = get().flow;
-      if (draft === null) return;
-      if (writing !== null) await writing;
-      if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
-      try {
-        const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: `${draft.name} — копия` }) }));
-        if (get().flow?.id === draft.id) draft = get().flow!;
-        // Recovery copies own their drafts; reusing slugs would edit the original
-        // Prompter from a different flow. Saved media/jobs remain as history.
-        const ids = new Map(draft.nodes.map(node => [node.id, newId('n')]));
-        const nodes = draft.nodes.map(node => remapCanvasCopy(node, ids));
-        const edges = draft.edges.map(edge => ({ ...edge, id:newId('e'), from:ids.get(edge.from)!, to:ids.get(edge.to)! }));
-        // The original browser draft is retained until the new copy is confirmed on disk.
-        navigation += 1;
-        revisions.set(created.id, created.rev ?? 0);
-        set({ flow: { ...created, nodes, edges, viewport: draft.viewport }, save: 'dirty', error: null, past: [], future: [] });
-        persist();
-        if (await flush()) { try { localStorage.removeItem(draftKey(draft.id)); } catch { /* storage unavailable */ } }
-        await get().loadFlows();
-      } catch (error) { set({ error: String(error), save: 'error' }); }
     },
     newFlow: async (from) => {
       const request = ++navigation;
-      if (!await canLeave() || request !== navigation) return;
-      const created = await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: from?.name ?? '' }) }));
-      if (request !== navigation || !await canLeave() || request !== navigation) { await get().loadFlows(); return; }
+      await flush();
+      if (request !== navigation) return;
+      const created = FlowSchema.parse(await json<Flow>(await fetch('/api/canvas/flows', { method: 'POST', headers: HEADERS, body: JSON.stringify({ name: from?.name ?? '' }) })));
+      await flush();
+      if (request !== navigation) { await get().loadFlows(); return; }
       lastKey = null;
-      pending = null;
-      revisions.set(created.id, created.rev ?? 0);
+      acknowledgedBase.set(created.id, created);
       set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, save: from === undefined ? 'saved' : 'dirty', error: null, selected: null, selection: [], past: [], future: [] });
       if (from !== undefined) persist();
       await get().loadFlows();
@@ -355,6 +479,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     deleteFlow: async (id) => {
       if (!await flush()) return;
       await json(await fetch(`/api/canvas/flows/${id}`, { method: 'DELETE', headers: HEADERS }));
+      pending.delete(id); submissions.delete(id); acknowledgedBase.delete(id); failures.delete(id); attempts.delete(id); recoveryNotes.delete(id);
       if (get().flow?.id === id) set({ flow: null, past: [], future: [] });
       await get().loadFlows();
     },
@@ -364,11 +489,68 @@ export const useCanvas = create<CanvasState>((set, get) => {
       await get().openFlow(id);
       await get().loadFlows();
     },
+    loadHistory: async (id) => json<FlowHistoryItem[]>(await fetch(`/api/canvas/flows/${encodeURIComponent(id)}/history`)),
+    loadHistoryVersion: async (id, version) => FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${encodeURIComponent(id)}/history/${encodeURIComponent(version)}`))),
+    restoreHistoryVersion: async (id, version) => {
+      const clicked = get().flow;
+      if (clicked?.id !== id || restoreBusy.has(id)) return false;
+      let intention = restoreRequests.get(id);
+      if (intention && intention.version !== version) throw new Error('Повтори восстановление выбранной версии, чтобы подтвердить результат.');
+      if (!intention) {
+        intention = { version, requestId: newId('restore-'), clicked, hadPending: pending.has(id), archived: false };
+        restoreRequests.set(id, intention); restoreEdits.set(id, []);
+      }
+      restoring.add(id); restoreBusy.add(id);
+      let restoreSent = false;
+      let uncertain = false;
+      try {
+        // Stop this flow's autosave before replacing it. A request already on the
+        // wire may finish; unrelated failed queues do not prevent restoration.
+        await inFlight.get(id)?.catch(() => undefined);
+        if (intention.hadPending && !intention.archived) {
+          const archived = await json<{ archived: boolean }>(await fetch('/api/canvas/legacy-drafts', { method: 'POST', headers: HEADERS, body: JSON.stringify({ flow: intention.clicked }) }));
+          if (!archived.archived) throw new Error('Не удалось сохранить текущие изменения перед восстановлением.');
+          intention.archived = true;
+        }
+        if (intention.rev === undefined) {
+          const latest = FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${encodeURIComponent(id)}`)));
+          intention.rev = latest.rev ?? 0;
+        }
+        restoreSent = true;
+        const restored = FlowSchema.parse(await json<Flow>(await fetch(`/api/canvas/flows/${encodeURIComponent(id)}/history/${encodeURIComponent(version)}/restore`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ rev: intention.rev, requestId: intention.requestId }) })));
+        // Only user edits made after the restore click survive. Remote AI updates
+        // observed while waiting must not restore revoked approvals or old data.
+        recoveryNotes.delete(id);
+        acknowledge(restored, restoreEdits.get(id) ?? []);
+        if (get().flow?.id === id) set({ selected: null, selection: [], past: [], future: [] });
+        return true;
+      } catch (error) {
+        uncertain = restoreSent && transientFailure(error);
+        if (uncertain) {
+          const message = 'Ответ сервера не получен. Повтори сохранение, чтобы подтвердить восстановление выбранной версии.';
+          if (get().flow?.id === id) set({ save: 'error', error: message });
+          throw new Error(message);
+        }
+        throw error;
+      } finally {
+        restoreBusy.delete(id);
+        // An uncertain restore keeps the old queue paused. Explicit retry uses
+        // the exact receipt key, so it can never apply the replacement twice.
+        if (!uncertain) {
+          restoring.delete(id); restoreEdits.delete(id); restoreRequests.delete(id);
+          if (pending.has(id)) {
+            if (saveTimer !== null) clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => { saveTimer = null; void flush(); }, 600);
+          }
+        }
+      }
+    },
     update: (recipe, historyKey = null) => {
       const flow = get().flow;
       if (flow === null) return;
+      if (!acknowledgedBase.has(flow.id)) acknowledgedBase.set(flow.id, flow);
       if (historyKey !== false) pushHistory(flow, historyKey);
-      set({ flow: invalidateChanged(flow, recipe(flow)), save: 'dirty' });
+      set({ flow: invalidateChanged(flow, recipe(flow)), save: 'dirty', error: null });
       persist();
     },
     undo: () => {
