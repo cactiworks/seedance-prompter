@@ -1,5 +1,19 @@
 # Общая студия на Linux
 
+## Закрытый пилот библиотеки референсов
+
+`seedance-references.service` запускает отдельную студию с собственными данными и отдельным
+подключением ChatGPT/API. На VPS разложи проверенную production сборку в отдельную папку релиза,
+направь `/opt/seedance/reference-current` на неё и установи unit. `DynamicUser` и `StateDirectory`
+изолируют файлы от общей студии. Unit слушает `127.0.0.1:4321`; к Caddy его не подключать.
+
+Открыть доступ с Mac: `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4321:127.0.0.1:4321 <vps-host>`.
+В браузере открыть `http://127.0.0.1:4321/` и подключить свой аккаунт в студии. Smoke проверяет,
+что `/api/references/status` возвращает `enabled: true` через туннель, на общем входе раздел закрыт,
+а unit слушает только loopback. `systemctl disable --now seedance-references` остановит пилот,
+сохранив его state directory. Резервную копию данных пилота хранить отдельно от общей студии.
+После проверки пилота включи граф переключателем `SP_REFERENCE_GRAPH=1` в drop-in этого unit.
+
 Основная topology по решению владельца 06.11.2026: браузер → прямой HTTPS → Caddy на
 существующем VPS → Node/systemd. Caddy передаёт Host `127.0.0.1:4317`; Node слушает только
 loopback. Код, shared data, private accounts, Codex CLI и обработка медиа остаются на том же VPS.

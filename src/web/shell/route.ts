@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 
 /** Стабильные hash-ссылки; Canvas — основной вход, помощники доступны из меню инструментов. */
-export const ROUTES = ['shots', 'prompter', 'images', 'video', 'canvas', 'library', 'calibration', 'production'] as const;
+export const ROUTES = ['shots', 'prompter', 'images', 'video', 'canvas', 'library', 'calibration', 'production', 'references'] as const;
 export type Route = (typeof ROUTES)[number];
 
-export const PRIMARY_ROUTES: Route[] = ['canvas', 'production', 'images', 'video', 'library'];
+export const PRIMARY_ROUTES: Route[] = ['canvas', 'production', 'images', 'video', 'library', 'references'];
 export const TOOL_ROUTES: Route[] = ['shots', 'prompter', 'calibration'];
-export const ROUTE_RU: Record<Route, string> = { production: 'Производство', shots: 'Seedance-сценарий', prompter: 'Помощник промптов', images: 'Изображения', video: 'Видео', canvas: 'Canvas', library: 'Материалы', calibration: 'Калибровка' };
-export const ROUTE_EN: Record<Route, string> = { production: 'Production', shots: 'Seedance script', prompter: 'Prompt helper', images: 'Images', video: 'Video', canvas: 'Canvas', library: 'Assets', calibration: 'Calibration' };
+export const ROUTE_RU: Record<Route, string> = { production: 'Производство', shots: 'Seedance-сценарий', prompter: 'Помощник промптов', images: 'Изображения', video: 'Видео', canvas: 'Canvas', library: 'Материалы', references: 'Референсы', calibration: 'Калибровка' };
+export const ROUTE_EN: Record<Route, string> = { production: 'Production', shots: 'Seedance script', prompter: 'Prompt helper', images: 'Images', video: 'Video', canvas: 'Canvas', library: 'Assets', references: 'References', calibration: 'Calibration' };
 export const ROUTE_HINT: Record<Route, string> = {
   production: 'Серии фото и клипов: этапы и две точки приёмки · mock',
   canvas: 'Холст: референсы, генерация и обработка вместе',
   images: 'Быстрая генерация и правка изображений',
   video: 'Генерация видео по тексту или изображению',
   library: 'Сохранённые результаты и загруженные файлы',
+  references: 'Кадры, визуальные приёмы и подбор по brief',
   shots: 'Подробный промпт по кадрам, референсам и репликам',
   prompter: 'Помощь с промптом и выбором модели по твоей идее',
   calibration: 'Сравнение моделей на одинаковых задачах',
@@ -24,6 +25,7 @@ export const ROUTE_HINT_EN: Record<Route, string> = {
   images: 'Fast image generation and editing',
   video: 'Generate video from text or an image',
   library: 'Saved results and uploaded files',
+  references: 'Frames, visual techniques, and reference chat',
   shots: 'Detailed prompt with shots, references and dialogue',
   prompter: 'Prompt and model help for your idea',
   calibration: 'Compare models on the same tasks',

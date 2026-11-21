@@ -1,5 +1,5 @@
 import { estimate, findModel, paramsFor, upscaleModelOf, validateGen, type Estimate, type GenModel, type GenParams, type RefRole } from '../gen/models.ts';
-import { isJobNode, outputOf, type CanvasNode, type Flow, type InputPort } from '../model/canvas.ts';
+import { isJobNode, outputOf, type CanvasNode, type Flow } from '../model/canvas.ts';
 import type { JobRef, RefSource } from '../model/media.ts';
 import { aiPromptProblems, isAiPromptNode } from './ai.ts';
 
@@ -13,10 +13,11 @@ export interface RunPlan {
   problems: string[];
 }
 
-const ROLE_OF: Record<Exclude<InputPort, 'context' | 'idea' | 'prompt' | 'video' | 'media'>, RefRole> = { ref: 'ref', start: 'start', end: 'end' };
+const ROLE_OF: Record<'ref' | 'start' | 'end', RefRole> = { ref: 'ref', start: 'start', end: 'end' };
 
 export const nodeTitle = (node: CanvasNode): string => {
   if (node.type === 'comment') return node.label || 'Комментарий';
+  if (node.type === 'references') return 'Библиотека референсов';
   if (node.type === 'ai') return 'AI';
   if (node.type === 'prompt') return 'Промпт';
   if (node.type === 'image') return node.label !== '' ? node.label : 'Картинка';
@@ -79,7 +80,7 @@ export function planRun(flow: Flow, nodeId: string, mediaOf: (jobId: string) => 
 
   const refs: JobRef[] = [];
   for (const edge of incoming) {
-    if (edge.port === 'context' || edge.port === 'idea' || edge.port === 'prompt' || edge.port === 'video' || edge.port === 'media') continue;
+    if (edge.port !== 'ref' && edge.port !== 'start' && edge.port !== 'end') continue;
     const from = source(edge.from);
     if (from === undefined) continue;
     if (from.stale) { problems.push(`«${nodeTitle(from)}»: вход изменился, обнови результат.`); continue; }

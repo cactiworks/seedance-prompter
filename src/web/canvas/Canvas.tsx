@@ -5,6 +5,7 @@ import { studioFetch as fetch } from '../remoteFetch.ts';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { z } from 'zod';
 import { flowCost } from '../../core/canvas/plan.ts';
+import { referenceComments } from '../../core/canvas/ai.ts';
 import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
@@ -12,10 +13,11 @@ import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
 import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, useCanvas, type FlowHistoryItem } from './canvasStore.ts';
-import { NodeView, portsOf } from './NodeView.tsx';
+import { NodeView, portsOf, PORT_RU } from './NodeView.tsx';
 import { afterSeedanceClose } from './openSeedance.ts';
 import { CanvasAiDrawer } from './CanvasAi.tsx';
 import { useStore, type ProjectHost } from '../store.ts';
+import { ReferenceChat } from '../references/ReferenceChat.tsx';
 
 const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
 
@@ -159,10 +161,11 @@ function FlowHistoryDialog({ flowId, open, onOpenChange }: { flowId: string; ope
 }
 
 /** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
-export function Canvas() {
+export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEnabled?: boolean }) {
   const { flow, save, selected, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
   const { library, loadJobs, loadLibrary } = useGen();
   const board = useRef<HTMLDivElement>(null);
+  const zoomBar = useRef<HTMLDivElement>(null);
   const importer = useRef<HTMLInputElement>(null);
   const addMenu = useRef<HTMLDetailsElement>(null);
   const moreMenu = useRef<HTMLDetailsElement>(null);
@@ -175,7 +178,9 @@ export function Canvas() {
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [picker, setPicker] = useState<string | null>(null);
+  const [referencePicker, setReferencePicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
+  const referenceNode = referenceLibraryEnabled ? flow?.nodes.find(n => n.id === referencePicker && n.type === 'references') : undefined;
   const [consent, setConsent] = useState<{ run: () => void; provider?: string } | null>(null);
 
   useEffect(() => {
@@ -205,6 +210,7 @@ export function Canvas() {
     setKeyboardFrom(null);
     setHistoryOpen(false);
     setPicker(null);
+    setReferencePicker(null);
     setConsent(null);
     useCanvas.getState().closeAi();
     const flush = (): void => { void useCanvas.getState().flush(); };
@@ -428,7 +434,7 @@ export function Canvas() {
     setAct(null);
     if (from === undefined) return;
     if (!portAccepts(port, outputOf(from))) {
-      setHint(port === 'prompt' ? 'Во вход «Промпт» подключается блок с текстом промпта.' : port === 'video' ? 'Во вход «Видео» подключается видео: генератор, своё видео или обрезка.' : port === 'media' ? 'Во вход «Файл» подключается изображение или видео.' : 'Во вход изображения подключается изображение, стоп-кадр или генератор изображения.');
+      setHint(port === 'context' || port === 'libraryRefs' ? 'Несовместимые порты.' : port === 'prompt' ? 'Во вход «Промпт» подключается блок с текстом промпта.' : port === 'video' ? 'Во вход «Видео» подключается видео: генератор, своё видео или обрезка.' : port === 'media' ? 'Во вход «Файл» подключается изображение или видео.' : 'Во вход изображения подключается изображение, стоп-кадр или генератор изображения.');
       return;
     }
     const problem = connect(from.id, node.id, port);
@@ -440,7 +446,11 @@ export function Canvas() {
     const from = nodeById.get(fromId);
     if (from === undefined) return [];
     const out = outputOf(from);
-    if (out === 'context') return [{ label: 'Разработать идею с AI', type: 'ai', kind: 'image', port: 'context' }];
+    if (out === 'context') return [
+      { label: 'Разработать идею с AI', type: 'ai', kind: 'image', port: 'context' },
+      ...(referenceLibraryEnabled ? [{ label: 'Подобрать референсы', type: 'references', kind: 'image', port: 'context' } as const] : []),
+    ];
+    if (out === 'libraryRefs') return [{ label: 'Разработать идею с AI', type: 'ai', kind: 'image', port: 'libraryRefs' }];
     if (out === 'idea') return [{ label: 'Подготовить промпт с AI', type: 'prompt', kind: from.kind, port: 'idea' }];
     if (out === 'text')
       return [
@@ -484,8 +494,9 @@ export function Canvas() {
     const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type]));
     const heights = new Map([...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].map((el) => [el.dataset.nodeId, el.offsetHeight]));
     const maxY = Math.max(...flow.nodes.map((n) => n.y + (heights.get(n.id) ?? 360)));
-    const zoom = Math.min(1, Math.max(0.1, Math.min(rect.width / (maxX - minX + 96), rect.height / (maxY - minY + 96))));
-    setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (rect.height - (maxY - minY) * zoom) / 2 - minY * zoom });
+    const height = Math.max(1, (zoomBar.current?.getBoundingClientRect().top ?? rect.bottom) - rect.top);
+    const zoom = Math.min(1, Math.max(0.1, Math.min(rect.width / (maxX - minX + 96), height / (maxY - minY + 96))));
+    setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (height - (maxY - minY) * zoom) / 2 - minY * zoom });
   };
 
   const exportFlow = (): void => {
@@ -587,6 +598,7 @@ export function Canvas() {
               <button type="button" onClick={() => addBlock('image')}><Icon name="image" size={1} />{ui("Изображение")}</button>
               <button type="button" onClick={() => addBlock('video')}><Icon name="video" size={1} />{ui("Видео")}</button>
               <button type="button" onClick={() => addBlock('comment')}><Icon name="pencil" size={1} />{ui('Комментарий')}</button>
+              {referenceLibraryEnabled && <button type="button" onClick={() => addBlock('references')}><Icon name="images" size={1} />{ui('Библиотека референсов')}</button>}
             </div>
             <div className={styles.addGroup} role="group" aria-label={ui("Создать")}>
               <Text variant="caption" tone="tertiary">{ui("Создать")}</Text>
@@ -676,7 +688,7 @@ export function Canvas() {
             {linkFrom !== undefined && act?.type === 'link' && <path d={curve(outPoint(linkFrom).x, outPoint(linkFrom).y, act.x, act.y)} className={styles.edgeDraft} />}
           </svg>
           {flow.nodes.map((node) => (
-            <NodeView key={`${flow.id}:${node.id}`} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} keyboardSource={keyboardFrom === node.id} onKeyboardOutput={() => { setKeyboardFrom(node.id); setHint('Выход выбран. Нажми Tab до нужного входа и Enter; Escape — отмена.'); }} onKeyboardInput={(port) => { if (keyboardFrom !== null) { setHint(connect(keyboardFrom, node.id, port) ?? 'Связь создана.'); setKeyboardFrom(null); } else setHint('Сначала выбери выход исходной ноды.'); }} onPickFromLibrary={setPicker} onNeedConsent={(runIt, provider) => setConsent({ run: runIt, provider })} />
+            <NodeView key={`${flow.id}:${node.id}`} node={node} selected={selection.includes(node.id)} onHeaderDown={onHeaderDown} onOutputDown={onOutputDown} onInputUp={onInputUp} keyboardSource={keyboardFrom === node.id} onKeyboardOutput={() => { setKeyboardFrom(node.id); setHint('Выход выбран. Нажми Tab до нужного входа и Enter; Escape — отмена.'); }} onKeyboardInput={(port) => { if (keyboardFrom !== null) { setHint(connect(keyboardFrom, node.id, port) ?? 'Связь создана.'); setKeyboardFrom(null); } else setHint('Сначала выбери выход исходной ноды.'); }} onPickFromLibrary={setPicker} onOpenReferences={referenceLibraryEnabled ? setReferencePicker : undefined} onNeedConsent={(runIt, provider) => setConsent({ run: runIt, provider })} />
           ))}
         </div>
 
@@ -738,7 +750,7 @@ export function Canvas() {
           </button>
         )}
         {/* Плавающая группа: история, масштаб и оценка генераций. */}
-        <div className={styles.zoom}>
+        <div className={styles.zoom} ref={zoomBar}>
           {cost.unquoted > 0 && <Text variant="caption" tone="secondary">{ui("Seedance: цена перед запуском · ")}{cost.unquoted}</Text>}
           {cost.usd > 0 && (
             <span className={styles.cost} title={ui("Оценка одного запуска каждого генератора. Каждый блок запускается отдельно, с ценой на кнопке.")}>
@@ -773,7 +785,23 @@ export function Canvas() {
       <FlowHistoryDialog flowId={flow.id} open={historyOpen} onOpenChange={setHistoryOpen} />
       <Dialog open={connectionsOpen} onOpenChange={setConnectionsOpen} title={ui("Связи холста")} description={ui("Клавиатура: выбери выход ноды, затем нужный вход. Здесь можно удалить связь.")}>
         {flow.edges.length === 0 && <Text>{ui("Связей пока нет.")}</Text>}
-        {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {edge.port}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>{ui("Удалить связь")}</Button></div>)}
+        {flow.edges.map((edge) => <div key={edge.id}><Text>{nodeTitle(nodeById.get(edge.from)!)} → {nodeTitle(nodeById.get(edge.to)!)} · {ui(PORT_RU[edge.port])}</Text><Button variant="border" size="s" onClick={() => disconnect(edge.id)}>{ui("Удалить связь")}</Button></div>)}
+      </Dialog>
+      <Dialog open={referenceNode !== undefined} onOpenChange={open => { if (!open) setReferencePicker(null); }} title={ui('Подобрать референсы')} size="l">
+        {referenceNode && <ReferenceChat
+          key={`${flow.id}~${referenceNode.id}`}
+          threadKey={`${flow.id}~${referenceNode.id}`}
+          initialBrief={referenceComments(flow, referenceNode.id).map(comment => comment.text).join('\n\n')}
+          selection={referenceNode.libraryRefs ?? []}
+          onApply={async selection => {
+            const current = useCanvas.getState();
+            if (current.flow?.id !== flow.id || !current.flow.nodes.some(node => node.id === referenceNode.id)) {
+              throw new Error(ui('Холст изменился. Открой подборку заново.'));
+            }
+            current.patchNode(referenceNode.id, { libraryRefs: selection });
+            if (!await current.flush()) throw new Error(ui('Сначала сохрани изменения холста.'));
+          }}
+        />}
       </Dialog>
       <Dialog open={picker !== null} onOpenChange={(open) => !open && setPicker(null)} size="l" title={pickKind === 'video' ? ui("Видео из библиотеки") : ui("Картинка из библиотеки")} description={ui("Выбери файл для этого блока. Свои файлы можно добавить в блоке кнопкой «С диска».")}>
         <div className={styles.pickerGrid}>

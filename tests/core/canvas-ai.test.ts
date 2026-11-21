@@ -25,6 +25,30 @@ function approved(flow: Flow = graph()): Flow {
 }
 
 describe('Canvas AI contracts', () => {
+  it('uses the pinned set and its comments as idea inputs, invalidating approval when the selection changes', () => {
+    const base = graph();
+    const libraryRefs = [{ id: 'ref-frame', version: 1, role: 'Свет' }];
+    const flow = FlowSchema.parse({
+      ...base,
+      nodes: [...base.nodes, node('refs', 'references', { libraryRefs })],
+      edges: [...base.edges, { id: 'comment-refs', from: 'comment', to: 'refs', port: 'context' }, { id: 'refs-ai', from: 'refs', to: 'ai', port: 'libraryRefs' }],
+    });
+    const input = aiInputContext(flow, 'ai', () => null);
+    expect(input.libraryRefs).toEqual(libraryRefs);
+    expect(input.contexts).toHaveLength(1);
+    expect(aiInputContext({ ...flow, edges: flow.edges.filter(e => e.id !== 'context') }, 'ai', () => null).contexts).toEqual(input.contexts);
+    expect(input.problems).toEqual([]);
+    expect(planRun(flow, 'gen', () => null).refs).toEqual([]);
+    expect(FlowSchema.safeParse({ ...flow, edges: [...flow.edges, { id: 'bad', from: 'refs', to: 'gen', port: 'ref' }] }).success).toBe(false);
+
+    const reviewed = approved(flow);
+    const moved = { ...reviewed, nodes: reviewed.nodes.map(n => n.id === 'refs' ? { ...n, x: 100 } : n) };
+    expect(inputFingerprint(moved, 'ai')).toBe(input.inputFingerprint);
+    const repinned = { ...reviewed, nodes: reviewed.nodes.map(n => n.id === 'refs' ? { ...n, libraryRefs: [{ ...libraryRefs[0]!, role: 'Композиция' }] } : n) };
+    expect(inputFingerprint(repinned, 'ai')).not.toBe(input.inputFingerprint);
+    expect(invalidateChanged(reviewed, repinned).nodes.filter(n => n.stale).map(n => n.id)).toEqual(['ai', 'prompt', 'gen']);
+  });
+
   it('treats an idea-connected prompt shell as managed before compilation and never sends its manual text', () => {
     const flow = graph();
     const prompt = flow.nodes.find(n => n.id === 'prompt')!;
@@ -53,7 +77,7 @@ describe('Canvas AI contracts', () => {
 
   it('separates context, idea and provider prompt ports and rejects a direct AI/comment generation wire', () => {
     const flow = graph();
-    expect(inputsOf(flow.nodes[1]!, [])).toEqual(['context', 'ref']);
+    expect(inputsOf(flow.nodes[1]!, [])).toEqual(['context', 'ref', 'libraryRefs']);
     expect(inputsOf(flow.nodes[2]!, [])).toEqual(['idea']);
     expect(outputOf(flow.nodes[0]!)).toBe('context');
     expect(outputOf(flow.nodes[1]!)).toBe('idea');

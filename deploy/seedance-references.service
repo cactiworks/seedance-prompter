@@ -1,0 +1,34 @@
+[Unit]
+Description=Seedance personal reference library pilot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=seedance-references
+StateDirectoryMode=0700
+WorkingDirectory=/opt/seedance/reference-current
+ExecStart=/usr/local/bin/node src/server/index.ts
+Environment=NODE_ENV=production
+Environment=SP_SERVE_STATIC=1
+Environment=SP_NO_OPEN=1
+Environment=SP_HOST=127.0.0.1
+Environment=SP_PORT=4321
+Environment=SP_PRIVATE_REFERENCE_LIBRARY=1
+Environment=SP_DATA_DIR=/var/lib/seedance-references/data
+Environment=SP_ACCOUNTS_DIR=/var/lib/seedance-references/accounts
+Environment=HOME=/var/lib/seedance-references
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

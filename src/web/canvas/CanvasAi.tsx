@@ -7,6 +7,7 @@ import { inputFingerprint } from '../../core/canvas/freshness.ts';
 import { findModel } from '../../core/gen/models.ts';
 import { savedMediaOf, thumbOf, useGen } from '../gen/genStore.ts';
 import { ui } from '../language.ts';
+import { referenceImageUrl } from '../references/api.ts';
 import { Button, Icon, Text } from '../ui/components/index.ts';
 import { canvasAiApi, CanvasAiApiError, canvasAiPreview, canvasAiRuns, currentCanvasFlow, type CanvasAiResponse } from './canvasAiApi.ts';
 import { useCanvas } from './canvasStore.ts';
@@ -250,7 +251,21 @@ export function CanvasAiDrawer() {
             {!previewCurrent && !previewError && <Text variant="caption" tone="secondary" role="status">{save === 'saved' ? ui('Проверяю входы AI…') : ui('Сохрани изменения, чтобы проверить входы AI.')}</Text>}
             {previewError && <Text variant="caption" tone="accent" role="alert">{previewError}</Text>}
             {previewCurrent && preview && <>
-              <div><Text variant="caption" medium>{ui('Изображения для AI · {0}', preview.snapshot.refs.length)}</Text>{preview.snapshot.refs.length > 0 ? <div className={styles.references}>{preview.snapshot.refs.map((ref, i) => <figure key={i}><img src={thumbOf(ref.source)} alt={ref.label} /><Text as="figcaption" variant="caption">{ref.label}</Text></figure>)}</div> : <Text variant="caption" tone="secondary">{ui('Не подключены')}</Text>}</div>
+              {(!preview.snapshot.libraryRefs || preview.snapshot.refs.length > 0) && <div>
+                <Text variant="caption" medium>{ui(preview.snapshot.libraryRefs ? 'Изображения из нод · {0}' : 'Изображения для AI · {0}', preview.snapshot.refs.length)}</Text>
+                {preview.snapshot.refs.length > 0 ? <div className={styles.references}>{preview.snapshot.refs.map((ref, i) => <figure key={i}><img src={thumbOf(ref.source)} alt={ref.label} /><Text as="figcaption" variant="caption">{ref.label}</Text></figure>)}</div> : <Text variant="caption" tone="secondary">{ui('Не подключены')}</Text>}
+              </div>}
+              {preview.snapshot.libraryRefs && <div>
+                <Text variant="caption" medium>{ui('Подборка из библиотеки · {0}', preview.snapshot.libraryRefs.length)}</Text>
+                <Text variant="caption" tone="secondary">{ui(stage === 'idea' ? 'Кадры и приёмы войдут в контекст идеи.' : 'В промптинг войдут роли и описание приёмов.')}</Text>
+                <div className={styles.references}>{preview.snapshot.libraryRefs.map(ref => <figure key={ref.selection.id}>
+                  <img src={referenceImageUrl(ref.selection.id)} alt={ref.sourceName} />
+                  <Text as="figcaption" variant="caption">{ref.selection.role}</Text>
+                </figure>)}</div>
+                <details className={styles.details}><summary>{ui('Приёмы из подборки')}</summary>
+                  {preview.snapshot.libraryRefs.map(ref => <Text key={ref.selection.id} variant="caption" tone="secondary">{ref.selection.role} · {ref.transfer}</Text>)}
+                </details>
+              </div>}
               {preview.snapshot.identity && <div><Text variant="caption" medium>{ui('Внешность · {0}', preview.snapshot.identity.name)}</Text><div className={styles.references}>{preview.snapshot.identity.uploadIds.map((uploadId, i) => <figure key={uploadId}><img src={thumbOf({ type: 'upload', uploadId })} alt={ui('Фото внешности {0}', i + 1)} /><Text as="figcaption" variant="caption">{ui('Фото {0}', i + 1)}</Text></figure>)}</div></div>}
               <div><Text variant="caption" medium>{ui('Референсы генерации · {0}', preview.snapshot.generationRefs.length)}</Text>{preview.snapshot.generationRefs.length > 0 ? <div className={styles.references}>{preview.snapshot.generationRefs.map((ref, i) => <figure key={i}><img src={thumbOf(ref.source)} alt={ref.label} /><Text as="figcaption" variant="caption">{ui(ref.role === 'start' ? 'Старт' : ref.role === 'end' ? 'Финал' : 'Реф')} · {ref.label}</Text></figure>)}</div> : <Text variant="caption" tone="secondary">{ui('Не передаются')}</Text>}</div>
               {preview.warningsRu.map((warning, i) => <Text key={i} variant="caption" tone="accent">{warning}</Text>)}

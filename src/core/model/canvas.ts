@@ -1,6 +1,7 @@
 import { currentModelId } from '../gen/models.ts';
 import { z } from 'zod';
 import { GenParamsSchema, RefSourceSchema } from './media.ts';
+import { MAX_REFERENCE_SELECTIONS, ReferenceSelectionSchema } from '../references.ts';
 
 /**
  * Canvas — нодовый граф в духе connxn. Ноды: промпт, картинка (загрузка / библиотека), генератор
@@ -13,11 +14,11 @@ import { GenParamsSchema, RefSourceSchema } from './media.ts';
  * (data/projects/cv-<id>), картинки входа «Рефы» становятся панелью кадра, выход — сгенерированное видео.
  * upscale — апскейл Topaz (решение 39): картинка или видео на входе «Файл», выход того же вида; запуск платный, с гейтом.
  */
-export const CANVAS_NODE_TYPES = ['comment', 'ai', 'prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance', 'upscale'] as const;
+export const CANVAS_NODE_TYPES = ['comment', 'references', 'ai', 'prompt', 'image', 'generator', 'frame', 'trim', 'video', 'resize', 'seedance', 'upscale'] as const;
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[number];
 
 /** video — вход ноды «Кадр из видео»: принимает результат генератора видео. media — вход «Размера»: картинка или видео. */
-export const INPUT_PORTS = ['context', 'idea', 'prompt', 'ref', 'start', 'end', 'video', 'media'] as const;
+export const INPUT_PORTS = ['context', 'idea', 'prompt', 'ref', 'start', 'end', 'video', 'media', 'libraryRefs'] as const;
 export type InputPort = (typeof INPUT_PORTS)[number];
 
 /** Compact projections only; the server keeps authoritative attempts and their history. */
@@ -53,6 +54,10 @@ export const CanvasNodeSchema = z.object({
   /** A materialized prompt stays linked to the exact reviewed AI version. */
   aiSource: CanvasAiSourceSchema.optional(),
   aiApproval: CanvasAiApprovalSchema.optional(),
+  /** Private reference-library selection. Frames are resolved server-side as AI context. */
+  libraryRefs: z.array(ReferenceSelectionSchema).max(MAX_REFERENCE_SELECTIONS).refine(
+    items => new Set(items.map(item => item.id)).size === items.length, 'Кадры в подборке должны быть уникальны.',
+  ).optional(),
   type: z.enum(CANVAS_NODE_TYPES),
   x: z.number(),
   y: z.number(),
@@ -117,7 +122,7 @@ export const FlowSchema = z.object({
     if (from === undefined || to === undefined || e.from === e.to) { error('Связь ссылается на отсутствующую ноду или саму себя.'); continue; }
     const ports = inputsOf(to, ['ref', 'start', 'end']);
     if (!ports.includes(e.port) || !portAccepts(e.port, outputOf(from))) error('Несовместимые порты связи.');
-    const key = `${e.to}:${e.port}:${['idea', 'start', 'end', 'video', 'media'].includes(e.port) ? '' : e.from}`;
+    const key = `${e.to}:${e.port}:${['idea', 'start', 'end', 'video', 'media', 'libraryRefs'].includes(e.port) ? '' : e.from}`;
     if (used.has(key)) error('Повторная связь во входе.');
     used.add(key);
     adjacency.set(e.from, [...(adjacency.get(e.from) ?? []), e.to]);
@@ -139,20 +144,21 @@ export type Flow = z.infer<typeof FlowSchema>;
 
 /** Какие входы принимает нода. Промпт и картинка входов не имеют. */
 export function inputsOf(node: CanvasNode, roles: readonly string[]): InputPort[] {
-  if (node.type === 'ai') return ['context', 'ref'];
+  if (node.type === 'ai') return ['context', 'ref', 'libraryRefs'];
+  if (node.type === 'references') return ['context'];
   if (node.type === 'prompt') return ['idea'];
   if (node.type === 'frame' || node.type === 'trim') return ['video'];
   if (node.type === 'resize' || node.type === 'upscale') return ['media'];
   // Seedance-промптер берёт сколько угодно картинок (модель — до 30): каждая становится картинкой панели.
   if (node.type === 'seedance') return ['ref'];
   if (node.type !== 'generator') return [];
-  return ['prompt', ...INPUT_PORTS.filter((p) => p !== 'prompt' && p !== 'video' && roles.includes(p))];
+  return ['prompt', ...INPUT_PORTS.filter((p) => p !== 'prompt' && p !== 'video' && p !== 'libraryRefs' && roles.includes(p))];
 }
 
 /** Что отдаёт нода: текст, картинку или видео. Обрезка отдаёт видео — его можно резать дальше и брать из него кадр. */
-export type CanvasOutputType = 'context' | 'idea' | 'text' | 'image' | 'video';
+export type CanvasOutputType = 'context' | 'idea' | 'text' | 'image' | 'video' | 'libraryRefs';
 export const outputOf = (node: CanvasNode): CanvasOutputType =>
-  node.type === 'comment' ? 'context' : node.type === 'ai' ? 'idea' : node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize' || node.type === 'upscale') && node.kind === 'video') ? 'video' : 'image';
+  node.type === 'comment' ? 'context' : node.type === 'references' ? 'libraryRefs' : node.type === 'ai' ? 'idea' : node.type === 'prompt' ? 'text' : node.type === 'trim' || node.type === 'video' || node.type === 'seedance' || ((node.type === 'generator' || node.type === 'resize' || node.type === 'upscale') && node.kind === 'video') ? 'video' : 'image';
 
 /** Ноды, выход которых — выбранный вариант запусков (`jobIds[selected]`): генератор, Seedance-промптер, апскейл. */
 export const isJobNode = (node: CanvasNode): boolean => node.type === 'generator' || node.type === 'seedance' || node.type === 'upscale';
@@ -167,7 +173,7 @@ export const isCanvasDraft = (slug: string): boolean => slug.startsWith('cv-');
 
 /** Промпт — только во вход prompt, видео — во вход video, «Размер» берёт и то и другое, картинки — в ref / start / end. */
 export const portAccepts = (port: InputPort, output: CanvasOutputType): boolean =>
-  port === 'context' ? output === 'context' : port === 'idea' ? output === 'idea' : port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : port === 'media' ? output === 'image' || output === 'video' : output === 'image';
+  port === 'context' ? output === 'context' : port === 'libraryRefs' ? output === 'libraryRefs' : port === 'idea' ? output === 'idea' : port === 'prompt' ? output === 'text' : port === 'video' ? output === 'video' : port === 'media' ? output === 'image' || output === 'video' : output === 'image';
 
 /**
  * Связи из ноды, которые её выход больше не принимают. Выход «Размера» и апскейла меняет вид вслед за входом

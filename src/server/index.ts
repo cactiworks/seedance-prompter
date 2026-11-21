@@ -38,7 +38,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  const referenceLibrary = process.env.SP_PRIVATE_REFERENCE_LIBRARY === '1';
   const dataDir = process.env.SP_DATA_DIR ?? path.join(ROOT, 'data');
+  if (referenceLibrary && (!process.env.SP_DATA_DIR?.trim() || HOST !== '127.0.0.1' || process.env.SP_PUBLIC_ORIGINS?.trim())) {
+    throw new Error('Reference Library requires its own SP_DATA_DIR, loopback and no public origins');
+  }
   const releaseDataLock = await acquireDataLock(dataDir);
   const productionMode = process.env.SP_SERVE_STATIC === '1';
   const accountsDir = process.env.SP_ACCOUNTS_DIR?.trim() || (productionMode ? path.join(path.dirname(path.resolve(dataDir)), 'accounts') : undefined);
@@ -49,7 +53,9 @@ async function main(): Promise<void> {
   await gen.start();
   const production = createProductionRuntime({ dataDir, gen, runLlmForAccount: accounts?.runnerFor });
   await production.start();
-  const app = createApp({ rootDir: ROOT, dataDir, gen, production, accounts });
+  const app = createApp({ rootDir: ROOT, dataDir, gen, production, accounts, referenceLibrary,
+    referenceGraph: process.env.SP_REFERENCE_GRAPH === '1',
+  });
   const httpServer = createHttpServer();
   const vite = productionMode ? null : await (await import('vite')).createServer({
     configFile: path.join(ROOT, 'vite.config.ts'),

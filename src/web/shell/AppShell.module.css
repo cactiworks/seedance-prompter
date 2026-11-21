@@ -357,10 +357,15 @@
   }
 }
 
+@media (width <= 56rem) {
+  .tabs {
+    overflow: auto hidden;
+  }
+}
+
 @media (width <= 48rem) {
   .tabs {
     flex: 1 0 100%;
-    overflow-x: auto;
   }
 
   .tab {

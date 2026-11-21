@@ -49,7 +49,7 @@ let seq = 0;
 export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
-export const NODE_WIDTH: Record<CanvasNodeType, number> = { comment: 280, ai: 300, prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
+export const NODE_WIDTH: Record<CanvasNodeType, number> = { comment: 280, references: 280, ai: 300, prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
 /** Вертикаль портов: выход и первый вход — под шапкой, остальные входы — шагом PORT_STEP. */
 export const PORT_TOP = 58;
 export const PORT_STEP = 30;
@@ -612,7 +612,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (sourceNode === undefined || targetNode === undefined || !inputsOf(targetNode, ['ref', 'start', 'end']).includes(port) || !portAccepts(port, outputOf(sourceNode))) return 'Несовместимые порты.';
       if (wouldCycle(flow, from, to)) return 'Так получится цикл.';
       // Во входы «Старт», «Финал» и «Видео» — одна связь; повторная заменяет прежнюю.
-      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && (port === 'start' || port === 'end' || port === 'video' || port === 'media' || port === 'idea');
+      const replace = (e: CanvasEdge): boolean => e.to === to && e.port === port && ['start', 'end', 'video', 'media', 'idea', 'libraryRefs'].includes(port);
       if (flow.edges.some((e) => e.from === from && e.to === to && e.port === port)) return null;
       // «Размер» и апскейл отдают то же, что получили: картинку или видео; прежний результат другого вида больше не годится
       // (у апскейла его запуски остаются в библиотеке, но выходом ноды быть не могут).

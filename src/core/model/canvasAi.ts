@@ -1,14 +1,18 @@
 import { z } from 'zod';
 import { CanvasAiVersionSchema } from './canvas.ts';
 import { GenParamsSchema, JobRefSchema } from './media.ts';
+import { MAX_REFERENCE_SELECTIONS, ReferenceSelectionSchema } from '../references.ts';
 
 export const CanvasAiSnapshotSchema = z.object({
   taskRu: z.string(), contexts: z.array(z.object({ nodeId: z.string(), text: z.string() })),
   refs: z.array(JobRefSchema), generationRefs: z.array(JobRefSchema),
   target: z.object({ id: z.string(), kind: z.enum(['image', 'video']), modelId: z.string(), params: GenParamsSchema }),
   identity: z.object({ characterId: z.string(), name: z.string(), referenceId: z.string(), uploadIds: z.array(z.string()).max(6) }).nullable(),
-  attachments: z.array(z.object({ file: z.string(), mediaType: z.enum(['image/jpeg', 'image/png', 'image/webp']), sha256: z.string(), role: z.enum(['context', 'generation', 'identity']), label: z.string() })),
+  attachments: z.array(z.object({ file: z.string(), mediaType: z.enum(['image/jpeg', 'image/png', 'image/webp']), sha256: z.string(), role: z.enum(['context', 'generation', 'identity', 'library']), label: z.string() })),
   approvedIdeaVersionId: z.string().nullable(), modelCardHash: z.string(), contextDigest: z.string(),
+  libraryRefs: z.array(z.object({
+    selection: ReferenceSelectionSchema, sourceName: z.string(), timeMs: z.number().nullable(), visible: z.string(), technique: z.string(), transfer: z.string(), imageSha256: z.string(),
+  })).max(MAX_REFERENCE_SELECTIONS).optional(),
 });
 export const CanvasAiCallSchema = z.object({
   stage: z.enum(['idea', 'prompt']), status: z.enum(['running', 'complete', 'failed', 'cancelled', 'interrupted']),

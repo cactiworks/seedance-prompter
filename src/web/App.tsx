@@ -1,11 +1,12 @@
 import { ui } from './language.ts';
 import { GenerationQuote } from './gen/GenerationQuote.tsx';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Calibration, CalibrationList } from './calibration/Calibration.tsx';
 import { Canvas, FlowList } from './canvas/Canvas.tsx';
 import { Home } from './features/Home.tsx';
 import { Workspace, WorkspaceOverlay } from './features/Workspace.tsx';
 import { Library } from './library/Library.tsx';
+import { referenceLibraryStatus } from './references/api.ts';
 import { useGen } from './gen/genStore.ts';
 import { Production, ProductionList } from './production/Production.tsx';
 import { Prompter } from './prompter/Prompter.tsx';
@@ -17,6 +18,8 @@ import { applyTheme, readTheme } from './theme.ts';
 import { Text } from './ui/components/index.ts';
 import { applyLanguage, useLanguage } from './language.ts';
 
+const ReferenceLibrary = lazy(async () => ({ default: (await import('./references/ReferenceLibrary.tsx')).ReferenceLibrary }));
+
 export function App() {
   const [language] = useLanguage();
   useEffect(() => {
@@ -27,7 +30,10 @@ export function App() {
     return () => { stop(); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, []);
   const { pack, project, host, loadPack, error } = useStore();
-  const [route, setRoute] = useRoute();
+  const [requestedRoute, setRoute] = useRoute();
+  const [referenceStatus, setReferenceStatus] = useState<{ enabled: boolean; graph?: boolean }>();
+  const referenceLibraryEnabled = referenceStatus?.enabled;
+  const route = requestedRoute === 'references' && referenceLibraryEnabled === false ? 'canvas' : requestedRoute;
   const tasksVisit = useGen((s) => s.tasksVisit);
 
   useEffect(() => {
@@ -36,6 +42,16 @@ export function App() {
   }, [loadPack]);
 
   useEffect(() => { applyLanguage(language); }, [language]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void referenceLibraryStatus(controller.signal).then((status) => {
+      if (!controller.signal.aborted) setReferenceStatus(status);
+    }, () => {
+      if (!controller.signal.aborted) setReferenceStatus({ enabled: false });
+    });
+    return () => controller.abort();
+  }, []);
 
   if (pack === null) {
     return (
@@ -49,13 +65,16 @@ export function App() {
 
   return (
     <>
-      <AppShell route={route} onRoute={setRoute} sidebar={route === 'production' ? <ProductionList /> : route === 'canvas' ? <FlowList /> : route === 'calibration' ? <CalibrationList /> : undefined}>
+      <AppShell route={route} onRoute={setRoute} referenceLibraryEnabled={referenceLibraryEnabled} sidebar={route === 'production' ? <ProductionList /> : route === 'canvas' ? <FlowList /> : route === 'calibration' ? <CalibrationList /> : undefined}>
         {route === 'production' && <Production />}
         {route === 'prompter' && <Prompter />}
         {route === 'images' && <Studio kind="image" />}
         {route === 'video' && <Studio kind="video" />}
-        {route === 'canvas' && <Canvas />}
+        {route === 'canvas' && <Canvas referenceLibraryEnabled={referenceLibraryEnabled} />}
         {route === 'library' && <Library key={tasksVisit} />}
+        {route === 'references' && <Suspense fallback={<Text tone="secondary">{ui('Открываю библиотеку…')}</Text>}>
+          {referenceLibraryEnabled ? <ReferenceLibrary showGraph={referenceStatus?.graph === true} /> : <Text tone="secondary">{ui('Открываю библиотеку…')}</Text>}
+        </Suspense>}
         {route === 'calibration' && <Calibration />}
         {route === 'shots' && (
           <div style={{ height: '100%', overflowY: 'auto' }}>

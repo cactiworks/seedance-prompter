@@ -193,7 +193,7 @@ function ProviderCards() {
   );
 }
 
-export function AppShell({ route, onRoute, sidebar, children }: { route: Route; onRoute: (r: Route) => void; sidebar?: ReactNode; children: ReactNode }) {
+export function AppShell({ route, onRoute, sidebar, children, referenceLibraryEnabled = false }: { route: Route; onRoute: (r: Route) => void; sidebar?: ReactNode; children: ReactNode; referenceLibraryEnabled?: boolean }) {
   const [language] = useLanguage();
   const english = language === 'en';
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -205,6 +205,21 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
     window.addEventListener('keydown', escape);
     return () => { media.removeEventListener('change', adapt); window.removeEventListener('keydown', escape); };
   }, []);
+  const tabRail = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const fitActiveTab = (): void => {
+      const rail = tabRail.current;
+      const active = rail?.querySelector('[aria-current="page"]');
+      if (!rail || !active) return;
+      const bounds = rail.getBoundingClientRect();
+      const tab = active.getBoundingClientRect();
+      if (tab.right > bounds.right) rail.scrollLeft += tab.right - bounds.right;
+      else if (tab.left < bounds.left) rail.scrollLeft += tab.left - bounds.left;
+    };
+    fitActiveTab();
+    window.addEventListener('resize', fitActiveTab);
+    return () => window.removeEventListener('resize', fitActiveTab);
+  }, [route, referenceLibraryEnabled]);
   const toolsRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (event: PointerEvent): void => {
@@ -258,8 +273,8 @@ export function AppShell({ route, onRoute, sidebar, children }: { route: Route; 
               <Icon name="chevron-forward" size={1} />
             </button>
           )}
-          <nav className={styles.tabs} aria-label={english ? 'Studio sections' : ui("Разделы студии")}>
-            {PRIMARY_ROUTES.map((r) => (
+          <nav ref={tabRail} className={styles.tabs} aria-label={english ? 'Studio sections' : ui("Разделы студии")}>
+            {PRIMARY_ROUTES.filter((r) => r !== 'references' || referenceLibraryEnabled).map((r) => (
               <button key={r} type="button" data-guide={`nav-${r}`} aria-current={r === route ? 'page' : undefined} title={(english ? ROUTE_HINT_EN : ROUTE_HINT)[r]} className={`${styles.tab} ${r === route ? styles.tabActive : ''}`} onClick={() => onRoute(r)}>
                 {(english ? ROUTE_EN : ROUTE_RU)[r]}
               </button>

@@ -1,8 +1,11 @@
 import type { CanvasNode, Flow } from '../model/canvas.ts';
 
-const config = (n: CanvasNode): string => JSON.stringify([n.type, n.type === 'seedance' ? null : n.text, n.source, n.modelId, n.params, n.which, n.start, n.end, n.width, n.height, n.fit, n.kind, n.type === 'ai' ? n.targetGeneratorId : null, n.aiSource]);
+const config = (n: CanvasNode): string => {
+  const fields = [n.type, n.type === 'seedance' ? null : n.text, n.source, n.modelId, n.params, n.which, n.start, n.end, n.width, n.height, n.fit, n.kind, n.type === 'ai' ? n.targetGeneratorId : null, n.aiSource];
+  return JSON.stringify(n.type === 'references' ? [...fields, n.libraryRefs ?? []] : fields);
+};
 const output = (n: CanvasNode): string => JSON.stringify([config(n), n.mediaId, n.jobIds[n.selected], n.stale, n.acceptedMediaId, n.acceptedJobId, n.ai?.idea, n.ai?.prompt, n.aiApproval]);
-const processed = (n: CanvasNode): boolean => !['comment', 'prompt', 'image', 'video'].includes(n.type);
+const processed = (n: CanvasNode): boolean => !['comment', 'prompt', 'image', 'video', 'references'].includes(n.type);
 /** Settings are a dependency, while the target's generated result is not an AI input. */
 const targetConfig = (flow: Flow, node: CanvasNode): string => {
   if (node.type !== 'ai') return '';

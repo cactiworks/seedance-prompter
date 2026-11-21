@@ -11,6 +11,7 @@ import { cardFile, EMPTY_SHOT, validatePrompter, type PrompterRef } from '../../
 import type { CanvasAiPreview } from '../../core/model/canvasAi.ts';
 import { CanvasNodeSchema, FlowSchema, type CanvasAiVersion, type CanvasNode, type Flow } from '../../core/model/canvas.ts';
 import type { CanvasOrigin, RefSource } from '../../core/model/media.ts';
+import type { ReferenceCard, ReferenceSelection } from '../../core/references.ts';
 import { characterReady } from '../../core/production/character.ts';
 import { imageSize } from '../gen/imageSize.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
@@ -23,7 +24,7 @@ import type { Flows } from '../storage/flows.ts';
 import { createStore } from '../storage/fsStore.ts';
 import { createJournal } from '../storage/journal.ts';
 import { createCanvasAiStore } from './store.ts';
-import { IDEA_SYSTEM, IdeaOutputSchema, PROMPT_SYSTEM, PromptOutputSchema } from './prompts.ts';
+import { IDEA_LIBRARY_GUIDANCE, IDEA_SYSTEM, IdeaOutputSchema, PROMPT_LIBRARY_GUIDANCE, PROMPT_SYSTEM, PromptOutputSchema } from './prompts.ts';
 import { CanvasAiError, publicRun, type CanvasAiRun, type CanvasAiSnapshot, type StoredCanvasAiRun } from './types.ts';
 
 const hash = (value: unknown) => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -33,7 +34,25 @@ const MAX_IMAGES = 14;
 interface StartInput { flowId: string; nodeId: string; stage: 'idea' | 'prompt'; requestId: string; flow: Flow; feedbackRu: string; previewDigest: string }
 interface SnapshotResult { snapshot: CanvasAiSnapshot; images: ImageInput[]; modelCard: string; inputFingerprint: string; parentRunId: string | null }
 
-export function createCanvasAi(options: { dataDir: string; rootDir: string; flows: Flows; gen: GenRuntime; characters: Characters; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; model?: string }) {
+interface CanvasAiOptions {
+  dataDir: string;
+  rootDir: string;
+  flows: Flows;
+  gen: GenRuntime;
+  characters: Characters;
+  runLlm?: Runner;
+  runLlmForAccount?: (id?: string) => Runner;
+  resolveLibraryReference?: (selection: ReferenceSelection) => Promise<{ card: ReferenceCard; image: ImageInput } | null>;
+  model?: string;
+}
+
+function snapshotDigest(snapshot: CanvasAiSnapshot, approvedIdeaVersionId = snapshot.approvedIdeaVersionId): string {
+  // The card entry binds the image hash in both stages. Only the idea transmits the pixels.
+  const attachments = snapshot.libraryRefs ? snapshot.attachments.filter(image => image.role !== 'library') : snapshot.attachments;
+  return hash({ ...snapshot, attachments, approvedIdeaVersionId, contextDigest: '' });
+}
+
+export function createCanvasAi(options: CanvasAiOptions) {
   const store = createCanvasAiStore(options.dataDir);
   const projects = createStore(options.dataDir);
   const journal = createJournal(options.dataDir);
@@ -88,15 +107,15 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
       target: { id: target.id, kind: target.kind, modelId: model.id, params: paramsFor(model, target.params) }, identity: null,
       attachments: [], approvedIdeaVersionId: null, modelCardHash: hash(modelCard), contextDigest: '' };
     const images: ImageInput[] = [];
-    const add = async (source: RefSource, role: 'context' | 'generation' | 'identity', label: string) => {
+    const add = (image: ImageInput, role: CanvasAiSnapshot['attachments'][number]['role'], label: string) => {
       if (images.length >= MAX_IMAGES) return fail('TOO_MANY_REFS', 'К AI можно передать до восьми референсов и шести фото выбранного Soul ID.');
-      const image = await readImage(source); images.push(image);
+      images.push(image);
       snapshot.attachments.push({ file: `image-${images.length}.${({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as const)[image.mediaType]}`, mediaType: image.mediaType, sha256: hash(image.base64), role, label });
     };
     const seen = new Set<string>();
-    if (input.refs.length > 8) return fail('TOO_MANY_REFS', 'Подключи к AI не больше восьми референсов.');
+    if (input.refs.length + input.libraryRefs.length > 8) return fail('TOO_MANY_REFS', 'Подключи к AI не больше восьми референсов вместе с кадрами из подборки.');
     for (const ref of input.refs) {
-      const key = JSON.stringify(ref.source); if (seen.has(key)) continue; seen.add(key); await add(ref.source, 'context', ref.label);
+      const key = JSON.stringify(ref.source); if (seen.has(key)) continue; seen.add(key); add(await readImage(ref.source), 'context', ref.label);
     }
     const soulId = target.params.soulId;
     if (typeof soulId === 'string' && soulId.trim()) {
@@ -106,9 +125,23 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
       if (!all.length && stage === 'prompt') return fail('IDENTITY_REFS_MISSING', 'У выбранного Soul ID нет локальных фото. Добавь локальные референсы внешности.');
       const ids = all.length <= 6 ? all : Array.from({ length: 6 }, (_, i) => all[Math.round(i * (all.length - 1) / 5)]!);
       snapshot.identity = { characterId: character?.id ?? '', name: character?.name ?? 'Выбранный Soul ID', referenceId: soulId, uploadIds: ids };
-      for (const id of ids) await add({ type: 'upload', uploadId: id }, 'identity', character?.name ?? 'Выбранный Soul ID');
+      for (const id of ids) add(await readImage({ type: 'upload', uploadId: id }), 'identity', character?.name ?? 'Выбранный Soul ID');
     }
-    if (previewDigest !== undefined && hash({ ...snapshot, approvedIdeaVersionId: null, contextDigest: '' }) !== previewDigest) return fail('PREVIEW_CHANGED', 'Набор входов изменился после просмотра. Обнови preview и проверь выбранные референсы перед новым запуском.', 409);
+    if (input.libraryRefs.length) {
+      if (!options.resolveLibraryReference) return fail('LIBRARY_UNAVAILABLE', 'Библиотека референсов недоступна на этой студии.');
+      snapshot.libraryRefs = [];
+      for (const selection of input.libraryRefs) {
+        const resolved = await options.resolveLibraryReference(selection);
+        if (!resolved?.card.analysis || resolved.card.id !== selection.id || resolved.card.version !== selection.version) {
+          return fail('LIBRARY_REF_UNAVAILABLE', 'Закреплённый кадр изменился или недоступен. Открой подборку и обнови её.', 409);
+        }
+        const { card, image } = resolved;
+        const { visible, technique, transfer } = card.analysis!;
+        snapshot.libraryRefs.push({ selection, sourceName: card.sourceName, timeMs: card.timeMs, visible, technique, transfer, imageSha256: hash(image.base64) });
+        if (stage === 'idea') add(image, 'library', selection.role);
+      }
+    }
+    if (previewDigest !== undefined && snapshotDigest(snapshot, null) !== previewDigest) return fail('PREVIEW_CHANGED', 'Набор входов изменился после просмотра. Обнови preview и проверь выбранные референсы перед новым запуском.', 409);
     let parentRunId: string | null = null;
     if (stage === 'prompt') {
       const idea = (await store.list(flow.id, nodeId)).find(r => r.stage === 'idea' && r.status === 'approved' && r.version?.id === node.ai?.idea?.id);
@@ -117,10 +150,10 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
     }
     if (stage === 'prompt' && parentRunId) {
       const approved = await required(parentRunId);
-      const baseDigest = hash({ ...snapshot, approvedIdeaVersionId: null, contextDigest: '' });
+      const baseDigest = snapshotDigest(snapshot, null);
       if (baseDigest !== approved.snapshot.contextDigest) return fail('STALE_IDEA', 'Референсы или правила модели изменились. Перепроверь и одобри идею для текущих входов.', 409);
     }
-    snapshot.contextDigest = hash({ ...snapshot, contextDigest: '' });
+    snapshot.contextDigest = snapshotDigest(snapshot);
     return { snapshot, images, modelCard, inputFingerprint: input.inputFingerprint, parentRunId };
   }
 
@@ -194,11 +227,18 @@ export function createCanvasAi(options: { dataDir: string; rootDir: string; flow
         const parent = run.parentRunId ? await required(run.parentRunId) : null;
         const history = (await store.list(run.flowId, run.nodeId)).filter(r => r.id !== run.id).reverse();
         const previous = [...history].reverse().find(r => r.stage === run.stage && r.version);
-        const data = { ...run.snapshot, feedbackRu: run.feedbackRu, approvedIdeaRu: parent?.version?.text ?? null, previous: previous?.version?.text ?? null,
+        const { libraryRefs: pinned, ...snapshot } = run.snapshot;
+        const libraryAttachments = snapshot.attachments.filter(image => image.role === 'library');
+        const libraryRefs = pinned?.map((ref, i) => ({
+          attachmentFile: libraryAttachments[i]?.file, role: ref.selection.role, visible: ref.visible, technique: ref.technique, transfer: ref.transfer,
+        }));
+        const data = { ...snapshot, libraryRefs, feedbackRu: run.feedbackRu, approvedIdeaRu: parent?.version?.text ?? null, previous: previous?.version?.text ?? null,
           priorFeedback: history.filter(r => r.feedbackRu).map(r => ({ stage: r.stage, feedbackRu: r.feedbackRu })),
           referenceRouting: run.snapshot.generationRefs.map((r, i, refs) => ({ label: r.role === 'start' ? 'first frame' : r.role === 'end' ? 'last frame' : findModel(run.snapshot.target.modelId)?.promptRefs === 'at-image' ? `@Image${refs.slice(0, i + 1).filter(x => x.role === 'ref').length}` : `image ${refs.slice(0, i + 1).filter(x => x.role === 'ref').length}`, how: r.role === 'ref' ? 'name this generation reference and its purpose' : 'describe motion from the frame; do not use an image number', role: r.role, source: r.source })) };
         const runner = options.runLlmForAccount ? options.runLlmForAccount(run.codexAccountId) : options.runLlm ?? runCodex;
-        const llmInput = { system: `${run.stage === 'idea' ? IDEA_SYSTEM : PROMPT_SYSTEM}\n\n# Fixed model card\n${modelCard}`, user: JSON.stringify(data), model: llmModel };
+        const stageSystem = run.stage === 'idea' ? IDEA_SYSTEM : PROMPT_SYSTEM;
+        const libraryGuidance = libraryRefs?.length ? run.stage === 'idea' ? IDEA_LIBRARY_GUIDANCE : PROMPT_LIBRARY_GUIDANCE : '';
+        const llmInput = { system: `${[stageSystem, libraryGuidance].filter(Boolean).join('\n\n')}\n\n# Fixed model card\n${modelCard}`, user: JSON.stringify(data), model: llmModel };
         await store.update(run.id, current => { current.llmInput = llmInput; });
         if (controller.signal.aborted) return;
         const result = await runner<unknown>({ ...llmInput,

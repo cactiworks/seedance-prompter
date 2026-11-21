@@ -1,14 +1,29 @@
 import { findModel } from '../gen/models.ts';
 import { isJobNode, outputOf, type CanvasNode, type Flow } from '../model/canvas.ts';
 import type { JobRef } from '../model/media.ts';
+import type { ReferenceSelection } from '../references.ts';
 import { inputFingerprint } from './freshness.ts';
+
+interface CanvasComment {
+  nodeId: string;
+  text: string;
+}
 
 export interface CanvasAiInputContext {
   target: CanvasNode | null;
-  contexts: { nodeId: string; text: string }[];
+  contexts: CanvasComment[];
   refs: JobRef[];
+  libraryRefs: ReferenceSelection[];
   inputFingerprint: string;
   problems: string[];
+}
+
+export function referenceComments(flow: Flow, nodeId: string): CanvasComment[] {
+  return flow.edges.filter(e => e.to === nodeId && e.port === 'context').flatMap(e => {
+    const comment = flow.nodes.find(n => n.id === e.from && n.type === 'comment');
+    const text = comment?.text.trim();
+    return text ? [{ nodeId: e.from, text }] : [];
+  });
 }
 
 /** A visible prompt block is managed as soon as an idea is connected, before compilation. */
@@ -25,7 +40,8 @@ export const isAiPromptNode = (flow: Flow, prompt: CanvasNode): boolean =>
 export function aiInputContext(flow: Flow, nodeId: string, mediaOf: (jobId: string) => string | null): CanvasAiInputContext {
   const node = flow.nodes.find(n => n.id === nodeId && n.type === 'ai');
   const target = flow.nodes.find(n => n.id === node?.targetGeneratorId && n.type === 'generator') ?? null;
-  const result: CanvasAiInputContext = { target, contexts: [], refs: [], inputFingerprint: inputFingerprint(flow, nodeId), problems: [] };
+  const result: CanvasAiInputContext = { target, contexts: [], refs: [], libraryRefs: [], inputFingerprint: inputFingerprint(flow, nodeId), problems: [] };
+  let libraryComments: CanvasComment[] = [];
   if (!node) { result.problems.push('AI-нода не найдена.'); return result; }
   if (!target || !findModel(target.modelId)) result.problems.push('Выбери генератор с моделью для этой AI-ноды.');
   for (const edge of flow.edges.filter(e => e.to === nodeId)) {
@@ -34,6 +50,13 @@ export function aiInputContext(flow: Flow, nodeId: string, mediaOf: (jobId: stri
     if (edge.port === 'context') {
       if (source.type !== 'comment') { result.problems.push('Во вход «Контекст» подключи комментарий.'); continue; }
       if (source.text.trim()) result.contexts.push({ nodeId: source.id, text: source.text.trim() });
+      continue;
+    }
+    if (edge.port === 'libraryRefs') {
+      if (source.type !== 'references') { result.problems.push('Подключи к входу подборку из библиотеки референсов.'); continue; }
+      result.libraryRefs = source.libraryRefs ?? [];
+      libraryComments = referenceComments(flow, source.id);
+      if (!result.libraryRefs.length) result.problems.push('Закрепи кадры в подключённой подборке.');
       continue;
     }
     if (edge.port !== 'ref') { result.problems.push('Неподдерживаемый вход AI-ноды.'); continue; }
@@ -52,6 +75,7 @@ export function aiInputContext(flow: Flow, nodeId: string, mediaOf: (jobId: stri
     } else if (source.mediaId) result.refs.push({ label, source: { type: 'media', mediaId: source.mediaId }, role: 'ref' });
     else result.problems.push('Сначала сохрани результат обработки изображения.');
   }
+  result.contexts.push(...libraryComments.filter(comment => !result.contexts.some(current => current.nodeId === comment.nodeId)));
   if (!result.contexts.length && !node.text.trim()) result.problems.push('Добавь комментарий с идеей или опиши задачу в AI-ноде.');
   return result;
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CanvasNodeSchema, type Flow } from '../../src/core/model/canvas.ts';
 import { GenJobSchema } from '../../src/core/model/media.ts';
+import type { ReferenceCard } from '../../src/core/references.ts';
 import { planRun } from '../../src/core/canvas/plan.ts';
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
 import { createCanvasAi } from '../../src/server/canvasAi/service.ts';
@@ -22,7 +23,7 @@ const meta = { durationMs: 1, model: 'fake', turns: 1, inputTokens: 1, outputTok
 const idea = { textRu: 'Ты стоишь на мокрой улице в серой куртке, свет отражается в лужах.', assumptionsRu: ['Камера остаётся неподвижной.'], referenceNotesRu: [] };
 const prompt = { prompt: 'A young man wearing a grey jacket stands on a wet street, soft light reflected in puddles, documentary photography.', summaryRu: 'Сохранил улицу, куртку и отражения.', referenceNotesRu: [] };
 const node = (id: string, type: string, extra = {}) => CanvasNodeSchema.parse({ id, type, x: 0, y: 0, ...extra });
-async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runner; accountRunner?: (id?: string) => Runner } = {}) {
+async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runner; accountRunner?: (id?: string) => Runner; resolveLibraryReference?: Parameters<typeof createCanvasAi>[0]['resolveLibraryReference'] } = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'sp-canvas-ai-'));
   const flows = createFlows(dataDir);
   const base = await flows.create('AI fake test');
@@ -31,7 +32,7 @@ async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runne
   const run: Runner = options.run ?? (async <T>(request: LlmRequest) => { calls.push(request); return { data: outputs.shift() as T, meta }; });
   const gen = createGenRuntime({ dataDir, providers: {} });
   const characters = createCharacters({ dataDir });
-  const runtime = createCanvasAi({ rootDir: ROOT, dataDir, flows, gen, characters, runLlm: run, runLlmForAccount: options.accountRunner });
+  const runtime = createCanvasAi({ rootDir: ROOT, dataDir, flows, gen, characters, runLlm: run, runLlmForAccount: options.accountRunner, resolveLibraryReference: options.resolveLibraryReference });
   const app = createApp({ rootDir: ROOT, dataDir, gen, characters, canvasAi: runtime, runLlm: run });
   const saved = async () => (await flows.get(base.id))!;
   const send = (method: string, url: string, body?: unknown) => app.request(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -49,6 +50,59 @@ function submission(flow: Flow) {
 }
 
 describe('Canvas AI durable explicit stages', () => {
+  it('pins library images to the idea and only uses approved techniques during prompt compilation', async () => {
+    const card: ReferenceCard = {
+      id: 'ref-frame', sourceName: 'Private filename.mp4', timeMs: 1200, version: 1, folder: 'camera', tags: ['силуэт'],
+      analysis: { visible: 'Человек в контровом свете', technique: 'Силуэт через контровой свет', transfer: 'Подсветить контур героя сзади', subject: '', pose: '', composition: '', angle: '', lighting: '', color: '', texture: '', styling: '' },
+    };
+    const selection = { id: card.id, version: card.version, role: 'Контровой свет' };
+    const second: ReferenceCard = { ...card, id: 'ref-frame-2', sourceName: 'Second private filename.jpg' };
+    const secondSelection = { ...selection, id: second.id };
+    let base64 = 'aW1hZ2U=';
+    const s = await setup([idea, prompt], {
+      resolveLibraryReference: async ({ id }) => ({ card: id === second.id ? second : card, image: { mediaType: 'image/jpeg', base64 } }),
+    });
+    const before = await s.saved();
+    const saved = (await s.flows.save(before.id, {
+      ...before, nodes: [...before.nodes, node('refs', 'references', { libraryRefs: [selection, secondSelection] })],
+      edges: [{ id: 'context', from: 'comment', to: 'refs', port: 'context' }, { id: 'refs-ai', from: 'refs', to: 'ai', port: 'libraryRefs' }],
+    }))!;
+    const preview = await s.runtime.preview(saved.id, 'ai');
+    expect(preview.snapshot.libraryRefs?.[0]).toMatchObject({ selection, transfer: card.analysis?.transfer });
+    expect(preview.snapshot.attachments[0]?.role).toBe('library');
+    expect(preview.snapshot.generationRefs).toEqual([]);
+    base64 = 'cGljdHVyZQ==';
+    await expect(s.runtime.start({
+      flowId: saved.id, nodeId: 'ai', stage: 'idea', requestId: randomUUID(), flow: saved, feedbackRu: '', previewDigest: preview.snapshot.contextDigest,
+    })).rejects.toMatchObject({ code: 'PREVIEW_CHANGED' });
+    expect(s.calls).toHaveLength(0);
+
+    await s.approvedIdea();
+    const image = { mediaType: 'image/jpeg', base64 };
+    expect(s.calls[0]?.images).toEqual([image, image]);
+    const cue = {
+      role: selection.role, visible: card.analysis?.visible, technique: card.analysis?.technique, transfer: card.analysis?.transfer,
+    };
+    expect(JSON.parse(s.calls[0]!.user).libraryRefs).toEqual([
+      { ...cue, attachmentFile: 'image-1.jpg' }, { ...cue, attachmentFile: 'image-2.jpg' },
+    ]);
+    expect(s.calls[0]?.user).not.toContain(card.sourceName);
+    const compiled = await s.ready('prompt');
+    expect(compiled.status).toBe('ready');
+    expect(compiled.snapshot.libraryRefs?.[0]?.selection).toEqual(selection);
+    expect(compiled.snapshot.attachments).toEqual([]);
+    expect(s.calls[1]?.images).toEqual([]);
+    expect(JSON.parse(s.calls[1]!.user).libraryRefs).toEqual([cue, cue]);
+    const approved = await s.runtime.approve(compiled.id, await s.saved(), compiled.revision);
+    expect(submission(approved.flow).refs).toEqual([]);
+    expect(await s.runtime.validateSubmission(submission(approved.flow))).toMatchObject({ promptVersionId: compiled.version?.id });
+    expect(await s.gen.jobs.all()).toEqual([]);
+
+    card.version += 1;
+    await expect(s.runtime.preview(saved.id, 'ai')).rejects.toMatchObject({ code: 'LIBRARY_REF_UNAVAILABLE' });
+    expect(s.calls).toHaveLength(2);
+  });
+
   it('idea → approval → prompt → distinct approval; no generation or auto compilation; exact server lineage', async () => {
     const s = await setup();
     const prepared = await s.ready('idea');

@@ -3,7 +3,7 @@ import { createProductionCanvas } from './production/canvas.ts';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono, type Context } from 'hono';
 import { AccountError, type Accounts } from './accounts/service.ts';
@@ -41,6 +41,8 @@ import { createProductionRuntime, type ProductionRuntime } from './production/ru
 import { productionRoutes } from './production/routes.ts';
 import { createCharacters, type Characters } from './production/characters.ts';
 import { characterRoutes } from './production/characterRoutes.ts';
+import { createReferenceLibrary } from './references/library.ts';
+import { referenceRoutes } from './references/routes.ts';
 import { createFlows, FlowMergeError } from './storage/flows.ts';
 import { createJournal } from './storage/journal.ts';
 import { createMoodboards } from './storage/moodboards.ts';
@@ -91,6 +93,9 @@ export interface AppOptions {
   production?: ProductionRuntime;
   characters?: Characters;
   canvasAi?: CanvasAi;
+  /** Enabled only for a dedicated loopback instance reached through an SSH tunnel. */
+  referenceLibrary?: boolean;
+  referenceGraph?: boolean;
   /** Показать папку экспорта в Finder. По умолчанию — `open` на macOS; в тестах отключается. */
   reveal?: ((dir: string) => void) | false;
   /** Генерация и библиотека. По умолчанию — живые провайдеры, фоновый опрос не запущен (его запускает index.ts). */
@@ -142,7 +147,11 @@ export function createApp(options: AppOptions) {
   const moodboards = createMoodboards(options.dataDir);
   const journal = createJournal(options.dataDir);
   const app = new Hono();
-  const allowedOrigins = new Set([...ALLOWED_ORIGINS, ...(options.publicOrigins ?? (process.env.SP_PUBLIC_ORIGINS ?? '').split(',').filter(Boolean))]);
+  const publicOrigins = options.publicOrigins ?? (process.env.SP_PUBLIC_ORIGINS ?? '').split(',').filter(Boolean);
+  if (options.referenceLibrary && (HOST !== '127.0.0.1' || publicOrigins.length)) {
+    throw new Error('Reference Library requires a loopback-only instance without public origins');
+  }
+  const allowedOrigins = new Set([...ALLOWED_ORIGINS, ...publicOrigins]);
   for (const origin of allowedOrigins) {
     const url = new URL(origin);
     if (url.origin !== origin || (url.protocol !== 'https:' && !ALLOWED_ORIGINS.has(origin))) throw new Error('SP_PUBLIC_ORIGINS requires exact HTTPS origins');
@@ -185,7 +194,23 @@ export function createApp(options: AppOptions) {
 
   const characters = options.characters ?? createCharacters({ dataDir: options.dataDir });
   app.route('/api/characters', characterRoutes(characters));
-  const canvasAi = options.canvasAi ?? createCanvasAi({ dataDir: options.dataDir, rootDir: options.rootDir, flows, gen, characters, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor });
+  const referenceRoot = path.join(options.dataDir, 'references');
+  const references = options.referenceLibrary ? createReferenceLibrary(referenceRoot) : undefined;
+  app.route('/api/references', referenceRoutes(path.join(referenceRoot, 'chat'), references, runFor, options.referenceGraph));
+  const canvasAi = options.canvasAi ?? createCanvasAi({
+    dataDir: options.dataDir, rootDir: options.rootDir, flows, gen, characters,
+    runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor,
+    resolveLibraryReference: references ? async ({ id, version }) => {
+      const card = await references.get(id, version);
+      const file = card ? await references.imagePath(id) : undefined;
+      if (!card || !file) return null;
+      try { return { card, image: { mediaType: 'image/jpeg', base64: (await readFile(file)).toString('base64') } }; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
+    } : undefined,
+  });
   app.route('/api/canvas-ai', canvasAiRoutes(canvasAi, options.accounts));
   const production = options.production ?? createProductionRuntime({ dataDir: options.dataDir, runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor, gen });
   app.route('/api/production', productionRoutes(production, characters, options.accounts));

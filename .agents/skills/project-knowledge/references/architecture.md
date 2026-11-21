@@ -160,6 +160,13 @@ Bearer/API-key/JWT и URL убираются перед показом. Точн
 
 ## API
 
+Персональный пилот `SP_PRIVATE_REFERENCE_LIBRARY=1` включает `/api/references` в отдельном
+loopback-экземпляре без публичных origins. `data/references` хранит извлечённые кадры,
+версии их разбора, очередь анализа и историю подборок. Серверный поиск собирает кандидатов
+по сохранённым признакам и отдаёт их описания LLM на ранжирование. Нода «Референсы» хранит ID
+кадров, версии и назначение, а медиа-входы генератора остаются отдельными. Изображения уходят
+в AI · идея, AI · промпт использует текстовые приёмы из одобренной версии.
+
 Группы маршрутов в `src/server/app.ts`: `projects`, `llm/*` (fields, plan, write, critique, fix,
 vision, prompter, region-edit), `gen/*` (jobs, quote, measure, status, styles), `library/*` (файлы, папки,
 избранное, кадр, обрезка, импорт, выгрузка), `canvas/flows`, `studio/sessions`, `media/resize`,
