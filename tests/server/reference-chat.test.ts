@@ -68,7 +68,8 @@ describe('reference chat', () => {
   });
 
   it('passes partial terms to reranking and preserves its explanation when none qualify', async () => {
-    const chat = createReferenceChat(await root(), { list: async () => [card('street', 'улица', 'fisheye')], get: async () => undefined });
+    const available = card('street', 'улица', 'fisheye');
+    const chat = createReferenceChat(await root(), { list: async () => [available], get: async () => available });
     let calls = 0;
     const run = async <T>(request: LlmRequest): Promise<LlmResult<T>> => {
       calls++;
@@ -80,6 +81,42 @@ describe('reference chat', () => {
     const result = await chat.search('library', { brief: '', query: 'fisheye сверху' }, async () => run);
     expect(calls).toBe(2);
     expect(result.turns[0]).toMatchObject({ matches: [], summary: 'Есть оптика, но нет нужного верхнего ракурса.' });
+  });
+
+  it.each(['planning', 'ranking'])('rechecks eligibility after %s and never publishes a revoked result', async phase => {
+    const available = card('street', 'street', 'fisheye');
+    let eligible = true;
+    let release: () => void = () => undefined;
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    let reached = false;
+    let ranks = 0;
+    const library = {
+      list: async () => eligible ? [available] : [],
+      get: async () => eligible ? available : undefined,
+    };
+    const chat = createReferenceChat(await root(), library);
+    const run = async <T>(request: LlmRequest): Promise<LlmResult<T>> => {
+      const planning = request.taskRu === 'Разобрать запрос референсов';
+      if (!planning) ranks++;
+      if (planning === (phase === 'planning')) { reached = true; await waiting; }
+      return { data: (planning
+        ? { aspects: [{ role: 'angle', terms: ['fisheye'] }] }
+        : { summary: 'Use the fisheye frame.', matches: [{ refId: 'street', role: 'angle', reason: 'Visible perspective.' }] }) as T, meta };
+    };
+    const searching = chat.search('library', { brief: '', query: 'fisheye' }, async () => run);
+    const result = searching.then(value => ({ value, error: null }), error => ({ value: null, error }));
+    await vi.waitFor(() => expect(reached).toBe(true));
+    eligible = false;
+    release();
+    const outcome = await result;
+    if (phase === 'planning') {
+      expect(ranks).toBe(0);
+      expect(outcome.value?.turns[0]?.matches).toEqual([]);
+    } else {
+      expect(ranks).toBe(1);
+      expect(outcome.error).toMatchObject({ status: 409 });
+      expect((await chat.get('library')).turns).toEqual([]);
+    }
   });
 });
 

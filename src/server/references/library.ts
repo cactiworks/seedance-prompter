@@ -172,6 +172,7 @@ export function createReferenceLibrary(root: string) {
   }
 
   async function update(id: string, change: (frame: Source['frames'][number], current: CardVersion) => CardVersion) {
+    await initialize();
     const matches = CARD_ID.exec(id);
     if (!matches) return;
     const sourceId = matches[1]!;

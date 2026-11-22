@@ -198,6 +198,20 @@ it('deletes unreferenced rejected JPEGs and never resurrects their stable tombst
   expect(await reopened.get(card!.id, undefined, 'all')).toMatchObject({ quality: { status: 'reject' } });
 });
 
+it('initializes rejected cleanup before the first edit lock after restart', async () => {
+  const { root, source, library, cards, jpeg } = await fixture(2);
+  await library.startAnalysis(async <T>(request: LlmRequest) => request.taskRu === 'Проверка качества референсов'
+    ? { data: { frames: input(request).candidateIds.map((id, index) => index === 0 ? keep(id) : reject(id)) } as T, meta }
+    : response<T>(request), 2);
+  await finish(library);
+  await writeFile(path.join(source, 'frame-1.jpg'), jpeg);
+  const restarted = createReferenceLibrary(root);
+  const edited = await restarted.edit(cards[0]!.id, { tags: ['updated'] });
+  expect(edited?.tags).toEqual(['updated']);
+  expect(await readdir(source)).not.toContain('frame-1.jpg');
+  expect(await restarted.list()).toHaveLength(1);
+}, 2000);
+
 it.each(['canvas', 'canvas-ai', 'references/chat'] as const)('retains rejected media referenced from %s while denying new use', async folder => {
   const { dir, source, library, cards } = await fixture(1);
   await mkdir(path.join(dir, folder), { recursive: true });

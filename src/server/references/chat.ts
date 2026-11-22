@@ -119,6 +119,7 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
       const history = (await get(key)).turns.slice(-4);
       const previous = history.at(-1);
       const cards = (await library.list()).filter(isReferenceEligible);
+      let rankedCards: ReferenceCard[] = [];
       let matches: ReferenceMatch[] = [];
       let summary = NO_MATCH;
       if (cards.some(card => card.analysis)) {
@@ -133,7 +134,11 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
           model, effort: 'low', taskRu: 'Разобрать запрос референсов', timeoutMs: 120_000, signal,
         });
         const plan = QueryPlanSchema.parse(planned.data);
-        const candidates = shortlist(cards, plan.aspects, await readJson<Preference[]>(preferencesFor(accountId), []));
+        const preferences = await readJson<Preference[]>(preferencesFor(accountId), []);
+        const currentCards = (await library.list()).filter(isReferenceEligible);
+        const candidates = shortlist(currentCards, plan.aspects, preferences);
+        const candidateIds = new Set(candidates.map(candidate => candidate.refId));
+        rankedCards = currentCards.filter(card => candidateIds.has(card.id));
         signal?.throwIfAborted();
         if (candidates.length) {
           const ranked = await runner<unknown>({
@@ -155,6 +160,11 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
       return await serialize(file, async () => {
         signal?.throwIfAborted();
         const current = await get(key);
+        const currentCards = await Promise.all(rankedCards.map(card => library.get(card.id, card.version)));
+        signal?.throwIfAborted();
+        if (currentCards.some((card, index) => !isReferenceEligible(card) || card?.version !== rankedCards[index]!.version)) {
+          throw new ReferenceChatError(409, 'Допуск кадров изменился во время подбора. Обнови библиотеку и повтори запрос.');
+        }
         const next = { ...current, turns: [...current.turns, { ...input, id: randomUUID(), summary, matches }] };
         await atomicWrite(file, JSON.stringify(next));
         return next;
