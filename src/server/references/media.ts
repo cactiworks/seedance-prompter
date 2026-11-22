@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { open, readFile, readdir } from 'node:fs/promises';
+import { open, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { probeVideo, runFfmpeg } from '../gen/ffmpeg.ts';
 import { imageSize } from '../gen/imageSize.ts';
@@ -7,10 +7,14 @@ import { imageSize } from '../gen/imageSize.ts';
 const MAX_BYTES = 150 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 180;
 const MAX_SOURCE_PIXELS = 40_000_000;
-const MAX_FRAMES = 8;
-const SAMPLE_FPS = 4;
 const SAMPLE_SIDE = 32;
 const SAMPLE_BYTES = SAMPLE_SIDE * SAMPLE_SIDE * 3;
+const MAX_SCAN_BYTES = 192 * 1024 * 1024;
+const MAX_TIMING_BYTES = 8 * 1024 * 1024;
+const CUT_DIFFERENCE = 0.13;
+const ACTION_DIFFERENCE = 0.115;
+const ACTION_SPACING_US = 600_000;
+const DUPLICATE_DIFFERENCE = 0.035;
 const BOUNDED_JPEG = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease";
 
 const formats = {
@@ -70,97 +74,166 @@ export async function writeReferenceInput(file: string, body: ReadableStream<Uin
   }
 }
 
-interface Sample {
-  time: number;
-  pixels: Uint8Array;
+interface ScanFrame {
+  index: number;
+  timeUs: number;
+}
+
+interface Candidate {
+  frame: ScanFrame;
+  colors: Uint8Array;
+  score: number;
 }
 
 function difference(left: Uint8Array, right: Uint8Array): number {
   let total = 0;
-  for (let i = 0; i < SAMPLE_BYTES; i++) total += Math.abs(left[i]! - right[i]!);
-  return total / (SAMPLE_BYTES * 255);
+  for (let i = 0; i < left.length; i++) total += Math.abs(left[i]! - right[i]!);
+  return total / (left.length * 255);
 }
 
-function usable(sample: Sample): boolean {
-  const average = sample.pixels.reduce((sum, value) => sum + value, 0) / SAMPLE_BYTES;
-  return average > 8 && average < 247;
-}
-
-function selectTimes(samples: Sample[], cuts: number[], duration: number): number[] {
-  const visible = samples.filter(usable);
-  if (!samples.length) return [duration / 2];
-  if (!visible.length) throw new ReferenceLibraryError(422, 'В ролике нет кадров с различимым изображением.');
-  const boundaries = [0, ...cuts.filter((time, index) => time > 0 && time < duration && time > (cuts[index - 1] ?? -1)), duration];
-  const representatives = boundaries.slice(0, -1).flatMap((start, index) => {
-    const end = boundaries[index + 1]!;
-    const middle = (start + end) / 2;
-    const within = visible.filter(sample => sample.time >= start && sample.time < end);
-    const closest = within.reduce<Sample | undefined>((best, sample) =>
-      !best || Math.abs(sample.time - middle) < Math.abs(best.time - middle) ? sample : best, undefined);
-    return closest ? [closest] : [];
-  });
-  const poolSize = Math.min(representatives.length, MAX_FRAMES * 4);
-  const review = representatives.length > poolSize
-    ? Array.from({ length: poolSize }, (_, i) => representatives[Math.round(i * (representatives.length - 1) / (poolSize - 1))]!)
-    : representatives;
-  const distinct: Sample[] = [];
-  for (const sample of review) {
-    if (distinct.every(prior => difference(prior.pixels, sample.pixels) > 0.035)) distinct.push(sample);
+/** Average color within each 4×4 block keeps duplicates cheap to compare across shots. */
+function signature(pixels: Uint8Array): Uint8Array {
+  const blockSize = 4;
+  const blocksPerRow = SAMPLE_SIDE / blockSize;
+  const result = new Uint8Array(blocksPerRow * blocksPerRow * 3);
+  for (let block = 0; block < result.length / 3; block++) {
+    const start = (Math.floor(block / blocksPerRow) * blockSize * SAMPLE_SIDE + block % blocksPerRow * blockSize) * 3;
+    for (let channel = 0; channel < 3; channel++) {
+      let sum = 0;
+      for (let row = 0; row < blockSize; row++) {
+        for (let column = 0; column < blockSize; column++) {
+          sum += pixels[start + (row * SAMPLE_SIDE + column) * 3 + channel]!;
+        }
+      }
+      result[block * 3 + channel] = Math.round(sum / (blockSize * blockSize));
+    }
   }
-  const picked = distinct.length > MAX_FRAMES
-    ? Array.from({ length: MAX_FRAMES }, (_, i) => distinct[Math.round(i * (distinct.length - 1) / (MAX_FRAMES - 1))]!)
-    : distinct;
-  if (!picked.length) picked.push(visible[Math.floor(visible.length / 2)]!);
+  return result;
+}
 
-  // Add a changed pose, action or composition within a shot if a scene cut did not cover it.
-  while (picked.length < MAX_FRAMES) {
-    let candidate: Sample | undefined;
-    let best = 0.115;
-    for (const sample of visible) {
-      if (picked.some(prior => Math.abs(prior.time - sample.time) < 0.6)) continue;
-      const score = Math.min(...picked.map(prior => difference(prior.pixels, sample.pixels)));
-      if (score > best) {
-        best = score;
-        candidate = sample;
+function nearDuplicate(left: Uint8Array, right: Uint8Array): boolean {
+  const limit = left.length * 255 * DUPLICATE_DIFFERENCE;
+  let total = 0;
+  for (let i = 0; i < left.length; i++) {
+    total += Math.abs(left[i]! - right[i]!);
+    if (total > limit) return false;
+  }
+  return true;
+}
+
+/** Favor frames with defined edges, rejecting black and blown-out fades. */
+function quality(pixels: Uint8Array): number | undefined {
+  let total = 0;
+  let edges = 0;
+  const stride = SAMPLE_SIDE * 3;
+  for (let i = 0; i < pixels.length; i++) {
+    const value = pixels[i]!;
+    total += value;
+    if (i % stride >= 3) edges += Math.abs(value - pixels[i - 3]!);
+    if (i >= stride) edges += Math.abs(value - pixels[i - stride]!);
+  }
+  const average = total / SAMPLE_BYTES;
+  return average > 8 && average < 247 ? edges : undefined;
+}
+
+async function selectFrames(rawFile: string, timestamps: number[]): Promise<ScanFrame[]> {
+  const candidates: Candidate[] = [];
+  let best: { indices: number[]; score: number; pixels: Buffer } | undefined;
+  let segmentStartUs = 0;
+  const previous = Buffer.alloc(SAMPLE_BYTES);
+  const file = await open(rawFile);
+
+  async function finishSegment() {
+    if (!best) return;
+    const index = best.indices[Math.floor(best.indices.length / 2)]!;
+    if (index !== best.indices[0]) {
+      const { bytesRead } = await file.read(best.pixels, 0, SAMPLE_BYTES, index * SAMPLE_BYTES);
+      if (bytesRead !== SAMPLE_BYTES) throw new Error('Incomplete frame scan.');
+    }
+    candidates.push({ frame: { index, timeUs: timestamps[index]! }, colors: signature(best.pixels), score: best.score });
+    best = undefined;
+  }
+
+  const batch = Buffer.alloc(SAMPLE_BYTES * 64);
+  try {
+    let index = 0;
+    while (index < timestamps.length) {
+      const length = Math.min(batch.length, (timestamps.length - index) * SAMPLE_BYTES);
+      const { bytesRead } = await file.read(batch, 0, length, index * SAMPLE_BYTES);
+      if (bytesRead !== length) throw new Error('Incomplete frame scan.');
+      for (let offset = 0; offset < length; offset += SAMPLE_BYTES, index++) {
+        const pixels = batch.subarray(offset, offset + SAMPLE_BYTES);
+        const timeUs = timestamps[index]!;
+        const cut = index > 0 && difference(previous, pixels) > CUT_DIFFERENCE;
+        const action = best && timeUs - segmentStartUs >= ACTION_SPACING_US && difference(best.pixels, pixels) > ACTION_DIFFERENCE;
+        if (cut || action) {
+          await finishSegment();
+          segmentStartUs = timeUs;
+        }
+        const score = quality(pixels);
+        if (score !== undefined) {
+          if (!best || score > best.score) best = { indices: [index], score, pixels: Buffer.from(pixels) };
+          else if (score === best.score) best.indices.push(index);
+        }
+        pixels.copy(previous);
       }
     }
-    if (!candidate) break;
-    picked.push(candidate);
+    await finishSegment();
+  } finally {
+    await file.close();
   }
-  return picked.map(sample => sample.time).sort((a, b) => a - b);
+  if (!candidates.length) throw new ReferenceLibraryError(422, 'В ролике нет кадров с различимым изображением.');
+  const distinct: Candidate[] = [];
+  for (const candidate of candidates.sort((a, b) => b.score - a.score || a.frame.index - b.frame.index)) {
+    if (!distinct.some(prior => nearDuplicate(prior.colors, candidate.colors))) distinct.push(candidate);
+  }
+  return distinct.map(item => item.frame).sort((a, b) => a.index - b.index);
+}
+
+/** Split the index lookup so the filter needs logarithmic work per decoded frame. */
+function indexFilter(frames: ScanFrame[], start = 0, end = frames.length): string {
+  if (end - start === 1) return `eq(n,${frames[start]!.index})`;
+  const middle = Math.floor((start + end) / 2);
+  return `if(lt(n,${frames[middle]!.index}),${indexFilter(frames, start, middle)},${indexFilter(frames, middle, end)})`;
 }
 
 const videoInputs = (source: string, format: MediaFormat) => [
   '-nostdin', '-protocol_whitelist', 'file', '-threads', '2', '-xerror', '-err_detect', 'explode', '-f', format, '-i', source,
 ];
 
-async function extractVideo(input: string[], directory: string, duration: number) {
-  const cutFile = path.join(directory, 'cuts.txt');
+async function extractVideo(input: string[], directory: string) {
+  const clockFile = path.join(directory, 'samples.crc');
   const rawFile = path.join(directory, 'samples.rgb');
-  const filter = `[0:v:0]setpts=PTS-STARTPTS,scale=${SAMPLE_SIDE}:${SAMPLE_SIDE},split=2[a][b];[a]scdet=threshold=10:sc_pass=1[cuts];[b]fps=${SAMPLE_FPS},format=rgb24[samples]`;
+  const filter = `[0:v:0]setpts=PTS-STARTPTS,scale=${SAMPLE_SIDE}:${SAMPLE_SIDE},format=rgb24,split=2[samples][clock]`;
   await runFfmpeg([
     ...input, '-filter_complex_threads', '2', '-filter_complex', filter,
-    '-map', '[cuts]', '-fps_mode', 'passthrough', '-enc_time_base', '1:1000', '-f', 'framecrc', cutFile,
-    '-map', '[samples]', '-frames:v', String(MAX_VIDEO_SECONDS * SAMPLE_FPS + 1), '-c:v', 'rawvideo', '-threads', '1', '-f', 'rawvideo', rawFile,
+    '-map', '[samples]', '-fps_mode', 'passthrough', '-c:v', 'rawvideo', '-threads', '1', '-fs', String(MAX_SCAN_BYTES), '-f', 'rawvideo', rawFile,
+    '-map', '[clock]', '-fps_mode', 'passthrough', '-enc_time_base', '1:1000000', '-c:v', 'rawvideo', '-threads', '1', '-fs', String(MAX_TIMING_BYTES), '-f', 'framecrc', clockFile,
   ]);
-  const [cutLog, raw] = await Promise.all([readFile(cutFile, 'utf8'), readFile(rawFile)]);
-  const cuts = cutLog.split('\n').filter(line => /^0,/.test(line)).map(line => Number(line.split(',')[2]) / 1000);
-  const samples = Array.from({ length: Math.floor(raw.length / SAMPLE_BYTES) }, (_, index) => ({
-    time: Math.min(index / SAMPLE_FPS, duration * 0.99),
-    pixels: raw.subarray(index * SAMPLE_BYTES, (index + 1) * SAMPLE_BYTES),
-  }));
-  const thresholds = selectTimes(samples, cuts, duration).map(time => time.toFixed(6));
-  const select = thresholds.map(time => `gte(t,${time})*(isnan(prev_pts)+lt(prev_pts*TB,${time}))`).join('+');
+  const [timing, raw] = await Promise.all([stat(clockFile), stat(rawFile)]);
+  if (raw.size >= MAX_SCAN_BYTES || timing.size >= MAX_TIMING_BYTES) {
+    throw new ReferenceLibraryError(422, 'Слишком большой объём декодированных кадров. Уменьши частоту кадров видео.');
+  }
+  const clock = await readFile(clockFile, 'utf8');
+  const timestamps = clock.split('\n').filter(line => line.startsWith('0,')).map(line => Number(line.split(',')[2]));
+  if (raw.size !== timestamps.length * SAMPLE_BYTES || timestamps.some(time => !Number.isSafeInteger(time) || time < 0)) {
+    throw new Error('Invalid frame scan.');
+  }
+  const frames = await selectFrames(rawFile, timestamps);
+  const selectFile = path.join(directory, 'select.txt');
+  await writeFile(selectFile, `select='${indexFilter(frames)}',${BOUNDED_JPEG}`);
   await runFfmpeg([
     ...input, '-filter_threads', '2', '-map', '0:v:0', '-map_metadata', '-1', '-map_chapters', '-1',
-    '-vf', `setpts=PTS-STARTPTS,select='${select}',${BOUNDED_JPEG}`,
-    '-c:v', 'mjpeg', '-threads', '2', '-q:v', '3', '-fps_mode', 'passthrough', '-enc_time_base', '1:1000',
-    '-frame_pts', '1', path.join(directory, 'frame-%d.jpg'),
+    '-filter_script:v', selectFile,
+    '-c:v', 'mjpeg', '-threads', '2', '-q:v', '3', '-fps_mode', 'passthrough',
+    '-start_number', '0', path.join(directory, 'frame-%d.jpg'),
   ]);
-  return (await readdir(directory)).flatMap(name => {
-    const timestamp = /^frame-(\d+)\.jpg$/.exec(name);
-    return timestamp ? [{ file: name, timeMs: Number(timestamp[1]) }] : [];
-  }).sort((a, b) => a.timeMs - b.timeMs);
+  const files = new Set(await readdir(directory));
+  return frames.map((frame, index) => {
+    const file = `frame-${index}.jpg`;
+    if (!files.has(file)) throw new Error('Missing selected frame.');
+    return { file, timeMs: Math.round(frame.timeUs / 1000) };
+  });
 }
 
 function matchesHeader(header: Buffer, format: MediaFormat) {
@@ -192,9 +265,7 @@ export async function extractReferenceFrames(source: string, format: MediaFormat
       const info = await probeVideo(source);
       requireSize(info);
       if (info.durationSec > MAX_VIDEO_SECONDS) throw new ReferenceLibraryError(422, 'Видео должно быть не длиннее трёх минут.');
-      const frames = await extractVideo(input, directory, info.durationSec);
-      if (frames.length) return frames;
-      // Very short or unevenly timed videos still get a cover frame.
+      return await extractVideo(input, directory);
     } else {
       requireSize(imageSize(scanned));
     }
@@ -204,7 +275,7 @@ export async function extractReferenceFrames(source: string, format: MediaFormat
       '-vf', BOUNDED_JPEG, '-frames:v', '1', '-c:v', 'mjpeg', '-threads', '2', '-q:v', '3', '-update', '1', path.join(directory, file),
     ]);
     if (!(await readdir(directory)).includes(file)) throw new Error('Empty frame.');
-    return [{ file, timeMs: format === 'mov' || format === 'matroska' ? 0 : null }];
+    return [{ file, timeMs: null }];
   } catch (error) {
     if (error instanceof ReferenceLibraryError) throw error;
     throw new ReferenceLibraryError(422, 'Не удалось прочитать файл и извлечь кадры.');

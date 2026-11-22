@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { atomicWrite, serialize } from './atomic.ts';
 import { StoreError } from './fsStore.ts';
 import { invalidateChanged } from '../../core/canvas/freshness.ts';
-import { mergeCanvasFlow } from '../../core/canvas/merge.ts';
+import { canvasSectionEditsLost, mergeCanvasFlow } from '../../core/canvas/merge.ts';
 import { FlowSchema, type Flow } from '../../core/model/canvas.ts';
 
 export const FLOW_ID = /^f-[a-z0-9-]{6,64}$/;
@@ -123,7 +123,7 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
     }) || desired.edges.some(edge => {
       const old = base.edges.find(value => value.id === edge.id);
       return JSON.stringify(old) !== JSON.stringify(edge) && !parsed.data.edges.some(value => JSON.stringify(value) === JSON.stringify(edge));
-    })) await archive('recovery', desired);
+    }) || canvasSectionEditsLost(base, desired, parsed.data)) await archive('recovery', desired);
     return FlowSchema.parse(invalidateChanged(current, parsed.data));
   }
 
@@ -234,7 +234,14 @@ export function createFlows(dataDir: string, now: () => number = Date.now) {
       return transaction(id, async current => {
         if (current === undefined) throw new StoreError('NOT_FOUND', 'Холст не найден.');
         if ((parsed.data.rev ?? 0) !== (current.rev ?? 0)) throw new StoreError('CONFLICT', 'Холст изменён на сервере. Обнови страницу, чтобы получить текущую версию.');
-        return commit(current, parsed.data);
+        const desired = parsed.data;
+        if (desired.sections !== undefined || !current.sections?.length) return commit(current, desired);
+        // Older clients omit section metadata even when updating a member.
+        const membership = new Map(current.nodes.map(node => [node.id, node.sectionId]));
+        const nodes = desired.nodes.map(node => ({ ...node, sectionId: membership.get(node.id) }));
+        const occupied = new Set(nodes.map(node => node.sectionId));
+        const sections = current.sections.filter(section => occupied.has(section.id));
+        return commit(current, { ...desired, nodes, sections: sections.length > 0 ? sections : undefined });
       });
     },
     async patch(id: string, incoming: unknown): Promise<Flow | null> {

@@ -1,4 +1,13 @@
 {
+  "Инструменты холста": "Canvas tools",
+  "Курсор": "Cursor",
+  "Перемещение холста": "Pan canvas",
+  "Создать секцию": "Create section",
+  "Секция {0}": "Section {0}",
+  "Название секции": "Section name",
+  "Разгруппировать секцию": "Ungroup section",
+  "Секция скопирована": "Section copied",
+  "Агент должен описать кадры на английском. Повтори разбор оставшихся кадров.": "Frame descriptions must be in English. Retry the remaining frames.",
   "Сервер не ответил на запрос ({0}).": "Request failed ({0}).",
   "Открываю библиотеку…": "Opening the library…",
   "Здесь пока нет кадров": "No frames here yet",

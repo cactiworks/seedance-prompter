@@ -1,11 +1,11 @@
 import { studioFetch as fetch } from '../remoteFetch.ts';
 import { create } from 'zustand';
 import { modelsOf, paramsFor, type MediaKind } from '../../core/gen/models.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, inputsOf, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type Flow, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasSectionSchema, FlowSchema, CanvasNodeSchema, portAccepts, inputsOf, dropStaleEdges, outputOf, type CanvasEdge, type CanvasNode, type CanvasNodeType, type CanvasSection, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import { wouldCycle } from '../../core/canvas/plan.ts';
 import { inputFingerprint, invalidateChanged } from '../../core/canvas/freshness.ts';
 import { cloneSeedance } from '../../core/canvas/seedance.ts';
-import { mergeCanvasFlow } from '../../core/canvas/merge.ts';
+import { canvasSectionEditsLost, mergeCanvasFlow } from '../../core/canvas/merge.ts';
 
 const HEADERS = { 'x-sp-client': '1', 'content-type': 'application/json' };
 /** Префикс нод в системном буфере — чтобы вставка работала между flows и вкладками. */
@@ -47,6 +47,7 @@ type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 
 let seq = 0;
 export const newId = (prefix: string): string => `${prefix}${Date.now().toString(36)}${(seq += 1).toString(36)}`;
+const newSectionId = (): string => `s-${crypto.randomUUID()}`;
 
 /** Ширина нод — фиксированная: по ней считаются координаты портов для рёбер. */
 export const NODE_WIDTH: Record<CanvasNodeType, number> = { comment: 280, references: 280, ai: 300, prompt: 260, image: 260, generator: 300, frame: 240, trim: 280, video: 260, resize: 260, seedance: 300, upscale: 280 };
@@ -72,10 +73,28 @@ export function blankNode(type: CanvasNodeType, x: number, y: number, kind: Medi
 }
 
 /** Imported copies keep material history, never a current AI approval from another graph. */
-export function remapCanvasCopy(node: CanvasNode, ids: ReadonlyMap<string, string>): CanvasNode {
-  return { ...node, id: ids.get(node.id) ?? node.id, production: undefined, ai: undefined, aiSource: node.aiSource ? { ...node.aiSource, aiNodeId: ids.get(node.aiSource.aiNodeId) ?? node.aiSource.aiNodeId } : undefined, aiApproval: undefined,
+export function remapCanvasCopy(node: CanvasNode, ids: ReadonlyMap<string, string>, sectionIds?: ReadonlyMap<string, string>): CanvasNode {
+  return { ...node, id: ids.get(node.id) ?? node.id, sectionId: node.sectionId === undefined ? undefined : sectionIds?.get(node.sectionId), production: undefined, ai: undefined, aiSource: node.aiSource ? { ...node.aiSource, aiNodeId: ids.get(node.aiSource.aiNodeId) ?? node.aiSource.aiNodeId } : undefined, aiApproval: undefined,
     targetGeneratorId: node.targetGeneratorId ? ids.get(node.targetGeneratorId) ?? null : null,
     acceptedJobId: null, acceptedMediaId: null, runInputFingerprint: undefined, ...cloneSeedance(node) };
+}
+
+type CanvasGraph = Pick<Flow, 'nodes' | 'edges' | 'sections'>;
+
+export function remapCanvasSections(sections: CanvasSection[] = []): { ids: Map<string, string>; sections: CanvasSection[] } {
+  const ids = new Map(sections.map(section => [section.id, newSectionId()]));
+  return { ids, sections: sections.map(section => ({ ...section, id: ids.get(section.id)! })) };
+}
+
+function removeEmptySections(flow: Flow): Flow {
+  if (!flow.sections?.length) return flow;
+  const occupied = new Set(flow.nodes.map(node => node.sectionId));
+  const sections = flow.sections.filter(section => occupied.has(section.id));
+  if (sections.length === flow.sections.length) return flow;
+  if (sections.length > 0) return { ...flow, sections };
+  const next = { ...flow };
+  delete next.sections;
+  return next;
 }
 
 interface CanvasState {
@@ -84,8 +103,9 @@ interface CanvasState {
   save: SaveState;
   /** Последняя выбранная нода — к ней относятся одиночные действия. */
   selected: string | null;
-  /** Все выделенные ноды: Shift+клик, рамка Shift+протяжкой, ⌘A. Группа двигается, удаляется и копируется вместе. */
+  /** Выделенные по отдельности ноды. При выборе секции список пуст. */
   selection: string[];
+  selectedSection: string | null;
   aiDrawer: { nodeId: string; stage: 'idea' | 'prompt' } | null;
   openAi: (nodeId: string, stage?: 'idea' | 'prompt') => void;
   closeAi: () => void;
@@ -99,7 +119,7 @@ interface CanvasState {
   future: Flow[];
   loadFlows: () => Promise<void>;
   openFlow: (id: string, reload?: boolean) => Promise<boolean>;
-  newFlow: (from?: Pick<Flow, 'nodes' | 'edges' | 'name'>) => Promise<void>;
+  newFlow: (from?: CanvasGraph & { name: string }) => Promise<void>;
   deleteFlow: (id: string) => Promise<void>;
   restoreFlow: (id: string) => Promise<void>;
   loadHistory: (id: string) => Promise<FlowHistoryItem[]>;
@@ -122,6 +142,10 @@ interface CanvasState {
   /** `additive` — Shift: добавить к выделению или убрать из него. */
   select: (id: string | null, additive?: boolean) => void;
   selectMany: (ids: string[]) => void;
+  selectSection: (id: string) => void;
+  createSection: (title: string) => void;
+  renameSection: (id: string, title: string) => void;
+  ungroupSection: (id: string) => void;
   removeSelected: () => void;
   /** Сдвиг нескольких нод одним шагом истории (перетаскивание группы). */
   moveNodes: (positions: { id: string; x: number; y: number }[], historyKey: string) => void;
@@ -165,6 +189,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
   let navigation = 0;
   const retryDelays = [1_500, 5_000, 15_000, 30_000];
   const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+  const sectionSelection = (flow: Flow, id = get().selectedSection): string | null => flow.sections?.some(section => section.id === id) ? id : null;
   const listItem = (flow: Flow): FlowListItem => ({ id: flow.id, name: flow.name, nodes: flow.nodes.length, updatedAt: flow.updatedAt, production: flow.production });
   const updateList = (flow: Flow): void => set(state => ({ flows: state.flows.map(item => item.id === flow.id ? listItem(flow) : item) }));
   const rebaseHistory = (before: Flow | null, after: Flow): void => {
@@ -186,7 +211,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     })) return null;
     const oldEdges = new Map(base.edges.map(edge => [edge.id, edge]));
     const mergedEdges = new Map(merged.edges.map(edge => [edge.id, edge]));
-    if (desired.edges.some(edge => !same(oldEdges.get(edge.id), edge) && !same(mergedEdges.get(edge.id), edge))) return null;
+    if (desired.edges.some(edge => !same(oldEdges.get(edge.id), edge) && !same(mergedEdges.get(edge.id), edge)) || canvasSectionEditsLost(base, desired, merged)) return null;
     return merged;
   };
   const showCanonical = (canonical: Flow, base: Flow): Flow => {
@@ -222,7 +247,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     if (same(merged, canonical) && !submissions.has(id)) pending.delete(id); else pending.set(id, merged);
     failures.delete(id); attempts.delete(id);
     updateList(canonical);
-    if (get().flow?.id === id) set({ flow: merged, save: pending.has(id) ? 'dirty' : 'saved', error: recoveryNotes.get(id) ?? null });
+    if (get().flow?.id === id) set({ flow: merged, selectedSection: sectionSelection(merged), save: pending.has(id) ? 'dirty' : 'saved', error: recoveryNotes.get(id) ?? null });
   };
   const transientFailure = (error: unknown): boolean => error instanceof CanvasHttpError ? error.status === 408 || error.status === 429 || error.status >= 500 : error instanceof TypeError;
   const scheduleRetry = (id: string, error: unknown): void => {
@@ -343,21 +368,27 @@ export const useCanvas = create<CanvasState>((set, get) => {
   };
 
   /** Копия ноды без результатов: запуски принадлежат исходной ноде. Seedance-промптер получит копию черновика при открытии. */
-  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, production: undefined, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ai: undefined, aiSource: undefined, aiApproval: undefined, targetGeneratorId: null, acceptedJobId: null, acceptedMediaId: null, ...cloneSeedance(node) });
+  const cloneNode = (node: CanvasNode, dx: number, dy: number): CanvasNode => ({ ...node, sectionId: undefined, production: undefined, id: newId('n'), x: node.x + dx, y: node.y + dy, jobIds: [], selected: 0, mediaId: node.type === 'video' ? node.mediaId : null, stale: false, runInputFingerprint: undefined, ai: undefined, aiSource: undefined, aiApproval: undefined, targetGeneratorId: null, acceptedJobId: null, acceptedMediaId: null, ...cloneSeedance(node) });
 
   /** Выделенные ноды и связи внутри группы — то, что копируется и дублируется вместе. */
-  const group = (): { nodes: CanvasNode[]; edges: CanvasEdge[] } => {
-    const { flow, selection } = get();
+  const group = (): CanvasGraph => {
+    const { flow, selection, selectedSection } = get();
     if (flow === null) return { nodes: [], edges: [] };
-    const ids = new Set(selection);
-    return { nodes: flow.nodes.filter((n) => ids.has(n.id)), edges: flow.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+    const section = flow.sections?.find(item => item.id === selectedSection);
+    const selectedIds = new Set(selection);
+    const nodes = section === undefined
+      ? flow.nodes.filter(node => selectedIds.has(node.id)).map(node => ({ ...node, sectionId: undefined }))
+      : flow.nodes.filter(node => node.sectionId === section.id);
+    const ids = new Set(nodes.map(node => node.id));
+    return { nodes, edges: flow.edges.filter(edge => ids.has(edge.from) && ids.has(edge.to)), ...(section && { sections: [section] }) };
   };
 
   /** Вставить копии нод со сдвигом; связи переносятся по новым id. Возвращает id копий. */
-  const insertCopies = (nodes: CanvasNode[], edges: CanvasEdge[], dx: number, dy: number): string[] => {
+  const insertCopies = ({ nodes, edges, sections }: CanvasGraph, dx: number, dy: number): string[] => {
+    const remapped = remapCanvasSections(sections);
     const ids = new Map<string, string>();
     const copies = nodes.map((n) => {
-      const c = cloneNode(n, dx, dy);
+      const c = { ...cloneNode(n, dx, dy), sectionId: n.sectionId === undefined ? undefined : remapped.ids.get(n.sectionId) };
       ids.set(n.id, c.id);
       return c;
     });
@@ -372,9 +403,12 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const to = ids.get(e.to);
       return from === undefined || to === undefined ? [] : [{ ...e, id: newId('e'), from, to }];
     });
-    get().update((f) => ({ ...f, nodes: [...f.nodes, ...copies], edges: [...f.edges, ...copiedEdges] }));
+    get().update((f) => ({ ...f, nodes: [...f.nodes, ...copies], edges: [...f.edges, ...copiedEdges],
+      ...(remapped.sections.length > 0 && { sections: [...(f.sections ?? []), ...remapped.sections] }),
+    }));
     const created = copies.map((c) => c.id);
-    set({ selection: created, selected: created.at(-1) ?? null });
+    const section = remapped.sections[0];
+    if (section) get().selectSection(section.id); else get().selectMany(created);
     return created;
   };
 
@@ -384,6 +418,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     save: 'saved',
     selected: null,
     selection: [],
+    selectedSection: null,
     aiDrawer: null,
     openAi: (nodeId, stage = 'idea') => set({ aiDrawer: { nodeId, stage } }),
     closeAi: () => set({ aiDrawer: null }),
@@ -404,7 +439,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const flow = get().flow;
       const node = flow?.nodes.find(n => n.id === nodeId);
       if (!flow || !node) return;
-      set({ selected: nodeId, selection: [nodeId] });
+      get().selectMany([nodeId]);
       get().setViewport({ ...flow.viewport, x: 80 - node.x * flow.viewport.zoom, y: 120 - node.y * flow.viewport.zoom });
     },
     applyServerFlow: (flow, expected) => {
@@ -413,7 +448,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const merged = showCanonical(flow, acknowledgedBase.get(flow.id) ?? expected);
       if (acknowledgedBase.get(flow.id) !== flow) return false;
       failures.delete(flow.id);
-      set({ flow: merged, save: pending.has(flow.id) ? 'dirty' : 'saved', error: recoveryNotes.get(flow.id) ?? null });
+      set({ flow: merged, selectedSection: sectionSelection(merged), save: pending.has(flow.id) ? 'dirty' : 'saved', error: recoveryNotes.get(flow.id) ?? null });
       return true;
     },
     error: null,
@@ -460,7 +495,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const base = acknowledgedBase.get(id) ?? saved;
       const flow = showCanonical(saved, base);
       lastKey = null;
-      set({ flow, selected: null, selection: [], save: failures.has(id) ? 'error' : pending.has(id) ? 'dirty' : 'saved', past: [], future: [], error: failures.get(id) ?? recoveryNotes.get(id) ?? null });
+      set({ flow, selected: null, selection: [], selectedSection: null, save: failures.has(id) ? 'error' : pending.has(id) ? 'dirty' : 'saved', past: [], future: [], error: failures.get(id) ?? recoveryNotes.get(id) ?? null });
       return true;
     },
     newFlow: async (from) => {
@@ -472,7 +507,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (request !== navigation) { await get().loadFlows(); return; }
       lastKey = null;
       acknowledgedBase.set(created.id, created);
-      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges }, save: from === undefined ? 'saved' : 'dirty', error: null, selected: null, selection: [], past: [], future: [] });
+      set({ flow: from === undefined ? created : { ...created, nodes: from.nodes, edges: from.edges, sections: from.sections }, save: from === undefined ? 'saved' : 'dirty', error: null, selected: null, selection: [], selectedSection: null, past: [], future: [] });
       if (from !== undefined) persist();
       await get().loadFlows();
     },
@@ -480,7 +515,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (!await flush()) return;
       await json(await fetch(`/api/canvas/flows/${id}`, { method: 'DELETE', headers: HEADERS }));
       pending.delete(id); submissions.delete(id); acknowledgedBase.delete(id); failures.delete(id); attempts.delete(id); recoveryNotes.delete(id);
-      if (get().flow?.id === id) set({ flow: null, past: [], future: [] });
+      if (get().flow?.id === id) set({ flow: null, selected: null, selection: [], selectedSection: null, past: [], future: [] });
       await get().loadFlows();
     },
 
@@ -522,7 +557,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         // observed while waiting must not restore revoked approvals or old data.
         recoveryNotes.delete(id);
         acknowledge(restored, restoreEdits.get(id) ?? []);
-        if (get().flow?.id === id) set({ selected: null, selection: [], past: [], future: [] });
+        if (get().flow?.id === id) set({ selected: null, selection: [], selectedSection: null, past: [], future: [] });
         return true;
       } catch (error) {
         uncertain = restoreSent && transientFailure(error);
@@ -550,7 +585,8 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (flow === null) return;
       if (!acknowledgedBase.has(flow.id)) acknowledgedBase.set(flow.id, flow);
       if (historyKey !== false) pushHistory(flow, historyKey);
-      set({ flow: invalidateChanged(flow, recipe(flow)), save: 'dirty', error: null });
+      const next = invalidateChanged(flow, removeEmptySections(recipe(flow)));
+      set({ flow: next, selectedSection: sectionSelection(next), save: 'dirty', error: null });
       persist();
     },
     undo: () => {
@@ -559,7 +595,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       if (flow === null || prev === undefined) return;
       lastKey = null;
       // Вид холста не откатываем: отмена правит граф, а не то, куда смотрит владелец.
-      set((s) => ({ flow: { ...prev, rev: flow.rev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => prev.nodes.some((n) => n.id === id)) }));
+      set((s) => ({ flow: { ...prev, rev: flow.rev, viewport: flow.viewport }, past: s.past.slice(0, -1), future: [...s.future, flow], save: 'dirty', selectedSection: sectionSelection(prev), selected: prev.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => prev.nodes.some((n) => n.id === id)) }));
       persist();
     },
     redo: () => {
@@ -567,7 +603,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
       const next = future.at(-1);
       if (flow === null || next === undefined) return;
       lastKey = null;
-      set((s) => ({ flow: { ...next, rev: flow.rev, viewport: flow.viewport }, future: s.future.slice(0, -1), past: [...s.past, flow], save: 'dirty' }));
+      set((s) => ({ flow: { ...next, rev: flow.rev, viewport: flow.viewport }, future: s.future.slice(0, -1), past: [...s.past, flow], save: 'dirty', selectedSection: sectionSelection(next), selected: next.nodes.some((n) => n.id === s.selected) ? s.selected : null, selection: s.selection.filter((id) => next.nodes.some((n) => n.id === id)) }));
       persist();
     },
     rename: (name) => get().update((f) => ({ ...f, name }), 'rename'),
@@ -575,7 +611,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
     addNode: (type, x, y, kind = 'image') => {
       const node = blankNode(type, x, y, kind);
       get().update((f) => ({ ...f, nodes: [...f.nodes, node] }));
-      set({ selected: node.id, selection: [node.id] });
+      get().selectMany([node.id]);
       return node.id;
     },
     patchNode: (id, patch, historyKey = null) => get().update((f) => ({ ...f, nodes: f.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) }), historyKey),
@@ -585,18 +621,43 @@ export const useCanvas = create<CanvasState>((set, get) => {
     },
     select: (id, additive = false) =>
       set((s) => {
-        if (id === null) return additive ? {} : { selected: null, selection: [] };
-        if (!additive) return { selected: id, selection: s.selection.includes(id) && s.selection.length > 1 ? s.selection : [id] };
+        if (id === null) return additive ? {} : { selected: null, selection: [], selectedSection: null };
+        if (!additive) return { selected: id, selection: s.selection.includes(id) && s.selection.length > 1 ? s.selection : [id], selectedSection: null };
         const on = s.selection.includes(id);
         const selection = on ? s.selection.filter((x) => x !== id) : [...s.selection, id];
-        return { selection, selected: on ? (selection.at(-1) ?? null) : id };
+        return { selection, selected: on ? (selection.at(-1) ?? null) : id, selectedSection: null };
       }),
-    selectMany: (ids) => set({ selection: ids, selected: ids.at(-1) ?? null }),
+    selectMany: (ids) => set({ selection: ids, selected: ids.at(-1) ?? null, selectedSection: null }),
+    selectSection: (id) => set({ selected: null, selection: [], selectedSection: id }),
+    createSection: (title) => {
+      const { flow, selection } = get();
+      const ids = new Set(selection);
+      if (!flow?.nodes.some(node => ids.has(node.id))) return;
+      const section = CanvasSectionSchema.parse({ id: newSectionId(), title });
+      get().update(f => ({ ...f, sections: [...(f.sections ?? []), section], nodes: f.nodes.map(node => ids.has(node.id) ? { ...node, sectionId: section.id } : node) }));
+      get().selectSection(section.id);
+    },
+    renameSection: (id, value) => {
+      const section = CanvasSectionSchema.safeParse({ id, title: value });
+      const previous = get().flow?.sections?.find(item => item.id === id);
+      if (!previous || !section.success || previous.title === section.data.title) return;
+      get().update(f => ({ ...f, sections: f.sections?.map(item => item.id === id ? section.data : item) }));
+    },
+    ungroupSection: (id) => {
+      const flow = get().flow;
+      if (!flow?.sections?.some(section => section.id === id)) return;
+      get().update(f => ({ ...f, sections: f.sections?.filter(section => section.id !== id),
+        nodes: f.nodes.map(node => node.sectionId === id ? { ...node, sectionId: undefined } : node),
+      }));
+      get().selectMany(flow.nodes.filter(node => node.sectionId === id).map(node => node.id));
+    },
     removeSelected: () => {
-      const ids = new Set(get().selection);
+      const { selectedSection, selection } = get();
+      if (selectedSection !== null) { get().ungroupSection(selectedSection); return; }
+      const ids = new Set(selection);
       if (ids.size === 0) return;
       get().update((f) => ({ ...f, nodes: f.nodes.filter((n) => !ids.has(n.id)), edges: f.edges.filter((e) => !ids.has(e.from) && !ids.has(e.to)) }));
-      set({ selected: null, selection: [] });
+      get().select(null);
     },
     moveNodes: (positions, historyKey) => {
       const at = new Map(positions.map((p) => [p.id, p]));
@@ -642,21 +703,20 @@ export const useCanvas = create<CanvasState>((set, get) => {
     pasteNodes: (text, at) => {
       if (!text.startsWith(CLIPBOARD_PREFIX)) return 0;
       try {
-        const parsed = JSON.parse(text.slice(CLIPBOARD_PREFIX.length)) as { nodes?: unknown; edges?: unknown };
-        const nodes = (Array.isArray(parsed.nodes) ? parsed.nodes : []).map((n) => CanvasNodeSchema.parse(n));
-        const edges = (Array.isArray(parsed.edges) ? parsed.edges : []).map((e) => CanvasEdgeSchema.parse(e));
+        const parsed = JSON.parse(text.slice(CLIPBOARD_PREFIX.length)) as { nodes?: unknown; edges?: unknown; sections?: unknown };
+        const graph = FlowSchema.parse({ ...get().flow, nodes: parsed.nodes, edges: parsed.edges, sections: parsed.sections });
+        const { nodes } = graph;
         if (nodes.length === 0) return 0;
-        FlowSchema.parse({ ...get().flow, nodes, edges });
         const minX = Math.min(...nodes.map((n) => n.x));
         const minY = Math.min(...nodes.map((n) => n.y));
-        return insertCopies(nodes, edges, at.x - minX, at.y - minY).length;
+        return insertCopies(graph, at.x - minX, at.y - minY).length;
       } catch {
         return 0;
       }
     },
     duplicateSelected: () => {
       const copied = group();
-      if (copied.nodes.length > 0) insertCopies(copied.nodes, copied.edges, 32, 32);
+      if (copied.nodes.length > 0) insertCopies(copied, 32, 32);
     },
     createCorrectionBranch: (generatorId) => {
       const flow = get().flow;
@@ -671,7 +731,7 @@ export const useCanvas = create<CanvasState>((set, get) => {
         .map(e => ({ ...e, id: newId('e'), to: e.to === ai.id ? nextAi.id : nextGenerator.id }));
       const prompt = { ...blankNode('prompt', nextAi.x + NODE_WIDTH.ai + 60, y, generator.kind), label: 'AI · промпт' };
       get().update(f => ({ ...f, nodes: [...f.nodes, comment, nextAi, prompt, nextGenerator], edges: [...f.edges, ...copiedInputs, { id: newId('e'), from: comment.id, to: nextAi.id, port: 'context' }, { id: newId('e'), from: nextAi.id, to: prompt.id, port: 'idea' }, { id: newId('e'), from: prompt.id, to: nextGenerator.id, port: 'prompt' }], viewport: { ...f.viewport, x: 80 - comment.x * f.viewport.zoom, y: 80 - y * f.viewport.zoom } }));
-      set({ selected: comment.id, selection: [comment.id] });
+      get().selectMany([comment.id]);
       return nextAi.id;
     },
     sendMedia: async (item) => {

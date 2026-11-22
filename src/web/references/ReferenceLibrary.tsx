@@ -207,7 +207,7 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
             <Text variant="label" medium>{ui(JOB_COPY[job.status])}</Text>
             <Text variant="caption" tone="secondary">{ui('{0} из {1} кадров · токены {2} вход / {3} выход', format.format(job.completed), format.format(job.total), format.format(job.inputTokens), format.format(job.outputTokens))}</Text>
             {running && <progress aria-label={ui('Прогресс анализа')} max={Math.max(1, job.total)} value={job.completed} />}
-            {job.error && <Text variant="label" className={styles.error}>{job.error}</Text>}
+            {job.error && <Text variant="label" className={styles.error}>{ui(job.error)}</Text>}
           </div>}
           {upload && <Text variant="label" role="status">{ui('Загружаю {0} из {1} · {2}', upload.index, upload.total, upload.name)}</Text>}
           {notice && <Text variant="label" role="status">{notice}</Text>}

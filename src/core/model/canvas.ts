@@ -45,6 +45,7 @@ export const CanvasAiSourceSchema = z.object({
 
 export const CanvasNodeSchema = z.object({
   id: z.string().min(1),
+  sectionId: z.string().min(1).optional(),
   production: z.object({ runId: z.string(), shotId: z.string(), artifactId: z.string() }).optional(),
   stale: z.boolean().optional(),
   runInputFingerprint: z.string().optional(),
@@ -100,6 +101,9 @@ export type CanvasNode = z.infer<typeof CanvasNodeSchema>;
 export const CanvasEdgeSchema = z.object({ id: z.string(), from: z.string(), to: z.string(), port: z.enum(INPUT_PORTS) });
 export type CanvasEdge = z.infer<typeof CanvasEdgeSchema>;
 
+export const CanvasSectionSchema = z.object({ id: z.string().min(1), title: z.string().trim().min(1).max(120) });
+export type CanvasSection = z.infer<typeof CanvasSectionSchema>;
+
 export const FlowSchema = z.object({
   production: z.object({ runId: z.string(), title: z.string() }).optional(),
   id: z.string(),
@@ -107,6 +111,7 @@ export const FlowSchema = z.object({
   rev: z.number().int().nonnegative().optional(),
   nodes: z.array(CanvasNodeSchema),
   edges: z.array(CanvasEdgeSchema),
+  sections: z.array(CanvasSectionSchema).optional(),
   viewport: z.object({ x: z.number(), y: z.number(), zoom: z.number().min(0.1).max(4) }).default({ x: 0, y: 0, zoom: 1 }),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -115,6 +120,9 @@ export const FlowSchema = z.object({
   const error = (message: string): void => ctx.addIssue({ code: 'custom', message });
   if (nodes.size !== flow.nodes.length) error('ID нод должны быть уникальны.');
   if (new Set(flow.edges.map((e) => e.id)).size !== flow.edges.length) error('ID связей должны быть уникальны.');
+  const sections = new Set(flow.sections?.map(section => section.id));
+  if (sections.size !== (flow.sections?.length ?? 0)) error('ID секций должны быть уникальны.');
+  if (flow.nodes.some(node => node.sectionId !== undefined && !sections.has(node.sectionId))) error('Нода ссылается на отсутствующую секцию.');
   const used = new Set<string>();
   const adjacency = new Map<string, string[]>();
   for (const e of flow.edges) {

@@ -75,6 +75,45 @@ it('concurrent same-field edits retain the replaced version in server history', 
   expect((await flows.history(base.id, version.id))?.name).toBe('First tab');
 });
 
+it('merges sections by ID and restores a concurrent rename from server history', async () => {
+  const flows = createFlows(await folder()); const empty = await flows.create('Sections');
+  const base = (await flows.save(empty.id, { ...empty, nodes: [node('one', 'prompt'), node('two', 'prompt')] }))!;
+  const sectionA = { id: 's-first', title: 'First section' };
+  const sectionB = { id: 's-second', title: 'Second section' };
+  const assign = (id: string, section: typeof sectionA): Flow => ({
+    ...base, sections: [section], nodes: base.nodes.map(item => item.id === id ? { ...item, sectionId: section.id } : item),
+  });
+  await flows.patch(base.id, { base, flow: assign('one', sectionA) });
+  const both = (await flows.patch(base.id, { base, flow: assign('two', sectionB) }))!;
+  expect(both.sections).toEqual([sectionA, sectionB]);
+  expect(both.nodes.map(item => item.sectionId)).toEqual([sectionA.id, sectionB.id]);
+
+  await flows.patch(base.id, { base: both, flow: {
+    ...both, sections: [sectionB], nodes: both.nodes.map(item => item.id === 'one' ? { ...item, sectionId: undefined } : item),
+  } });
+  const renamed = { ...sectionA, title: 'Unseen rename' };
+  const after = (await flows.patch(base.id, { base: both, flow: { ...both, sections: [renamed, sectionB] } }))!;
+  expect(after.sections).toEqual([sectionB]);
+  expect(after.nodes.map(item => item.sectionId)).toEqual([undefined, sectionB.id]);
+  const recovery = (await flows.listHistory(base.id)).find(item => item.kind === 'recovery')!;
+  const restored = await flows.restoreVersion(base.id, recovery.id, after.rev);
+  expect(restored?.sections).toEqual([renamed, sectionB]);
+  expect(restored?.nodes.map(item => item.sectionId)).toEqual([sectionA.id, sectionB.id]);
+});
+
+it('retains sections on a legacy whole-flow save and permits an explicit clear', async () => {
+  const flows = createFlows(await folder()); const base = await flows.create('Legacy client');
+  const section = { id: 's-keep', title: 'Keep' };
+  const current = (await flows.save(base.id, { ...base, sections: [section], nodes: [node('one', 'prompt', { sectionId: section.id })] }))!;
+  const legacy = { ...current, sections: undefined, nodes: [node('one', 'prompt', { text: 'Changed by old client' })] };
+  const saved = (await flows.save(base.id, legacy))!;
+  expect(saved.sections).toEqual([section]);
+  expect(saved.nodes[0]).toMatchObject({ text: 'Changed by old client', sectionId: section.id });
+  const cleared = await flows.save(base.id, { ...legacy, rev: saved.rev, sections: [] });
+  expect(cleared?.sections).toEqual([]);
+  expect(cleared?.nodes[0]?.sectionId).toBeUndefined();
+});
+
 it('server deletion wins over an old tab without losing edited content from that tab', async () => {
   const flows = createFlows(await folder()); const empty = await flows.create('Deletion');
   const base = (await flows.save(empty.id, { ...empty, nodes: [node('comment', 'comment', { text: 'Original' })] }))!;

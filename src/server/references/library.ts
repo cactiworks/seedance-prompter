@@ -8,8 +8,10 @@ import { extractReferenceFrames, referenceInput, ReferenceLibraryError, writeRef
 
 export { ReferenceLibraryError } from './media.ts';
 
-const CARD_ID = /^rf-([a-f0-9]{64})-([0-7])$/;
+const CARD_ID = /^rf-([a-f0-9]{64})-(0|[1-9]\d*)$/;
 const SOURCE_ID = /^[a-f0-9]{64}$/;
+const SCAN_VERSION = 2;
+const SCAN_DIRECTORY = 'scan-v2';
 const CardVersionSchema = z.object({
   folder: ReferenceFolderSchema.nullable(),
   tags: ReferenceTagsSchema,
@@ -17,14 +19,15 @@ const CardVersionSchema = z.object({
 });
 const SourceSchema = z.object({
   name: z.string().min(1).max(160),
+  scanVersion: z.literal(SCAN_VERSION).optional(),
   frames: z.array(z.object({
-    file: z.string().regex(/^frame-(?:cover|\d+)\.jpg$/),
+    file: z.string().regex(/^(?:frame-(?:cover|\d+)|scan-v2\/frame-\d+)\.jpg$/),
     timeMs: z.number().int().nonnegative().nullable(),
     versions: z.array(CardVersionSchema).min(1),
     manualFolder: z.boolean().optional(),
     manualTags: z.boolean().optional(),
-  })).min(1).max(8),
-});
+  })).min(1),
+}).refine(source => source.scanVersion === SCAN_VERSION || source.frames.every(frame => !frame.file.includes('/')));
 type Source = z.infer<typeof SourceSchema>;
 type CardVersion = z.infer<typeof CardVersionSchema>;
 
@@ -83,7 +86,7 @@ export function createReferenceLibrary(root: string) {
     const ids = (await readdir(storeDir)).filter(name => SOURCE_ID.test(name));
     const sources = await Promise.all(ids.map(async id => ({ id, source: await readSource(id) })));
     return sources.flatMap(({ id, source }) => source ? cardsFor(id, source) : [])
-      .sort((a, b) => a.sourceName.localeCompare(b.sourceName, 'ru') || a.id.localeCompare(b.id));
+      .sort((a, b) => a.sourceName.localeCompare(b.sourceName, 'ru') || a.id.localeCompare(b.id, 'en', { numeric: true }));
   }
 
   async function get(id: string, version?: number): Promise<ReferenceCard | undefined> {
@@ -129,6 +132,34 @@ export function createReferenceLibrary(root: string) {
     }));
   }
 
+  async function extendVideo(id: string, existing: Source, extracted: Awaited<ReturnType<typeof extractReferenceFrames>>, incoming: string) {
+    const seen = new Set(existing.frames.map(frame => frame.timeMs));
+    const additions = extracted.flatMap(frame => {
+      if (frame.timeMs === null || seen.has(frame.timeMs)) return [];
+      seen.add(frame.timeMs);
+      return [{ ...frame, filename: `frame-${frame.timeMs}.jpg` }];
+    });
+    const destination = path.join(sourceDir(id), SCAN_DIRECTORY);
+    // The unmarked manifest cannot reference an upgrade directory. A crash
+    // before manifest publication can leave one orphan to replace on retry.
+    await rm(destination, { recursive: true, force: true });
+    if (additions.length > 0) {
+      const prepared = path.join(incoming, SCAN_DIRECTORY);
+      await mkdir(prepared, { mode: 0o700 });
+      await Promise.all(additions.map(frame => rename(path.join(incoming, frame.file), path.join(prepared, frame.filename))));
+      await rename(prepared, destination);
+    }
+    const source: Source = {
+      ...existing,
+      scanVersion: SCAN_VERSION,
+      frames: [...existing.frames, ...additions.map(({ filename, timeMs }) => ({
+        file: `${SCAN_DIRECTORY}/${filename}`, timeMs, versions: [EMPTY],
+      }))],
+    };
+    await atomicWrite(manifestPath(id), `${JSON.stringify(source)}\n`);
+    return source;
+  }
+
   const analysis = createReferenceAnalysis(root, { list, imagePath, saveAnalysis });
 
   return {
@@ -160,12 +191,15 @@ export function createReferenceLibrary(root: string) {
         const id = await writeReferenceInput(original, body);
         return await serialize(manifestPath(id), async () => {
           const existing = await readSource(id);
-          if (existing) return cardsFor(id, existing);
+          if (existing && (existing.scanVersion === SCAN_VERSION || existing.frames.every(frame => frame.timeMs === null))) {
+            return cardsFor(id, existing);
+          }
           const frames = await extractReferenceFrames(original, input.format, incoming);
+          if (existing) return cardsFor(id, await extendVideo(id, existing, frames, incoming));
           const commit = path.join(incoming, 'ready');
           await mkdir(commit, { mode: 0o700 });
           await Promise.all(frames.map(frame => rename(path.join(incoming, frame.file), path.join(commit, frame.file))));
-          const source: Source = { name: input.name, frames: frames.map(frame => ({ ...frame, versions: [EMPTY] })) };
+          const source: Source = { name: input.name, scanVersion: SCAN_VERSION, frames: frames.map(frame => ({ ...frame, versions: [EMPTY] })) };
           await atomicWrite(path.join(commit, 'cards.json'), `${JSON.stringify(source)}\n`);
           await rename(commit, sourceDir(id));
           return cardsFor(id, source);

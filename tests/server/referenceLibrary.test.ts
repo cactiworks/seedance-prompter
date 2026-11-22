@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -6,14 +7,15 @@ import type { LlmRequest, LlmResult } from '../../src/server/llm/codexCli/provid
 import type { Runner } from '../../src/server/llm/tasks/write.ts';
 import { runFfmpeg } from '../../src/server/gen/ffmpeg.ts';
 import { createReferenceLibrary } from '../../src/server/references/library.ts';
+import { referenceRoutes } from '../../src/server/references/routes.ts';
 
 const workdirs: string[] = [];
 const notes = {
-  visible: 'Герой в красном свете',
-  technique: 'Красный силуэт отделяется от синего фона',
-  transfer: 'Подсвети края объекта контрастным цветом',
-  subject: 'Герой', pose: '', composition: 'По центру', angle: 'Фронтально',
-  lighting: 'Контровой свет', color: 'Красный и синий', texture: '', styling: '',
+  visible: 'The subject stands in red light',
+  technique: 'A red silhouette separates the subject from the blue background',
+  transfer: 'Light the silhouette with a contrasting color',
+  subject: 'Person', pose: '', composition: 'Centered', angle: 'Front view',
+  lighting: 'Rim lighting', color: 'Red and blue', texture: '', styling: '',
 };
 function body(bytes: Uint8Array) {
   return new ReadableStream<Uint8Array>({
@@ -79,6 +81,115 @@ it('extracts distinct shot frames with decoded timestamps rather than retaining 
   expect(colors[1]?.[2]).toBeGreaterThan(220);
 });
 
+async function manyShotVideo(dir: string): Promise<string> {
+  const video = path.join(dir, 'many-shots.mp4');
+  const colors = ['red', 'lime', 'blue', 'yellow', 'magenta', 'cyan', 'orange', 'purple', 'teal', 'navy', 'chartreuse'];
+  const shots = [...colors.map(color => ({ color, duration: 0.5 })),
+    { color: 'red', duration: 0.05 }, { color: 'pink', duration: 0.05 }, { color: 'red', duration: 0.4 }];
+  const inputs = shots.flatMap(({ color, duration }) => ['-f', 'lavfi', '-i', `color=${color}:s=160x90:r=20:d=${duration}`]);
+  const sequence = shots.map((_, index) => `[${index}:v]`).join('');
+  await runFfmpeg([
+    ...inputs, '-filter_complex', `${sequence}concat=n=${shots.length}:v=1:a=0`,
+    '-c:v', 'libx264', '-threads', '1', video,
+  ]);
+  return video;
+}
+
+it('scans every frame through a late single-frame insert and serves cards past index 9 after reload', async () => {
+  const { dir, root, library } = await fixture();
+  const bytes = await readFile(await manyShotVideo(dir));
+  const cards = await library.importFile('many-shots.mp4', body(bytes));
+  expect(cards).toHaveLength(12);
+  const late = cards.at(-1)!;
+  expect(late).toMatchObject({ timeMs: 5550, analysis: null, version: 1 });
+  expect(late.id).toMatch(/-11$/);
+
+  const reopened = createReferenceLibrary(root);
+  expect(await reopened.list()).toEqual(cards);
+  expect(await reopened.importFile('duplicate.mp4', body(bytes))).toEqual(cards);
+  const app = referenceRoutes(root, reopened, async () => { throw new Error('Import and image read must not use AI.'); }, {});
+  const response = await app.request(`/cards/${late.id}/image`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe('image/jpeg');
+  expect(new Uint8Array(await response.arrayBuffer()).slice(0, 2)).toEqual(new Uint8Array([0xff, 0xd8]));
+  const jpeg = (await reopened.imagePath(late.id))!;
+  const pink = path.join(dir, 'pink.rgb');
+  await runFfmpeg(['-i', jpeg, '-vf', 'scale=1:1,format=rgb24', '-frames:v', '1', '-f', 'rawvideo', pink]);
+  const pixel = await readFile(pink);
+  expect(pixel[0]).toBeGreaterThan(200);
+  expect(pixel[2]).toBeGreaterThan(150);
+});
+
+it('extends a legacy eight-card video only on re-upload and preserves its names, IDs, images and analysis versions', async () => {
+  const { dir, root, library } = await fixture();
+  const video = await manyShotVideo(dir);
+  const bytes = await readFile(video);
+  const id = createHash('sha256').update(bytes).digest('hex');
+  const source = path.join(root, 'sources', id);
+  const upgrade = path.join(source, 'scan-v2');
+  await mkdir(upgrade, { recursive: true });
+  // A process interrupted between directory and manifest publication leaves no
+  // visible cards. The retry must replace its unreferenced JPEGs safely.
+  await writeFile(path.join(upgrade, 'frame-5550.jpg'), 'an unreferenced JPEG from a failed scan');
+  const original = path.join(dir, 'first.jpg');
+  await runFfmpeg(['-i', video, '-frames:v', '1', '-update', '1', original]);
+  const jpeg = await readFile(original);
+  const frames = Array.from({ length: 8 }, (_, index) => {
+    const timeMs = 250 + index * 500;
+    return { file: `frame-${timeMs}.jpg`, timeMs, versions: [
+      { folder: null, tags: [], analysis: null },
+      { folder: 'camera', tags: ['контровой свет'], analysis: { ...notes, visible: 'Старый разбор' } },
+    ] };
+  });
+  await Promise.all(frames.map(frame => writeFile(path.join(source, frame.file), jpeg)));
+  await writeFile(path.join(source, 'cards.json'), JSON.stringify({ name: 'original.mp4', frames }));
+  const prior = await library.list();
+  expect(prior).toHaveLength(8);
+  const first = prior[0]!;
+  const firstVersion = await library.get(first.id, 1);
+  const firstPath = await library.imagePath(first.id);
+
+  const [refreshed, repeated] = await Promise.all([
+    library.importFile('same-content.mov', body(bytes)),
+    library.importFile('same-content-again.mp4', body(bytes)),
+  ]);
+  expect(refreshed).toEqual(repeated);
+  expect(refreshed).toHaveLength(12);
+  expect(refreshed.slice(0, 8)).toEqual(prior);
+  expect(refreshed.at(-1)).toMatchObject({ sourceName: 'original.mp4', timeMs: 5550, analysis: null, version: 1 });
+  const reopened = createReferenceLibrary(root);
+  expect(await reopened.list()).toEqual(refreshed);
+  expect(await reopened.get(first.id, 1)).toEqual(firstVersion);
+  expect(await reopened.imagePath(first.id)).toBe(firstPath);
+  expect(await readFile(firstPath!)).toEqual(jpeg);
+  const latePath = await reopened.imagePath(refreshed.at(-1)!.id);
+  expect((await readFile(latePath!)).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  expect(await reopened.importFile('same-content-later.mp4', body(bytes))).toEqual(refreshed);
+});
+
+it('keeps one representative for a static clip', async () => {
+  const { dir, library } = await fixture();
+  const file = path.join(dir, 'static.mp4');
+  await runFfmpeg(['-f', 'lavfi', '-i', 'color=blue:s=160x90:r=50:d=3', '-c:v', 'libx264', '-threads', '1', file]);
+  const cards = await library.importFile('static.mp4', body(await readFile(file)));
+  expect(cards).toHaveLength(1);
+  expect(cards[0]!.timeMs).toBe(1500);
+});
+
+it('chooses a clear frame within a stable composition', async () => {
+  const { dir, library } = await fixture();
+  const file = path.join(dir, 'focus-change.mp4');
+  await runFfmpeg([
+    '-f', 'lavfi', '-i', 'color=steelblue:s=160x90:r=20:d=3',
+    '-vf', "drawgrid=w=24:h=18:t=2:c=white,boxblur=6:2:enable='lt(t,1)+gte(t,2)'",
+    '-c:v', 'libx264', '-threads', '1', file,
+  ]);
+  const cards = await library.importFile('focus-change.mp4', body(await readFile(file)));
+  expect(cards).toHaveLength(1);
+  expect(cards[0]!.timeMs).toBeGreaterThanOrEqual(1000);
+  expect(cards[0]!.timeMs).toBeLessThan(2000);
+});
+
 it('omits blank videos and cleans their staged originals', async () => {
   const { dir, root, library } = await fixture();
   const file = path.join(dir, 'blank.mp4');
@@ -91,7 +202,7 @@ it('omits blank videos and cleans their staged originals', async () => {
 function reply<T>(request: LlmRequest): LlmResult<T> {
   const { imageIdsInOrder } = JSON.parse(request.user) as { imageIdsInOrder: string[] };
   return {
-    data: { frames: imageIdsInOrder.map(id => ({ id, folder: 'camera', tags: ['свет'], analysis: notes })) } as T,
+    data: { frames: imageIdsInOrder.map(id => ({ id, folder: 'camera', tags: ['lighting'], analysis: notes })) } as T,
     meta: { durationMs: 1, model: 'mock', turns: 1, inputTokens: 100, outputTokens: 20 },
   };
 }
@@ -137,6 +248,18 @@ it('does not publish an invalid model batch or retry without a click', async () 
   });
   await library.startAnalysis(runner);
   await vi.waitFor(async () => expect(await library.analysisStatus()).toMatchObject({ status: 'error', completed: 0, inputTokens: 12 }));
+  expect(await library.get(card!.id)).toEqual(card);
+});
+
+it('rejects non-English prose on a correctly identified frame before saving it', async () => {
+  const { dir, library } = await fixture();
+  const [card] = await library.importFile('red.png', body(await picture(dir, 'red')));
+  const runner: Runner = async <T>(request: LlmRequest) => ({
+    ...reply<T>(request),
+    data: { frames: [{ id: card!.id, folder: 'camera', tags: ['lighting'], analysis: { ...notes, visible: 'Красный силуэт' } }] } as T,
+  });
+  await library.startAnalysis(runner);
+  await vi.waitFor(async () => expect(await library.analysisStatus()).toMatchObject({ status: 'error', completed: 0 }));
   expect(await library.get(card!.id)).toEqual(card);
 });
 

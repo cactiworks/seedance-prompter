@@ -27,7 +27,7 @@ const meta = { durationMs: 1, model: 'fake', turns: 1, inputTokens: 10, outputTo
 
 describe('reference chat', () => {
   it('finds complementary matches, verifies IDs, persists selections and applies feedback in context', async () => {
-    const cards = [card('food', 'бургер', 'крупный план'), card('street', 'улица', 'fisheye'), card('other', 'пейзаж', 'телефото')];
+    const cards = [card('food', 'burger', 'close-up'), card('street', 'улица', 'fisheye'), card('other', 'пейзаж', 'телефото')];
     const library = { list: async () => cards, get: async (id: string, version?: number) => cards.find(item => item.id === id && item.version === version) };
     const dir = await root();
     const chat = createReferenceChat(dir, library);
@@ -37,7 +37,7 @@ describe('reference chat', () => {
       const food = { refId: 'food', role: 'подача продукта', reason: 'Близкая перспектива подчёркивает начинку.' };
       const street = { refId: 'street', role: 'fisheye', reason: 'Искажение по краям усиливает перспективу.' };
       const data = request.taskRu === 'Разобрать запрос референсов'
-        ? { aspects: [{ role: 'продукт', terms: ['бургер'] }, { role: 'ракурс fisheye', terms: ['fisheye'] }] }
+        ? { aspects: [{ role: 'продукт', terms: ['burger', 'бургер'] }, { role: 'ракурс fisheye', terms: ['fisheye', 'рыбий глаз'] }] }
         : { summary: 'Соедини подачу с оптикой.', matches: [food, street, street, { ...food, refId: 'other' }, { ...food, refId: 'invented' }] };
       return { data: data as T, meta };
     };
@@ -128,7 +128,7 @@ describe('reference library deployment gate', () => {
 
   it('shares the gallery and Canvas history while keeping standalone threads and votes scoped to each account', async () => {
     const dataDir = await root();
-    const frame = card('fixture', 'улица', 'fisheye');
+    const frame = card('fixture', 'street', 'fisheye');
     let refId = '';
     const requests: { profile?: string; previous?: unknown; candidates?: { refId: string; preference: string }[] }[] = [];
     const accounts = createAccounts({

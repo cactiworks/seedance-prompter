@@ -6,20 +6,20 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { z } from 'zod';
 import { flowCost } from '../../core/canvas/plan.ts';
 import { referenceComments } from '../../core/canvas/ai.ts';
-import { CanvasEdgeSchema, CanvasNodeSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type Flow, type InputPort } from '../../core/model/canvas.ts';
+import { CanvasEdgeSchema, CanvasNodeSchema, CanvasSectionSchema, FlowSchema, portAccepts, outputOf, type CanvasNode, type Flow, type InputPort } from '../../core/model/canvas.ts';
 import type { GenJob } from '../../core/model/media.ts';
 import { importMedia, uploadImage, mediaUrl, useGen } from '../gen/genStore.ts';
 import { Button, Dialog, Icon, Text } from '../ui/components/index.ts';
 import styles from './Canvas.module.css';
 import { FLOW_TEMPLATES } from '../../core/canvas/templates.ts';
-import { newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, useCanvas, type FlowHistoryItem } from './canvasStore.ts';
+import { CLIPBOARD_PREFIX, newId, NODE_WIDTH, PORT_STEP, PORT_TOP, remapCanvasCopy, remapCanvasSections, useCanvas, type FlowHistoryItem } from './canvasStore.ts';
 import { NodeView, portsOf, PORT_RU } from './NodeView.tsx';
 import { afterSeedanceClose } from './openSeedance.ts';
 import { CanvasAiDrawer } from './CanvasAi.tsx';
 import { useStore, type ProjectHost } from '../store.ts';
 import { ReferenceChat } from '../references/ReferenceChat.tsx';
 
-const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema) });
+const ImportSchema = z.object({ name: z.string().default('Импорт'), nodes: z.array(CanvasNodeSchema), edges: z.array(CanvasEdgeSchema), sections: z.array(CanvasSectionSchema).optional() });
 
 const SAVE_RU = { saved: 'Сохранено на сервере', dirty: 'Ожидает сохранения на сервере', saving: 'Сохраняю…', error: 'Не сохранилось' } as const;
 
@@ -89,12 +89,21 @@ function TemplateCards() {
   );
 }
 
-type Interaction =
-  | { type: 'drag'; id: string; startX: number; startY: number; origins: { id: string; x: number; y: number }[] }
+type Interaction = { pointerId: number } & (
+  | { type: 'drag'; historyKey: string; startX: number; startY: number; origins: { id: string; x: number; y: number }[] }
   | { type: 'pan'; startX: number; startY: number; origX: number; origY: number }
   | { type: 'link'; from: string; x: number; y: number }
-  /** Рамка выделения: Shift + протяжка по пустому холсту; координаты экранные. */
-  | { type: 'marquee'; startX: number; startY: number; x: number; y: number };
+  | { type: 'marquee'; startX: number; startY: number; x: number; y: number; additive: boolean }
+);
+
+function editingCanvasText(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null;
+}
+
+function canvasShortcutsBlocked(target: EventTarget | null): boolean {
+  return editingCanvasText(target) || useStore.getState().host !== null
+    || document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]') !== null;
+}
 
 const curve = (x1: number, y1: number, x2: number, y2: number): string => {
   const dx = Math.max(48, Math.abs(x2 - x1) / 2);
@@ -162,22 +171,47 @@ function FlowHistoryDialog({ flowId, open, onOpenChange }: { flowId: string; ope
 
 /** Canvas — нодовый граф по каркасу connxn. Запуск — только нажатой ноды, цена видна до запуска. */
 export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEnabled?: boolean }) {
-  const { flow, save, selected, selection, error, past, future, newFlow, rename, addNode, patchNode, select, selectMany, removeSelected, moveNodes, connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
+  const { flow, save, selected, selection, selectedSection, error, past, future, newFlow, rename, addNode, patchNode,
+    select, selectMany, selectSection, createSection, renameSection, ungroupSection, removeSelected, moveNodes,
+    connect, disconnect, setViewport, undo, redo, copySelected, pasteNodes, duplicateSelected } = useCanvas();
   const { library, loadJobs, loadLibrary } = useGen();
   const board = useRef<HTMLDivElement>(null);
   const zoomBar = useRef<HTMLDivElement>(null);
+  const toolPalette = useRef<HTMLDivElement>(null);
+  const sectionName = useRef<HTMLInputElement>(null);
   const importer = useRef<HTMLInputElement>(null);
   const addMenu = useRef<HTMLDetailsElement>(null);
   const moreMenu = useRef<HTMLDetailsElement>(null);
   /** Связь дошла до входа — меню «в пустоту» не нужно. */
   const linked = useRef(false);
+  const spacePan = useRef(false);
   const [linkMenu, setLinkMenu] = useState<{ from: string; screenX: number; screenY: number; x: number; y: number } | null>(null);
   const [act, setAct] = useState<Interaction | null>(null);
+  const [tool, setTool] = useState<'cursor' | 'pan'>('cursor');
+  const [nodeSizes, setNodeSizes] = useState<{ flowId: string; sizes: Map<string, { width: number; height: number }> }>();
   const [hint, setHint] = useState<string | null>(null);
   const [keyboardFrom, setKeyboardFrom] = useState<string | null>(null);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [picker, setPicker] = useState<string | null>(null);
+  const memberIds = flow?.nodes.filter(node => node.sectionId !== undefined).map(node => node.id).join('\n') ?? '';
+  const flowId = flow?.id;
+
+  useEffect(() => {
+    if (!memberIds || !flowId || !board.current) return;
+    const ids = new Set(memberIds.split('\n'));
+    const elements = [...board.current.querySelectorAll<HTMLElement>('[data-node-id]')].filter(element => ids.has(element.dataset.nodeId ?? ''));
+    const measure = (): void => {
+      const sizes = new Map(elements.flatMap(element => element.dataset.nodeId
+        ? [[element.dataset.nodeId, { width: element.offsetWidth, height: element.offsetHeight }] as const] : []));
+      setNodeSizes(current => current?.flowId === flowId && current.sizes.size === sizes.size
+        && [...sizes].every(([id, size]) => current.sizes.get(id)?.width === size.width && current.sizes.get(id)?.height === size.height)
+        ? current : { flowId, sizes });
+    };
+    const observer = new ResizeObserver(measure);
+    for (const element of elements) observer.observe(element);
+    return () => observer.disconnect();
+  }, [flowId, memberIds]);
   const [referencePicker, setReferencePicker] = useState<string | null>(null);
   const pickKind = flow?.nodes.find((n) => n.id === picker)?.type === 'video' ? 'video' : 'image';
   const referenceNode = referenceLibraryEnabled ? flow?.nodes.find(n => n.id === referencePicker && n.type === 'references') : undefined;
@@ -258,31 +292,34 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
   useEffect(() => {
     if (act === null) return;
     const move = (event: PointerEvent): void => {
+      if (event.pointerId !== act.pointerId) return;
       if (act.type === 'drag') {
         const dx = (event.clientX - act.startX) / viewport.zoom;
         const dy = (event.clientY - act.startY) / viewport.zoom;
         moveNodes(
           act.origins.map((o) => ({ id: o.id, x: o.x + dx, y: o.y + dy })),
-          `move:${act.id}`,
+          act.historyKey,
         );
       } else if (act.type === 'pan') setViewport({ ...viewport, x: act.origX + event.clientX - act.startX, y: act.origY + event.clientY - act.startY });
       else if (act.type === 'marquee') setAct({ ...act, x: event.clientX, y: event.clientY });
       else setAct({ ...act, ...toWorld(event.clientX, event.clientY) });
     };
     const up = (event: PointerEvent): void => {
-      // Рамка: выделяются ноды, которых она касается (по их настоящим размерам на экране), Shift — к уже выделенным.
+      if (event.pointerId !== act.pointerId) return;
+      // Hit-test the actual card bounds. Shift preserves the prior selection.
       if (act.type === 'marquee') {
-        const left = Math.min(act.startX, act.x);
-        const right = Math.max(act.startX, act.x);
-        const top = Math.min(act.startY, act.y);
-        const bottom = Math.max(act.startY, act.y);
+        const left = Math.min(act.startX, event.clientX);
+        const right = Math.max(act.startX, event.clientX);
+        const top = Math.min(act.startY, event.clientY);
+        const bottom = Math.max(act.startY, event.clientY);
         const hit = [...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])]
           .filter((el) => {
             const r = el.getBoundingClientRect();
             return r.left < right && r.right > left && r.top < bottom && r.bottom > top;
           })
           .map((el) => el.dataset.nodeId ?? '');
-        selectMany([...new Set([...useCanvas.getState().selection, ...hit])]);
+        const before = act.additive ? useCanvas.getState().selection : [];
+        if (right !== left || bottom !== top) selectMany([...new Set([...before, ...hit])]);
         setAct(null);
         return;
       }
@@ -294,11 +331,16 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
       linked.current = false;
       setAct(null);
     };
+    const cancel = (event: PointerEvent): void => {
+      if (event.pointerId === act.pointerId) { linked.current = false; setAct(null); }
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
     return () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
     };
   });
 
@@ -326,24 +368,24 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
     return () => el.removeEventListener('wheel', onWheel);
   }, [flow?.id, setViewport]);
 
-  // Клавиши, пока фокус не в поле ввода: Delete — удалить, ⌘Z / ⇧⌘Z / ⌘Y — отмена и повтор,
-  // ⌘C — копировать ноду в буфер (работает и между flows), ⌘D — дублировать. ⌘V ловит обработчик paste ниже.
+  // Canvas keyboard shortcuts leave active editors and dialogs to the browser.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      const tag = (event.target as HTMLElement | null)?.tagName ?? '';
-      if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]') !== null) return;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
-      // Поверх холста открыт Seedance-промптер: Delete, ⌘Z и ⌘A относятся к нему, а не к нодам под ним.
-      if (useStore.getState().host !== null) return;
+      if (event.defaultPrevented || canvasShortcutsBlocked(event.target)) return;
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
-      if (selection.length > 0 && (event.key === 'Delete' || event.key === 'Backspace')) {
+      if (event.code === 'Space' && !mod && !(event.target instanceof Element && event.target.closest('button, a, summary'))) {
+        event.preventDefault();
+        spacePan.current = true;
+      } else if ((selection.length > 0 || selectedSection !== null) && (key === 'delete' || key === 'backspace')) {
+        event.preventDefault();
         removeSelected();
       } else if (mod && key === 'a') {
         event.preventDefault();
         selectMany(useCanvas.getState().flow?.nodes.map((n) => n.id) ?? []);
       } else if (event.key === 'Escape') {
         select(null);
+        setAct(null);
       } else if (mod && key === 'z' && !event.shiftKey) {
         event.preventDefault();
         undo();
@@ -352,23 +394,37 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
         redo();
       } else if (mod && key === 'd') {
         event.preventDefault();
-        duplicateSelected();
-      } else if (mod && key === 'c') {
-        const text = copySelected();
-        const n = useCanvas.getState().selection.length;
-        if (text !== null) void navigator.clipboard.writeText(text).then(() => setHint(n > 1 ? ui("Скопировано блоков: {0}, со связями — ⌘V вставит сюда или на другой холст.", n) : 'Блок скопирован — ⌘V вставит его сюда или на другой холст.'));
+        if (!event.repeat) duplicateSelected();
       }
     };
+    const releaseSpace = (event: KeyboardEvent): void => { if (event.code === 'Space') spacePan.current = false; };
+    const resetSpace = (): void => { spacePan.current = false; };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selection, removeSelected, selectMany, select, undo, redo, duplicateSelected, copySelected]);
+    window.addEventListener('keyup', releaseSpace);
+    window.addEventListener('blur', resetSpace);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', releaseSpace);
+      window.removeEventListener('blur', resetSpace);
+    };
+  }, [selection, selectedSection, removeSelected, selectMany, select, undo, redo, duplicateSelected]);
 
   // Вставка: ноды из буфера, картинка → нода картинки, текст → нода промпта. Как в connxn.
   useEffect(() => {
+    const onCopy = (event: ClipboardEvent): void => {
+      if (canvasShortcutsBlocked(event.target) || window.getSelection()?.isCollapsed === false) return;
+      const text = copySelected();
+      if (text === null || event.clipboardData === null) return;
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', text);
+      const state = useCanvas.getState();
+      const n = state.selection.length;
+      setHint(state.selectedSection !== null ? ui('Секция скопирована') : n > 1
+        ? ui("Скопировано блоков: {0}, со связями — ⌘V вставит сюда или на другой холст.", n)
+        : ui('Блок скопирован — ⌘V вставит его сюда или на другой холст.'));
+    };
     const onPaste = (event: ClipboardEvent): void => {
-      const tag = (event.target as HTMLElement | null)?.tagName ?? '';
-      if (document.querySelector('[aria-modal="true"], [role="dialog"][data-state="open"]') !== null) return;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || useCanvas.getState().flow === null || useStore.getState().host !== null) return;
+      if (canvasShortcutsBlocked(event.target) || useCanvas.getState().flow === null) return;
       const at = centerWorld();
       const file = [...(event.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
       if (file !== undefined) {
@@ -382,11 +438,15 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
       const text = event.clipboardData?.getData('text/plain') ?? '';
       if (text.trim() === '') return;
       event.preventDefault();
-      if (pasteNodes(text, at) > 0) return;
+      if (text.startsWith(CLIPBOARD_PREFIX)) { pasteNodes(text, at); return; }
       patchNode(addNode('prompt', at.x, at.y), { text }, false);
     };
+    window.addEventListener('copy', onCopy);
     window.addEventListener('paste', onPaste);
-    return () => window.removeEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('copy', onCopy);
+      window.removeEventListener('paste', onPaste);
+    };
   });
 
   if (flow === null) {
@@ -409,9 +469,37 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
   const portPoint = (node: CanvasNode, port: InputPort): { x: number; y: number } => ({ x: node.x, y: node.y + PORT_TOP + Math.max(0, portsOf(node).indexOf(port)) * PORT_STEP });
   const outPoint = (node: CanvasNode): { x: number; y: number } => ({ x: node.x + NODE_WIDTH[node.type], y: node.y + PORT_TOP });
   const cost = flowCost(flow);
+  const activeSection = flow.sections?.find(section => section.id === selectedSection);
+  const sectionBounds = new Map<string, { left: number; top: number; right: number; bottom: number }>();
+  const sectionPadding = 20;
+  for (const node of flow.nodes) {
+    if (node.sectionId === undefined) continue;
+    const size = nodeSizes?.flowId === flow.id ? nodeSizes.sizes.get(node.id) : undefined;
+    const previous = sectionBounds.get(node.sectionId);
+    sectionBounds.set(node.sectionId, {
+      left: Math.min(previous?.left ?? Infinity, node.x - sectionPadding),
+      top: Math.min(previous?.top ?? Infinity, node.y - sectionPadding),
+      right: Math.max(previous?.right ?? -Infinity, node.x + (size?.width ?? NODE_WIDTH[node.type]) + sectionPadding),
+      bottom: Math.max(previous?.bottom ?? -Infinity, node.y + (size?.height ?? 160) + sectionPadding),
+    });
+  }
+
+  const startDrag = (event: ReactPointerEvent, nodes: CanvasNode[]): void => {
+    setAct({
+      type: 'drag', pointerId: event.pointerId, historyKey: newId('move:'),
+      startX: event.clientX, startY: event.clientY,
+      origins: nodes.map(({ id, x, y }) => ({ id, x, y })),
+    });
+  };
+  const startPan = (event: ReactPointerEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAct({ type: 'pan', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, origX: viewport.x, origY: viewport.y });
+  };
 
   // Shift+клик по шапке — добавить в выделение или убрать; протяжка выделенной ноды двигает всю группу.
   const onHeaderDown = (event: ReactPointerEvent, node: CanvasNode): void => {
+    if (event.button !== 0 || !event.isPrimary) return;
     event.stopPropagation();
     if (event.shiftKey) {
       select(node.id, true);
@@ -419,13 +507,12 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
     }
     const inGroup = selection.includes(node.id) && selection.length > 1;
     if (!inGroup) select(node.id);
-    const ids = inGroup ? selection : [node.id];
-    const origins = flow.nodes.filter((n) => ids.includes(n.id)).map((n) => ({ id: n.id, x: n.x, y: n.y }));
-    setAct({ type: 'drag', id: node.id, startX: event.clientX, startY: event.clientY, origins });
+    startDrag(event, inGroup ? flow.nodes.filter(n => selection.includes(n.id)) : [node]);
   };
   const onOutputDown = (event: ReactPointerEvent, node: CanvasNode): void => {
+    if (event.button !== 0 || !event.isPrimary) return;
     event.stopPropagation();
-    setAct({ type: 'link', from: node.id, ...toWorld(event.clientX, event.clientY) });
+    setAct({ type: 'link', pointerId: event.pointerId, from: node.id, ...toWorld(event.clientX, event.clientY) });
   };
   const onInputUp = (node: CanvasNode, port: InputPort): void => {
     if (act?.type !== 'link') return;
@@ -489,18 +576,20 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
   const fit = (): void => {
     const rect = board.current?.getBoundingClientRect();
     if (rect === undefined || flow.nodes.length === 0) return setViewport({ x: 0, y: 0, zoom: 1 });
-    const minX = Math.min(...flow.nodes.map((n) => n.x));
-    const minY = Math.min(...flow.nodes.map((n) => n.y));
-    const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type]));
+    const bounds = [...sectionBounds.values()];
+    const minX = Math.min(...flow.nodes.map((n) => n.x), ...bounds.map(section => section.left));
+    const minY = Math.min(...flow.nodes.map((n) => n.y), ...bounds.map(section => section.top - 36));
+    const maxX = Math.max(...flow.nodes.map((n) => n.x + NODE_WIDTH[n.type]), ...bounds.map(section => section.right));
     const heights = new Map([...(board.current?.querySelectorAll<HTMLElement>('[data-node-id]') ?? [])].map((el) => [el.dataset.nodeId, el.offsetHeight]));
-    const maxY = Math.max(...flow.nodes.map((n) => n.y + (heights.get(n.id) ?? 360)));
-    const height = Math.max(1, (zoomBar.current?.getBoundingClientRect().top ?? rect.bottom) - rect.top);
+    const maxY = Math.max(...flow.nodes.map((n) => n.y + (heights.get(n.id) ?? 360)), ...bounds.map(section => section.bottom));
+    const top = Math.max(0, (toolPalette.current?.getBoundingClientRect().bottom ?? rect.top) - rect.top);
+    const height = Math.max(1, (zoomBar.current?.getBoundingClientRect().top ?? rect.bottom) - rect.top - top);
     const zoom = Math.min(1, Math.max(0.1, Math.min(rect.width / (maxX - minX + 96), height / (maxY - minY + 96))));
-    setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: (height - (maxY - minY) * zoom) / 2 - minY * zoom });
+    setViewport({ zoom, x: (rect.width - (maxX - minX) * zoom) / 2 - minX * zoom, y: top + (height - (maxY - minY) * zoom) / 2 - minY * zoom });
   };
 
   const exportFlow = (): void => {
-    const blob = new Blob([JSON.stringify({ name: flow.name, nodes: flow.nodes, edges: flow.edges }, null, 1)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ name: flow.name, nodes: flow.nodes, edges: flow.edges, sections: flow.sections }, null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `${flow.name.replace(/[^\p{L}\p{N}-]+/gu, '-')}.flow.json`;
@@ -513,13 +602,14 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
       FlowSchema.parse({ ...parsed, id: 'import', createdAt: '', updatedAt: '' });
       // Новые id: импорт того же flow второй раз не должен делить с оригиналом ноды и черновики Seedance-промптеров.
       const ids = new Map(parsed.nodes.map((n) => [n.id, newId('n')]));
-      const nodes = parsed.nodes.map(n => remapCanvasCopy(n, ids));
+      const { ids: sectionIds, sections } = remapCanvasSections(parsed.sections);
+      const nodes = parsed.nodes.map(n => remapCanvasCopy(n, ids, sectionIds));
       const edges = parsed.edges.flatMap((e) => {
         const from = ids.get(e.from);
         const to = ids.get(e.to);
         return from === undefined || to === undefined ? [] : [{ ...e, id: newId('e'), from, to }];
       });
-      await newFlow({ name: parsed.name, nodes, edges });
+      await newFlow({ name: parsed.name, nodes, edges, sections: sections.length > 0 ? sections : undefined });
     } catch {
       setHint('Не удалось открыть схему. Выбери JSON-файл, сохранённый кнопкой «Сохранить схему».');
     }
@@ -622,21 +712,25 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
       {flow.production && <SeriesFlow key={flow.id} flow={flow} />}
       <div
         ref={board}
-        className={styles.board}
+        className={`${styles.board} ${tool === 'pan' ? styles.boardPan : ''} ${act?.type === 'pan' ? styles.boardPanning : ''}`}
         data-guide="canvas-board"
         style={{ backgroundPosition: `${viewport.x}px ${viewport.y}px`, backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px` }}
-        onPointerDown={(event) => {
-          if (event.target !== event.currentTarget) return;
-          // Shift + протяжка — рамка выделения; просто протяжка — сдвиг холста (как раньше).
-          if (event.shiftKey) {
-            setAct({ type: 'marquee', startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY });
-            return;
+        onPointerDownCapture={event => {
+          if (!event.isPrimary || (event.button !== 0 && event.button !== 1)) return;
+          const target = event.target as Element;
+          if (sectionName.current === document.activeElement && target !== sectionName.current) sectionName.current?.blur();
+          if (target.closest('[data-canvas-tools]') || zoomBar.current?.contains(target)) return;
+          if (event.button === 1 || spacePan.current || (tool === 'pan' && (target === event.currentTarget || target.closest(`.${styles.nodeHead}, .${styles.sectionHeading}`)))) {
+            startPan(event);
           }
-          select(null);
-          setAct({ type: 'pan', startX: event.clientX, startY: event.clientY, origX: viewport.x, origY: viewport.y });
+        }}
+        onPointerDown={(event) => {
+          if (event.target !== event.currentTarget || event.button !== 0 || !event.isPrimary) return;
+          if (!event.shiftKey) select(null);
+          setAct({ type: 'marquee', pointerId: event.pointerId, additive: event.shiftKey, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY });
         }}
         onDoubleClick={(event) => {
-          if (event.target !== event.currentTarget) return;
+          if (event.target !== event.currentTarget || tool === 'pan' || spacePan.current) return;
           const p = toWorld(event.clientX, event.clientY);
           addNode('prompt', p.x, p.y);
         }}
@@ -669,6 +763,28 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
         }}
       >
         <div className={styles.world} style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})` }}>
+          {flow.sections?.map(section => {
+            const bounds = sectionBounds.get(section.id);
+            if (!bounds) return null;
+            const isSelected = selectedSection === section.id;
+            return (
+              <div key={section.id} data-section-id={section.id} data-selected={isSelected}
+                className={styles.sectionFrame}
+                style={{ left: bounds.left, top: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top }}>
+                <button type="button" className={styles.sectionHeading} aria-pressed={isSelected} title={section.title}
+                  onClick={() => selectSection(section.id)}
+                  onPointerDown={event => {
+                    if (event.button !== 0 || !event.isPrimary) return;
+                    event.stopPropagation();
+                    selectSection(section.id);
+                    startDrag(event, flow.nodes.filter(node => node.sectionId === section.id));
+                  }}>
+                  <Icon name="group" size={0.875} />
+                  <span>{section.title}</span>
+                </button>
+              </div>
+            );
+          })}
           <svg className={styles.edges} aria-hidden="true">
             {flow.edges.map((edge) => {
               const from = nodeById.get(edge.from);
@@ -722,12 +838,29 @@ export function Canvas({ referenceLibraryEnabled = false }: { referenceLibraryEn
             }}
           />
         )}
-        {selection.length > 1 && (
-          <div className={styles.selectionBar}>
-            <Text variant="caption" tone="secondary">
-              {ui("Выделено: ")}{selection.length} {ui(" · перетащи блок — двинется группа · ⌘C / ⌘D / Delete")}</Text>
+        <div ref={toolPalette} className={styles.canvasTools} role="group" aria-label={ui('Инструменты холста')} data-canvas-tools>
+          <div className={styles.toolRow}>
+            <Button variant="ghost" size="xs" aria-pressed={tool === 'cursor'} onClick={() => setTool('cursor')}>{ui('Курсор')}</Button>
+            <Button variant="ghost" size="xs" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')}>{ui('Перемещение холста')}</Button>
+            <Button variant="ghost" size="xs" icon={<Icon name="group" size={0.875} />} disabled={selection.length === 0}
+              onClick={() => createSection(ui('Секция {0}', (flow.sections?.length ?? 0) + 1))}>{ui('Создать секцию')}</Button>
           </div>
-        )}
+          {(flow.sections?.length ?? 0) > 0 && <div className={styles.toolRow} data-inactive={activeSection === undefined} inert={activeSection === undefined}>
+            <input ref={sectionName} key={activeSection ? `${activeSection.id}:${activeSection.title}` : 'untitled'} className={styles.sectionName} maxLength={120}
+              aria-label={ui('Название секции')} defaultValue={activeSection?.title ?? ''}
+              onBlur={event => {
+                if (!activeSection) return;
+                const title = event.currentTarget.value.trim() || activeSection.title;
+                event.currentTarget.value = title;
+                renameSection(activeSection.id, title);
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                if (event.key === 'Escape' && activeSection) { event.stopPropagation(); event.currentTarget.value = activeSection.title; event.currentTarget.blur(); }
+              }} />
+            <Button variant="ghost" size="xs" onClick={() => activeSection && ungroupSection(activeSection.id)}>{ui('Разгруппировать секцию')}</Button>
+          </div>}
+        </div>
         {linkMenu !== null && (
           <div className={styles.linkMenu} style={{ left: linkMenu.screenX - (board.current?.getBoundingClientRect().left ?? 0), top: linkMenu.screenY - (board.current?.getBoundingClientRect().top ?? 0) }} role="menu" onPointerDown={(event) => event.stopPropagation()}>
             <Text variant="caption" tone="tertiary" className={styles.linkMenuTitle}>

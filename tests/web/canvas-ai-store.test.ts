@@ -57,6 +57,32 @@ it('group duplication remaps the AI target and provenance without carrying appro
   expect(fetch).not.toHaveBeenCalled();
 });
 
+it('copies a section and its internal edges with fresh IDs, and undoes the paste as one edit', () => {
+  const store = canvas.useCanvas.getState;
+  store().selectMany(['ai', 'prompt', 'gen']);
+  store().createSection('Video setup');
+  const originalSection = store().selectedSection!;
+  const text = store().copySelected()!;
+  expect(store().selection).toEqual([]);
+  expect(store().pasteNodes(text, { x: 500, y: 200 })).toBe(3);
+
+  const result = FlowSchema.parse(store().flow);
+  const sectionId = store().selectedSection!;
+  const copies = result.nodes.filter(item => item.sectionId === sectionId);
+  const copyIds = new Set(copies.map(item => item.id));
+  expect(sectionId).not.toBe(originalSection);
+  expect(result.sections).toEqual([{ id: originalSection, title: 'Video setup' }, { id: sectionId, title: 'Video setup' }]);
+  expect(result.edges.filter(edge => copyIds.has(edge.to)).map(edge => edge.port)).toEqual(['idea', 'prompt']);
+  expect(result.edges.filter(edge => copyIds.has(edge.to)).every(edge => copyIds.has(edge.from))).toBe(true);
+  expect(copies).toHaveLength(3);
+  expect(copies.every(item => !item.ai && !item.aiApproval && !item.acceptedJobId && item.jobIds.length === 0)).toBe(true);
+
+  store().undo();
+  expect(store().flow?.sections?.map(item => item.id)).toEqual([originalSection]);
+  store().redo();
+  expect(store().flow?.sections).toEqual(result.sections);
+});
+
 it('a prompt copied alone remains an unapproved managed draft rather than silently becoming a manual prompt', () => {
   canvas.useCanvas.getState().selectMany(['prompt']);
   canvas.useCanvas.getState().duplicateSelected();

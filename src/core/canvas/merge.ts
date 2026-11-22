@@ -1,4 +1,4 @@
-import type { CanvasEdge, CanvasNode, Flow } from '../model/canvas.ts';
+import type { CanvasEdge, CanvasNode, CanvasSection, Flow } from '../model/canvas.ts';
 
 const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -65,5 +65,24 @@ export function mergeCanvasFlow(base: Flow, desired: Flow, current: Flow): Flow 
   // A deleted node also removes any concurrently attached edges.
   const nodeIds = new Set(next.nodes.map(node => node.id));
   next.edges = next.edges.filter(edge => nodeIds.has(edge.from) && nodeIds.has(edge.to));
+  const sections = entities<CanvasSection>(base.sections ?? [], desired.sections ?? [], current.sections ?? [], fields);
+  const sectionIds = new Set(sections.map(section => section.id));
+  for (const [index, node] of next.nodes.entries()) {
+    if (node.sectionId !== undefined && !sectionIds.has(node.sectionId)) next.nodes[index] = { ...node, sectionId: undefined };
+  }
+  const occupiedSections = new Set(next.nodes.map(node => node.sectionId));
+  const retainedSections = sections.filter(section => occupiedSections.has(section.id));
+  if (retainedSections.length > 0) next.sections = retainedSections;
+  else delete next.sections;
   return next;
+}
+
+/** Deleted groups and removed members can discard an edit that should be recoverable. */
+export function canvasSectionEditsLost(base: Flow, desired: Flow, merged: Flow): boolean {
+  const oldSections = new Map(base.sections?.map(section => [section.id, section.title]));
+  const mergedSections = new Map(merged.sections?.map(section => [section.id, section.title]));
+  if (desired.sections?.some(section => oldSections.get(section.id) !== section.title && mergedSections.get(section.id) !== section.title)) return true;
+  const oldMembership = new Map(base.nodes.map(node => [node.id, node.sectionId]));
+  const mergedMembership = new Map(merged.nodes.map(node => [node.id, node.sectionId]));
+  return desired.nodes.some(node => oldMembership.get(node.id) !== node.sectionId && mergedMembership.get(node.id) !== node.sectionId);
 }
