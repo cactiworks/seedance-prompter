@@ -5,7 +5,7 @@ import { z } from 'zod';
 import {
   REFERENCE_FOLDERS, isReferenceEligible, type ReferenceCard, type ReferenceMatch, type ReferenceSelection, type ReferenceThread,
 } from '../../core/references.ts';
-import { DEFAULT_LLM_MODEL } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import { atomicWrite, serialize } from '../storage/atomic.ts';
 
@@ -124,14 +124,14 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
       let summary = NO_MATCH;
       if (cards.some(card => card.analysis)) {
         const runner = await run();
-        const model = process.env.SP_REFERENCE_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
+        const planningRoute = selectLlmRoute('reference-plan');
         const context = { ...input, previous: previous ? {
           query: previous.query.slice(0, 1500), brief: previous.brief.slice(0, 2500), matches: previous.matches.slice(0, 5),
           earlierQueries: history.slice(0, -1).map(turn => turn.query.slice(0, 600)),
         } : null };
         const planned = await runner<unknown>({
           system: PLAN_SYSTEM, user: JSON.stringify(context), jsonSchema: z.toJSONSchema(QueryPlanSchema),
-          model, effort: 'low', taskRu: 'Разобрать запрос референсов', timeoutMs: 120_000, signal,
+          ...planningRoute, taskRu: 'Разобрать запрос референсов', timeoutMs: 120_000, signal,
         });
         const plan = QueryPlanSchema.parse(planned.data);
         const preferences = await readJson<Preference[]>(preferencesFor(accountId), []);
@@ -143,7 +143,7 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
         if (candidates.length) {
           const ranked = await runner<unknown>({
             system: RANK_SYSTEM, user: JSON.stringify({ ...context, candidates, aspects: plan.aspects.map(aspect => aspect.role) }),
-            jsonSchema: z.toJSONSchema(RankSchema), model, effort: 'low', taskRu: 'Подобрать кадры из библиотеки', timeoutMs: 120_000, signal,
+            jsonSchema: z.toJSONSchema(RankSchema), ...selectLlmRoute('reference-rank'), taskRu: 'Подобрать кадры из библиотеки', timeoutMs: 120_000, signal,
           });
           const result = RankSchema.parse(ranked.data);
           const eligible = new Set(candidates.map(card => card.refId));

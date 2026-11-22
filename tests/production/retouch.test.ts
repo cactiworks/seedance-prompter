@@ -69,6 +69,7 @@ describe('post-milestone automatic regional repair', () => {
     writeFileSync(path.join(s.dir, 'production-mock', `${s.id}.json`), JSON.stringify(run));
     await s.rt.retouch.start(s.id, await s.input()); await s.cycle();
     const qc = s.requests.find(r => r.taskRu === 'Автоправки деталей Production')!;
+    expect(qc).toMatchObject({ model: 'gpt-6.1-terra', effort: 'medium' });
     expect(JSON.parse(qc.user).style).toBe('cinema');
     expect((await s.get()).retouch!.items[0]!.status).toBe('blocked');
     expect((await s.get()).shots[0]!.acceptedPhotoId).toBeNull();

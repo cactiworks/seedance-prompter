@@ -30,9 +30,23 @@ function runtime(runLlm: Runner, dataDir = directory(), now = Date.now) {
   const rt = createProductionRuntime({ dataDir, runLlm, model: 'test-model', delayMs: 1, now });
   runtimes.push(rt); return rt;
 }
-afterEach(() => { for (const rt of runtimes.splice(0)) rt.stop(); vi.unstubAllGlobals(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { for (const rt of runtimes.splice(0)) rt.stop(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 describe('Production agent contracts', () => {
+  it('uses the economical creative route for director, repair and prompts unless explicitly overridden', async () => {
+    vi.stubEnv('SP_PRODUCTION_MODEL', ''); vi.stubEnv('SP_LLM_MODEL', '');
+    const bad = sceneDraft(); bad.shots[0]!.scriptExcerpt = 'Invented quote';
+    const r = runner([bad, sceneDraft(), promptPlan()]);
+    const options = { run: r.run, signal: new AbortController().signal, onCall: async () => {} };
+    const scene = await directScene(input, options);
+    await writePrompts(scene, input.style, options);
+    expect(r.requests).toHaveLength(3);
+    expect(r.requests.every(request => request.model === 'gpt-6.1-sol' && request.effort === 'medium')).toBe(true);
+    vi.stubEnv('SP_PRODUCTION_MODEL', 'operator-role-model');
+    const manual = runner([sceneDraft()]);
+    await directScene(input, { ...options, run: manual.run, model: 'explicit-model' });
+    expect(manual.requests[0]).toMatchObject({ model: 'explicit-model', effort: 'medium' });
+  });
   it('requires art direction for new plans while preserving legacy scenes', () => {
     const { storyboardVersion: _version, scenes: _scenes, shots, ...legacy } = withShotIds(sceneDraft());
     const stored = { ...legacy, shots: shots.map(({ id: _id, sceneId: _scene, beat: _beat, startFrame: _start, subjectVisibility: _visibility, ...shot }) => shot) };

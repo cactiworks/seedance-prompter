@@ -6,7 +6,7 @@ was not collected yet [not found] — prompt rules below are general video pract
 ## What it is good at
 - Short clips of 3–15 s; animating a given still from a start frame, optionally landing on an end frame
   [official schema].
-- Cheaper per second than Seedance 2.5 (std 14–20 credits/s vs 63 at 720p) [official price].
+- Its catalog price is supplied in the current candidate costHint. Compare it with Seedance 2.5 only after that model has a current account quote; an unknown quote does not establish relative cost.
 
 ## Where it fails
 - Only start / end frames are supported in this studio — no free reference images (Kling "elements" are not

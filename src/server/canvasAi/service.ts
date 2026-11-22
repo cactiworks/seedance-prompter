@@ -16,7 +16,8 @@ import { characterReady } from '../../core/production/character.ts';
 import { imageSize } from '../gen/imageSize.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
 import type { ImageInput } from '../llm/codexCli/args.ts';
-import { DEFAULT_LLM_MODEL, LlmError, runCodex } from '../llm/codexCli/provider.ts';
+import { LlmError, runCodex } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import type { Characters } from '../production/characters.ts';
 import { visionCopy } from '../production/vision.ts';
@@ -57,7 +58,6 @@ export function createCanvasAi(options: CanvasAiOptions) {
   const projects = createStore(options.dataDir);
   const journal = createJournal(options.dataDir);
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
-  const llmModel = options.model ?? process.env.SP_CANVAS_AI_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
 
   async function required(id: string): Promise<StoredCanvasAiRun> { return await store.get(id) ?? fail('NOT_FOUND', 'AI-запуск не найден.', 404); }
   async function mediaMap() {
@@ -238,12 +238,13 @@ export function createCanvasAi(options: CanvasAiOptions) {
         const runner = options.runLlmForAccount ? options.runLlmForAccount(run.codexAccountId) : options.runLlm ?? runCodex;
         const stageSystem = run.stage === 'idea' ? IDEA_SYSTEM : PROMPT_SYSTEM;
         const libraryGuidance = libraryRefs?.length ? run.stage === 'idea' ? IDEA_LIBRARY_GUIDANCE : PROMPT_LIBRARY_GUIDANCE : '';
-        const llmInput = { system: `${[stageSystem, libraryGuidance].filter(Boolean).join('\n\n')}\n\n# Fixed model card\n${modelCard}`, user: JSON.stringify(data), model: llmModel };
+        const route = selectLlmRoute(run.stage === 'idea' ? 'canvas-idea' : 'canvas-prompt', { explicitModel: options.model });
+        const llmInput = { system: `${[stageSystem, libraryGuidance].filter(Boolean).join('\n\n')}\n\n# Fixed model card\n${modelCard}`, user: JSON.stringify(data), model: route.model, effort: route.effort };
         await store.update(run.id, current => { current.llmInput = llmInput; });
         if (controller.signal.aborted) return;
         const result = await runner<unknown>({ ...llmInput,
           jsonSchema: run.stage === 'idea' ? z.toJSONSchema(IdeaOutputSchema) : z.toJSONSchema(PromptOutputSchema),
-          model: llmModel, effort: 'medium', images, timeoutMs: 180_000 + images.length * 15_000, signal: controller.signal, taskRu: run.stage === 'idea' ? 'Идея Canvas' : 'Промпт Canvas' });
+          images, timeoutMs: 180_000 + images.length * 15_000, signal: controller.signal, taskRu: run.stage === 'idea' ? 'Идея Canvas' : 'Промпт Canvas' });
         if (controller.signal.aborted) return;
         await store.update(run.id, current => { if (current.status === 'running') current.calls.at(-1)!.meta = result.meta; });
         const text = run.stage === 'idea' ? IdeaOutputSchema.parse(result.data).textRu : PromptOutputSchema.parse(result.data).prompt;

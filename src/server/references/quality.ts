@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { DEFAULT_LLM_MODEL, type LlmRequest, type LlmResult } from '../llm/codexCli/provider.ts';
+import type { LlmRequest, LlmResult } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import { ReferenceLibraryError } from './media.ts';
 
@@ -71,11 +72,12 @@ async function reviewBatch(cohort: QualityCohort, run: Runner, signal: AbortSign
   const frames = [...cohort.candidates, ...cohort.anchors];
   const images = await Promise.all(frames.map(readQualityImage));
   signal.throwIfAborted();
-  const model = process.env.SP_REFERENCE_QUALITY_MODEL ?? process.env.SP_VISION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
+  const route = selectLlmRoute('reference-quality');
+  const { model } = route;
   const result = await runWhileActive(run, {
     system: REFERENCE_QUALITY_SYSTEM,
     user: JSON.stringify({ imageIdsInOrder: frames.map(frame => frame.id), candidateIds: cohort.candidates.map(frame => frame.id), anchorIds: cohort.anchors.map(frame => frame.id) }),
-    images, jsonSchema: z.toJSONSchema(OutputSchema), model, effort: 'high',
+    images, jsonSchema: z.toJSONSchema(OutputSchema), ...route,
     timeoutMs: 240_000, signal, taskRu: 'Проверка качества референсов',
   }, signal);
   await onUsage(result.meta);

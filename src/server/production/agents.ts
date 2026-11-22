@@ -4,6 +4,7 @@ import { photoOutput, type PhotoOutput } from '../../core/production/output.ts';
 import type { RunInput } from '../../core/production/model.ts';
 import { LlmError } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 
 const SCENE_LOGIC_DIRECTION = `В каждом scenes.wardrobe задай законченный уместный комплект: верх, низ (конкретно брюки, шорты, юбка или цельная вещь) и обувь. Планируй его целиком и для сидячего/поясного портрета: генератор может показать бёдра и край кадра шире. Не считай куртку или слово «трикотаж» полным костюмом. Для обычной публичной/бытовой сцены одежда закрывает тело в соответствии с контекстом; открытое тело допустимо, когда его предполагает явно заданное владельцем действие или обстановка, например плавание. Не придумывай неожиданное обнажение ради fashion-эффекта. Внутри сцены закрепи состав комплекта в continuity, сохраняя свободу небольших отличий ткани и посадки.
 Перед выдачей проверь бытовую логику каждого startFrame: человек опирается на видимую/правдоподобно скрытую поверхность, предметы доступны и удерживаются естественно, действие выполнимо из начальной позы, одежда согласуется с местом, погодой и действием. Крупность не оправдывает незапланированную часть образа.`;
@@ -55,20 +56,21 @@ masterPrompt и imagePrompt — 40–125 английских слов; посл
 motionPrompt — самостоятельный английский текст для Seedance 2.5: оживление принятого startFrame, действие и камера этого shot, внутри его сцены. Интервалы непрерывно покрывают 0–durationSec, одна непрерывная сцена. Не переноси в motion события из соседних кадров, не меняй локацию внутри клипа. 480p задаётся кодом. Не добавляй реплики, звук или монтаж; видео отключено.
 Ни master, ни будущие изображения тебе не показаны. Не используй @ImageN, <<<image_N>>> или придуманные references; {{identity}} — единственный разрешённый placeholder. Seed, Soul ID, параметры API, цены и URL выбирает код. Phone и cinema — манеры съёмки Soul 2. warnings по-русски. Текст не доказывает качество или сходство. Никаких tools, файлов, сети или генерации. Только структурированный результат.`;
 
-export interface AgentOptions { run: Runner; model: string; signal: AbortSignal; onCall: (call: PreparationCall) => Promise<void> }
+export interface AgentOptions { run: Runner; model?: string; signal: AbortSignal; onCall: (call: PreparationCall) => Promise<void> }
 export function agentError(error: unknown): string {
   if (error instanceof LlmError) return error.messageRu;
   return 'Подготовка не завершена: ответ не прошёл проверку или результат не удалось сохранить. Можно повторить этот этап.';
 }
 async function checkedCall<T>(stage: PreparationStage, system: string, payload: object, schema: z.ZodType<T>, validate: (data: T) => string[], options: AgentOptions): Promise<T> {
+  const route = selectLlmRoute(stage === 'scene' ? 'production-director' : 'production-prompts', { explicitModel: options.model });
   let repair: { previous: unknown; issues: string[] } | undefined;
   for (let round = 0; round < 2; round++) {
     const started = Date.now();
     let result;
     try {
-      result = await options.run<unknown>({ system, user: JSON.stringify({ ...payload, ...(repair ? { repair } : {}) }), jsonSchema: z.toJSONSchema(schema), model: options.model, effort: 'medium', timeoutMs: 240_000, signal: options.signal, taskRu: stage === 'scene' ? 'Режиссёр Production' : 'Prompts Production' });
+      result = await options.run<unknown>({ system, user: JSON.stringify({ ...payload, ...(repair ? { repair } : {}) }), jsonSchema: z.toJSONSchema(schema), model: route.model, effort: route.effort, timeoutMs: 240_000, signal: options.signal, taskRu: stage === 'scene' ? 'Режиссёр Production' : 'Prompts Production' });
     } catch (error) {
-      await options.onCall({ stage, at: new Date().toISOString(), status: 'failed', model: options.model, durationMs: Date.now() - started, inputTokens: null, outputTokens: null, message: agentError(error) });
+      await options.onCall({ stage, at: new Date().toISOString(), status: 'failed', model: route.model, durationMs: Date.now() - started, inputTokens: null, outputTokens: null, message: agentError(error) });
       throw error;
     }
     const parsed = schema.safeParse(result.data);

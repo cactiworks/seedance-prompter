@@ -1,4 +1,4 @@
-import { findModel, paramsFor, type GenModel, type GenParams, type MediaKind, type ParamDef, type ParamValue, type RefRole } from '../gen/models.ts';
+import { estimate, findModel, paramsFor, type GenModel, type GenParams, type MediaKind, type ParamDef, type ParamValue, type RefRole } from '../gen/models.ts';
 
 /**
  * Промптер (решение 28): идея по-русски → промпт под одну модель, её параметры, мудборд и слабые места.
@@ -178,10 +178,19 @@ export function buildPrompterSystem(system: string, routing: string, cards: { mo
   return [system.trim(), routing.trim(), '# Model cards', ...cards.map((card) => card.text.trim())].join('\n\n');
 }
 
-function describeParam(def: ParamDef): Record<string, unknown> {
-  if (def.type === 'enum') return { key: def.key, options: def.options ?? [], default: def.default };
-  if (def.type === 'int') return { key: def.key, min: def.min, max: def.max, default: def.default };
-  return { key: def.key, options: ['true', 'false'], default: String(def.default) };
+function describeParam(def: ParamDef, value: ParamValue): Record<string, unknown> {
+  if (def.type === 'enum') return { key: def.key, options: def.options ?? [], default: value };
+  if (def.type === 'int') return { key: def.key, min: def.min, max: def.max, default: value };
+  return { key: def.key, options: ['true', 'false'], default: String(value) };
+}
+
+function prompterDefaults(model: GenModel, automatic: boolean, refCount = 0): GenParams {
+  const defaults = paramsFor(model, {});
+  if (!automatic || model.quoteRequired) return defaults;
+  const variants = model.params.filter(def => def.type === 'enum' && ['resolution', 'mode'].includes(def.key))
+    .reduce<GenParams[]>((all, def) => all.flatMap(params => (def.options ?? []).map(value => paramsFor(model, { ...params, [def.key]: value }))), [defaults]);
+  return variants.filter(params => !model.limits?.(params).length)
+    .reduce((best, params) => estimate(model, params, 1, refCount).usd < estimate(model, best, 1, refCount).usd ? params : best, defaults);
 }
 
 /** Текст владельца без внешних кавычек: «Привет» и "Привет" — одна и та же надпись. */
@@ -215,14 +224,25 @@ export function buildPrompterUser(request: PrompterRequest, candidates: readonly
     ...(template !== null ? { template: { title: template.titleRu, instructions: template.instructions } } : {}),
     ...(shot !== null ? { shot } : {}),
     ...(refs.length > 0 ? { refs: refs.map((ref, i) => ({ ref: i + 1, role: ref.role, commentRu: ref.commentRu.trim() })) } : {}),
-    candidates: candidates.map((model) => ({
-      id: model.id,
-      title: model.titleRu,
-      maxPromptChars: model.maxPromptChars,
-      params: agentParams(model).map(describeParam),
-      moodboards: hasStyles(model),
-      ...(refs.length > 0 ? { images: routeRefs(model, refs).map((route) => ({ ref: route.index + 1, how: routeText(model, route) })) } : {}),
-    })),
+    candidates: candidates.map((model) => {
+      const routes = routeRefs(model, refs);
+      const referenceCount = routes.filter(route => route.sentAs !== null).length;
+      const defaults = prompterDefaults(model, request.modelId === 'auto', referenceCount);
+      const cost = estimate(model, defaults, 1, referenceCount);
+      return {
+        id: model.id,
+        title: model.titleRu,
+        maxPromptChars: model.maxPromptChars,
+        params: agentParams(model).map(def => describeParam(def, defaults[def.key]!)),
+        costHint: {
+          usd: cost.requiresQuote ? null : cost.usd,
+          source: cost.requiresQuote ? 'account_quote_required' : 'catalog_estimate',
+          parameterBasis: 'candidate_defaults', outputs: 1, referenceCount,
+        },
+        moodboards: hasStyles(model),
+        ...(refs.length > 0 ? { images: routes.map((route) => ({ ref: route.index + 1, how: routeText(model, route) })) } : {}),
+      };
+    }),
     styleOptions: candidates.some(hasStyles) ? styles.map((style) => style.name) : [],
     ...(request.previous !== undefined ? { previous: request.previous, commentRu: request.commentRu?.trim() ?? '' } : {}),
   };
@@ -247,10 +267,18 @@ const findStyle = (styles: readonly PrompterStyle[], name: string): PrompterStyl
 /** Ответ агента → результат для формы. Невалидные значения заменяются умолчаниями модели; проверка их всё равно называет. */
 const aspectOptions = (model: GenModel): readonly string[] => model.params.find((d) => d.key === 'aspectRatio')?.options ?? [];
 
-export function normalizePrompter(output: PrompterOutput, styles: readonly PrompterStyle[], refs: readonly PrompterRef[] = [], shot: PrompterShot = EMPTY_SHOT): PrompterResult | null {
+export function normalizePrompter(output: PrompterOutput, styles: readonly PrompterStyle[], refs: readonly PrompterRef[] = [], shot: PrompterShot = EMPTY_SHOT, automatic = false, previous?: PrompterRequest['previous']): PrompterResult | null {
   const model = findModel(output.modelId.trim());
   if (model === undefined) return null;
   const given: GenParams = {};
+  const inherited: GenParams = {};
+  if (previous && findModel(previous.modelId)?.id === model.id && previous.params && typeof previous.params === 'object' && !Array.isArray(previous.params)) {
+    const valid = paramsFor(model, previous.params);
+    for (const def of agentParams(model)) {
+      const value = previous.params[def.key];
+      if (value !== undefined && valid[def.key] === value && ['string', 'number', 'boolean'].includes(typeof value)) inherited[def.key] = value;
+    }
+  }
   for (const item of output.params) {
     const def = agentParams(model).find((d) => d.key === item.key);
     const value = def === undefined ? undefined : coerce(def, item.value);
@@ -264,7 +292,7 @@ export function normalizePrompter(output: PrompterOutput, styles: readonly Promp
     modelId: model.id,
     reasonRu: output.reasonRu.trim(),
     prompt: output.prompt.trim(),
-    params: paramsFor(model, given),
+    params: paramsFor(model, { ...prompterDefaults(model, automatic, routeRefs(model, refs).filter(route => route.sentAs !== null).length), ...inherited, ...given }),
     styleName: style?.name ?? '',
     weakSpotsRu: output.weakSpotsRu.map((spot) => spot.trim()).filter((spot) => spot !== ''),
     alternativesRu: output.alternativesRu.trim(),

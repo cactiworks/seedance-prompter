@@ -1,5 +1,5 @@
 /** Codex CLI: configuration is separate from the untrusted user message. */
-export const DEFAULT_LLM_MODEL = 'gpt-6-astra';
+export { DEFAULT_LLM_MODEL } from '../routing.ts';
 export type Effort = 'low' | 'medium' | 'high';
 
 export interface ImageInput {

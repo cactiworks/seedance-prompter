@@ -6,7 +6,7 @@ import { CreateRunSchema, type ProductionRun, type RunAction, type RunInput } fr
 import { photoOutput } from '../../core/production/output.ts';
 import { StoredRunSchema } from '../../core/production/persistence.ts';
 import type { CharacterSelection } from '../../core/production/character.ts';
-import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
+import { runCodex } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import type { GenRuntime } from '../gen/runtime.ts';
 import { createPhotoProduction } from './photos.ts';
@@ -92,7 +92,7 @@ export function createProductionRuntime(options: { dataDir: string; now?: () => 
       const accountId = (await read(id)).preparation?.codexAccountId;
       const agentOptions: AgentOptions = {
         run: options.runLlmForAccount?.(accountId) ?? options.runLlm ?? runCodex,
-        model: options.model ?? process.env.SP_PRODUCTION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
+        model: options.model,
         signal: controller.signal,
         onCall: (call) => updatePreparation(id, attempt, (run) => {
           run.preparation!.calls.push(call);

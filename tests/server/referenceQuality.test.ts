@@ -137,7 +137,8 @@ it('holds the whole source behind its barrier through bounded QC batches, cancel
     return response(request);
   }, 12);
   await finish(reopened);
-  expect(await reopened.list()).toHaveLength(12);
+  expect(await reopened.list()).toHaveLength(1);
+  expect(await reopened.qualityAudit()).toMatchObject({ kept: 12, duplicates: 11, pendingWork: 0 });
 });
 
 it.each(['foreign', 'missing', 'repeated', 'cycle', 'unseen'] as const)('rejects %s QC output before template analysis or publication', async failure => {

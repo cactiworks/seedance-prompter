@@ -129,6 +129,7 @@ describe('Production Canvas preparation without media submission',()=>{
     expect(prompt).not.toContain('Ignore any people'); expect(prompt).toContain('opens exactly on');
     const r=runner([form,ready]); await f.service.start(p.slug,p.rev,r.run);
     const state=await finished(f); expect(state.state?.status).toBe('ready'); expect(r.requests).toHaveLength(2);
+    expect(r.requests.every(request => request.model === 'gpt-6.1-sol' && request.effort === 'medium')).toBe(true);
     expect(JSON.parse(r.requests[0]!.user).series.scenePlan.shots).toHaveLength(3);
     expect(r.requests[0]!.images).toEqual([{mediaType:'image/png',base64:'test-photo'}]);
     const other=flow.nodes.find(n=>n.type==='seedance' && n.id!==f.node.id)!; expect((await f.store.read(other.slug)).seriesFill).toBeUndefined();

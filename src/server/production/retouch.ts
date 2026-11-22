@@ -9,7 +9,8 @@ import { PHOTO_CRITIC_SYSTEM } from './review.ts';
 import { identityImages } from './appearance.ts';
 import { retainOutsideRegions } from './regional.ts';
 import { visionCopy } from './vision.ts';
-import { DEFAULT_LLM_MODEL, runCodex } from '../llm/codexCli/provider.ts';
+import { runCodex } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import { SubmitError, type GenRuntime } from '../gen/runtime.ts';
 
@@ -99,7 +100,8 @@ export function createRetouch(store: Store, options: { dataDir: string; gen?: Ge
           imageMap.push({ imageIndex: images.length, artifactId, role: artifactId === item.currentId ? 'current' : artifactId === item.originalId ? 'original' : 'context', original: artifactId === item.originalId });
         }
         const shot = run.scenePlan!.shots.find(s => s.id === item.shotId)!;
-        const reply = await (options.runLlmForAccount?.(run.retouch?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: RETOUCH_SYSTEM, user: JSON.stringify({ inspectionMode: 'logic-audit-v5', scope: 'series', style: run.style, contentMode: run.contentMode ?? 'story', scenePlan: { contentMode: run.scenePlan?.contentMode ?? 'story' }, candidate: { artifactId: item.currentId, shot }, originalId: item.originalId, imageMap, identityRequired: !!run.character, appearance: run.appearance?.output?.profile ?? null, scene: sceneForShot(run.scenePlan!, shot), scenario: run.script, direction: run.direction, previousFixes: item.history.flatMap(h => h.audit.fixes), identityAvailable: refs.images.length > 0 }), images, jsonSchema: z.toJSONSchema(GeneratedRetouchAuditSchema), model: process.env.SP_PRODUCTION_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 240_000, signal: controller.signal, taskRu: 'Автоправки деталей Production' });
+        const route = selectLlmRoute('retouch');
+        const reply = await (options.runLlmForAccount?.(run.retouch?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: RETOUCH_SYSTEM, user: JSON.stringify({ inspectionMode: 'logic-audit-v5', scope: 'series', style: run.style, contentMode: run.contentMode ?? 'story', scenePlan: { contentMode: run.scenePlan?.contentMode ?? 'story' }, candidate: { artifactId: item.currentId, shot }, originalId: item.originalId, imageMap, identityRequired: !!run.character, appearance: run.appearance?.output?.profile ?? null, scene: sceneForShot(run.scenePlan!, shot), scenario: run.script, direction: run.direction, previousFixes: item.history.flatMap(h => h.audit.fixes), identityAvailable: refs.images.length > 0 }), images, jsonSchema: z.toJSONSchema(GeneratedRetouchAuditSchema), model: route.model, effort: route.effort, timeoutMs: 240_000, signal: controller.signal, taskRu: 'Автоправки деталей Production' });
         const result = validateRetouchAudit(GeneratedRetouchAuditSchema.parse(reply.data), item.currentId, refs.images.length, !!run.character);
         await store.update(id, current => {
           const state = current.retouch!; const target = state.items.find(i => i.shotId === item.shotId)!;

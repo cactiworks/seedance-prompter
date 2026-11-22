@@ -10,6 +10,10 @@ import {
   REFERENCE_QUALITY_PROMPT_HASH, REFERENCE_QUALITY_VERSION, StoredReferenceQualitySchema, sha256,
   type QualityCohort, type QualityDecision, type QualityImage,
 } from './quality.ts';
+import {
+  REFERENCE_DEDUP_METHOD, ReferenceDedupStateSchema, groupReferenceDuplicates, referenceFingerprints,
+  type DedupInput, type DedupProgress, type ReferenceDedupState, type StoredDedupDecision,
+} from './dedup.ts';
 
 export { ReferenceLibraryError } from './media.ts';
 
@@ -43,11 +47,19 @@ const SourceSchema = z.object({
 type Source = z.infer<typeof SourceSchema>;
 type CardVersion = z.infer<typeof CardVersionSchema>;
 type Scope = 'eligible' | 'all';
-interface SourceRecord { id: string; source: Source; hashes: (string | null)[] }
+interface SourceRecord { id: string; source: Source; hashes: (string | null)[]; dedup?: ReferenceDedupState | null; dedupPassValid?: boolean }
 
 const EMPTY: CardVersion = { folder: null, tags: [], analysis: null };
-const imageDigest = ({ source, hashes }: SourceRecord) => sha256(JSON.stringify(source.frames.map((frame, index) => ({
-  file: frame.file, timeMs: frame.timeMs, imageSha256: frame.quality?.status === 'reject' ? frame.quality.imageSha256 : hashes[index],
+const storedDedup = (record: SourceRecord, index: number) => {
+  const quality = record.source.frames[index]?.quality;
+  const decision = record.dedup?.frames[`rf-${record.id}-${index}`];
+  const currentBytes = record.hashes[index] === decision?.imageSha256 || (record.hashes[index] === null && decision?.status === 'duplicate' &&
+    decision.purged === true && decision.retainedBecauseReferenced !== true);
+  return quality?.status === 'keep' && decision?.imageSha256 === quality.imageSha256 && decision.reviewId === quality.reviewId && currentBytes ? decision : undefined;
+};
+const imageDigest = (record: SourceRecord) => sha256(JSON.stringify(record.source.frames.map((frame, index) => ({
+  file: frame.file, timeMs: frame.timeMs, imageSha256: frame.quality?.status === 'reject' || storedDedup(record, index)?.status === 'duplicate'
+    ? frame.quality!.imageSha256 : record.hashes[index],
 }))));
 const recordDigest = (record: SourceRecord) => sha256(JSON.stringify({
   images: imageDigest(record), decisions: record.source.frames.map(frame => frame.quality?.reviewId ?? null),
@@ -64,18 +76,27 @@ function cardFor(record: SourceRecord, index: number, version?: number): Referen
   if (!values) return;
   const stored = frame.quality;
   const cohort = source.qualityCohort;
-  const valid = stored && currentPolicy(stored) && hashes[index] === stored.imageSha256;
+  const duplicate = storedDedup(record, index);
+  const controlledDeletion = duplicate?.status === 'duplicate' && hashes[index] === null;
+  const valid = stored && currentPolicy(stored) && (hashes[index] === stored.imageSha256 || controlledDeletion);
   const complete = cohort?.status === 'complete' && currentPolicy(cohort) && cohort.imageDigest === imageDigest(record);
   const quality: NonNullable<ReferenceCard['quality']> = stored?.status === 'reject'
     ? { status: 'reject', reason: stored.reason, duplicateOf: stored.duplicateOf, retainedBecauseReferenced: stored.retainedBecauseReferenced }
     : valid && (stored.status === 'uncertain' || complete)
       ? { status: stored.status, reason: stored.reason }
       : { status: 'pending', reason: hashes[index] === null ? 'Изображение недоступно. Кадр закрыт для использования.' : 'Кадр ожидает обязательной проверки качества.' };
-  const eligible = quality.status === 'keep' && values.analysis !== null &&
+  const dedup: ReferenceCard['dedup'] = quality.status === 'keep' || duplicate?.status === 'duplicate'
+    ? duplicate?.status === 'duplicate' ? { status: 'duplicate', reason: duplicate.reason, duplicateOf: duplicate.duplicateOf,
+      method: duplicate.method, retainedBecauseReferenced: duplicate.retainedBecauseReferenced }
+      : duplicate?.status === 'keep' && record.dedupPassValid
+        ? { status: 'keep', reason: duplicate.reason, method: duplicate.method }
+        : { status: 'pending', reason: 'Кадр ожидает сравнения с похожими кадрами библиотеки.' }
+    : undefined;
+  const eligible = quality.status === 'keep' && dedup?.status === 'keep' && record.dedupPassValid && values.analysis !== null &&
     values.analysisBinding?.imageSha256 === stored?.imageSha256 && values.analysisBinding?.reviewId === stored?.reviewId;
   return {
     id: `rf-${id}-${index}`, sourceName: source.name, timeMs: frame.timeMs, version: revision,
-    folder: values.folder, tags: values.tags, analysis: values.analysis, quality, eligible,
+    folder: values.folder, tags: values.tags, analysis: values.analysis, quality, eligible: !!eligible, dedup,
   };
 }
 
@@ -92,7 +113,9 @@ export function createReferenceLibrary(root: string) {
   const storeDir = path.resolve(root, 'sources');
   const sourceDir = (id: string) => path.join(storeDir, id);
   const manifestPath = (id: string) => path.join(sourceDir(id), 'cards.json');
+  const dedupFile = path.join(root, 'dedup-state.json');
   let ready: Promise<void> | undefined;
+  let loadingRecords: Promise<SourceRecord[]> | undefined;
   let imports = 0;
 
   function initialize() {
@@ -105,6 +128,10 @@ export function createReferenceLibrary(root: string) {
         const source = await readSource(entry.name);
         if (source?.frames.some(frame => frame.quality?.status === 'reject')) await cleanupRejected(entry.name);
       }
+      const temporary = await readdir(root, { withFileTypes: true });
+      await Promise.all(temporary.filter(entry => entry.isDirectory() && entry.name.startsWith('.dedup-'))
+        .map(entry => rm(path.join(root, entry.name), { recursive: true, force: true })));
+      await cleanupDuplicates();
     })();
   }
 
@@ -116,7 +143,12 @@ export function createReferenceLibrary(root: string) {
     }
   }
 
-  async function recordFor(id: string): Promise<SourceRecord | undefined> {
+  async function readDedupState(): Promise<ReferenceDedupState | null> {
+    try { return ReferenceDedupStateSchema.parse(JSON.parse(await readFile(dedupFile, 'utf8'))); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+  }
+
+  async function recordFor(id: string, dedup?: ReferenceDedupState | null): Promise<SourceRecord | undefined> {
     const source = await readSource(id);
     if (!source) return;
     const hashes = await Promise.all(source.frames.map(async frame => {
@@ -126,13 +158,25 @@ export function createReferenceLibrary(root: string) {
         throw error;
       }
     }));
-    return { id, source, hashes };
+    return { id, source, hashes, dedup: dedup === undefined ? await readDedupState() : dedup };
   }
 
-  async function records() {
+  async function loadRecords() {
     await initialize();
+    const state = await readDedupState();
     const ids = (await readdir(storeDir)).filter(name => SOURCE_ID.test(name)).sort();
-    return (await Promise.all(ids.map(recordFor))).filter((record): record is SourceRecord => record !== undefined);
+    return (await Promise.all(ids.map(id => recordFor(id, state)))).filter((record): record is SourceRecord => record !== undefined);
+  }
+
+  const dedupDigest = (all: SourceRecord[]) => sha256(JSON.stringify(all.flatMap(record => record.source.frames.flatMap((frame, index) =>
+    cardFor(record, index)?.quality?.status === 'keep' ? [{ id: `rf-${record.id}-${index}`, imageSha256: frame.quality!.imageSha256, reviewId: frame.quality!.reviewId }] : []))));
+
+  async function records(fresh = false): Promise<SourceRecord[]> {
+    const all = fresh ? await loadRecords() : await (loadingRecords ??= loadRecords().finally(() => { loadingRecords = undefined; }));
+    const state = await readDedupState();
+    const current = all.map(record => ({ ...record, dedup: state }));
+    const valid = state?.inputDigest === dedupDigest(current);
+    return current.map(record => ({ ...record, dedupPassValid: valid }));
   }
 
   const cardsFor = (record: SourceRecord) => record.source.frames.map((_, index) => cardFor(record, index)!);
@@ -141,11 +185,11 @@ export function createReferenceLibrary(root: string) {
       .sort((a, b) => a.sourceName.localeCompare(b.sourceName, 'ru') || a.id.localeCompare(b.id, 'en', { numeric: true }));
   }
 
-  async function get(id: string, version?: number, scope: Scope = 'eligible'): Promise<ReferenceCard | undefined> {
+  async function get(id: string, version?: number, scope: Scope = 'eligible', fresh = false): Promise<ReferenceCard | undefined> {
     await initialize();
     const matches = CARD_ID.exec(id);
     if (!matches) return;
-    const record = await recordFor(matches[1]!);
+    const record = (await records(fresh)).find(record => record.id === matches[1]);
     const card = record && cardFor(record, Number(matches[2]), version);
     return card && (scope === 'all' || card.eligible) ? card : undefined;
   }
@@ -153,7 +197,7 @@ export function createReferenceLibrary(root: string) {
   async function imagePath(id: string, scope: Scope = 'eligible'): Promise<string | undefined> {
     const matches = CARD_ID.exec(id);
     if (!matches || !await get(id, undefined, scope)) return;
-    const record = await recordFor(matches[1]!);
+    const record = (await records()).find(record => record.id === matches[1]);
     const index = Number(matches[2]);
     return record?.hashes[index] ? path.join(sourceDir(matches[1]!), record.source.frames[index]!.file) : undefined;
   }
@@ -162,12 +206,14 @@ export function createReferenceLibrary(root: string) {
     await initialize();
     const matches = CARD_ID.exec(id);
     if (!matches) return;
-    const record = await recordFor(matches[1]!);
+    const record = (await records()).find(record => record.id === matches[1]);
     const index = Number(matches[2]);
     const card = record && cardFor(record, index, version);
     if (!record || !card?.eligible) return;
     const bytes = await readFile(path.join(sourceDir(record.id), record.source.frames[index]!.file));
     if (sha256(bytes) !== record.hashes[index]) return;
+    const state = await readDedupState();
+    if (!state || state.id !== record.dedup?.id || !state.inputDigest || state.inputDigest !== record.dedup.inputDigest) return;
     return { card, bytes };
   }
 
@@ -185,7 +231,7 @@ export function createReferenceLibrary(root: string) {
       const next = change(frame, current);
       if (JSON.stringify(next) !== JSON.stringify(current)) frame.versions.push(next);
       await atomicWrite(manifestPath(sourceId), `${JSON.stringify(source)}\n`);
-      return get(id, undefined, 'all');
+      return get(id, undefined, 'all', true);
     });
   }
 
@@ -226,6 +272,104 @@ export function createReferenceLibrary(root: string) {
     });
   }
 
+  async function invalidateDedup() {
+    await serialize(dedupFile, async () => {
+      const state = await readDedupState();
+      if (state?.inputDigest) await atomicWrite(dedupFile, `${JSON.stringify({ ...state, inputDigest: '' })}\n`);
+    });
+  }
+
+  async function cleanupDuplicates() {
+    const refs = await referencedIds();
+    await serialize(dedupFile, async () => {
+      const state = await readDedupState();
+      if (!state) return;
+      let changed = false;
+      const removals: { file: string; imageSha256: string }[] = [];
+      const sources = new Map<string, Source | undefined>();
+      const sourceFor = async (id: string) => {
+        if (!sources.has(id)) sources.set(id, await readSource(id));
+        return sources.get(id);
+      };
+      for (const [id, decision] of Object.entries(state.frames)) {
+        if (decision.status !== 'duplicate' || !decision.duplicateOf) continue;
+        const matches = CARD_ID.exec(id), target = CARD_ID.exec(decision.duplicateOf);
+        if (!matches || !target || state.frames[decision.duplicateOf]?.status !== 'keep') continue;
+        const frame = (await sourceFor(matches[1]!))?.frames[Number(matches[2])];
+        const winner = (await sourceFor(target[1]!))?.frames[Number(target[2])];
+        const winnerDecision = state.frames[decision.duplicateOf]!;
+        if (!frame?.quality || frame.quality.reviewId !== decision.reviewId || frame.quality.imageSha256 !== decision.imageSha256 ||
+            !winner?.quality || winner.quality.reviewId !== winnerDecision.reviewId || winner.quality.imageSha256 !== winnerDecision.imageSha256) continue;
+        try {
+          if (sha256(await readFile(path.join(sourceDir(target[1]!), winner.file))) !== winnerDecision.imageSha256) continue;
+        } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+        try {
+          if (sha256(await readFile(path.join(sourceDir(matches[1]!), frame.file))) !== decision.imageSha256) continue;
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        const retained = refs === null || refs.has(id);
+        if (decision.retainedBecauseReferenced !== retained) { decision.retainedBecauseReferenced = retained; changed = true; }
+        if (!retained) {
+          if (!decision.purged) { decision.purged = true; changed = true; }
+          removals.push({ file: path.join(sourceDir(matches[1]!), frame.file), imageSha256: decision.imageSha256 });
+        }
+      }
+      if (changed) await atomicWrite(dedupFile, `${JSON.stringify(state)}\n`);
+      for (const removal of removals) {
+        try { if (sha256(await readFile(removal.file)) !== removal.imageSha256) continue; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        await rm(removal.file, { force: true });
+      }
+    });
+  }
+
+  async function curateDuplicates(signal: AbortSignal, onProgress: (progress: DedupProgress) => Promise<void> = async () => undefined) {
+    await initialize();
+    const result = await serialize(dedupFile, async () => {
+      const all = await records(true);
+      const prior = await readDedupState();
+      const inputDigest = dedupDigest(all);
+      const inputs: DedupInput[] = all.flatMap(record => record.source.frames.flatMap((frame, index) => {
+        if (cardFor(record, index)?.quality?.status !== 'keep') return [];
+        return [{ id: `rf-${record.id}-${index}`, imageSha256: frame.quality!.imageSha256,
+          reviewId: frame.quality!.reviewId, imagePath: record.hashes[index] ? path.join(sourceDir(record.id), frame.file) : undefined,
+          previous: storedDedup(record, index) }];
+      }));
+      signal.throwIfAborted();
+      if (prior?.inputDigest === inputDigest && inputs.every(input => input.previous)) {
+        await onProgress({ completed: inputs.length, total: inputs.length });
+        signal.throwIfAborted();
+        return { total: inputs.length, duplicateIds: inputs.filter(input => input.previous?.status === 'duplicate').map(input => input.id) };
+      }
+      if (prior?.inputDigest) await atomicWrite(dedupFile, `${JSON.stringify({ ...prior, inputDigest: '' })}\n`);
+      const fingerprints = await referenceFingerprints(root, inputs, signal, onProgress);
+      const groups = await groupReferenceDuplicates(fingerprints, signal);
+      const frames: Record<string, StoredDedupDecision> = { ...prior?.frames };
+      const at = new Date().toISOString();
+      const duplicateIds: string[] = [];
+      for (const group of groups) {
+        const winner = group[0]!;
+        for (const input of group) {
+          const duplicate = input.id !== winner.id;
+          if (duplicate) duplicateIds.push(input.id);
+          frames[input.id] = { status: duplicate ? 'duplicate' : 'keep', imageSha256: input.imageSha256,
+            reviewId: input.reviewId, fingerprint: input.fingerprint, duplicateOf: duplicate ? winner.id : undefined,
+            method: REFERENCE_DEDUP_METHOD, at,
+            purged: duplicate ? input.previous?.purged : undefined,
+            retainedBecauseReferenced: duplicate ? input.previous?.retainedBecauseReferenced : undefined,
+            reason: duplicate ? 'Очень похожий кадр: сохранён технически более удачный представитель по резкости и разрешению.'
+              : 'Сохранён технический представитель самостоятельной композиции.' };
+        }
+      }
+      signal.throwIfAborted();
+      if (dedupDigest(await records(true)) !== inputDigest) throw new ReferenceLibraryError(409, 'Кадры изменились во время сравнения дублей. Повтори сравнение перед разбором.');
+      signal.throwIfAborted();
+      await atomicWrite(dedupFile, `${JSON.stringify({ id: randomUUID(), inputDigest, method: REFERENCE_DEDUP_METHOD, at, frames })}\n`);
+      return { total: inputs.length, duplicateIds };
+    });
+    await cleanupDuplicates();
+    return result;
+  }
+
   async function qualityAudit(): Promise<ReferenceQualityAudit> {
     const all = await records();
     const cards = all.flatMap(cardsFor);
@@ -238,15 +382,18 @@ export function createReferenceLibrary(root: string) {
         id: card.id, sourceName: card.sourceName, timeMs: card.timeMs, ...quality,
         criteriaVersion: frame.quality?.criteriaVersion, imageSha256: frame.quality?.imageSha256,
         promptHash: frame.quality?.promptHash, model: frame.quality?.model, at: frame.quality?.at,
+        dedup: card.dedup,
       };
     }));
     const count = (status: NonNullable<ReferenceCard['quality']>['status']) => cards.filter(card => card.quality?.status === status).length;
     return {
       total: cards.length, pending: count('pending'), kept: count('keep'), rejected: count('reject'), uncertain: count('uncertain'),
       analyzed: cards.filter(card => card.analysis !== null).length, eligible: cards.filter(card => card.eligible).length,
-      retainedReferenced: cards.filter(card => card.quality?.retainedBecauseReferenced).length,
-      pendingWork: cards.filter(card => card.quality?.status === 'pending' || (card.quality?.status === 'keep' && !card.eligible)).length,
-      scopeDigest: sha256(JSON.stringify(all.map(record => ({ id: record.id, digest: recordDigest(record), versions: record.source.frames.map(frame => frame.versions.length) })))),
+      retainedReferenced: cards.filter(card => card.quality?.retainedBecauseReferenced || card.dedup?.retainedBecauseReferenced).length,
+      pendingWork: cards.filter(card => card.dedup?.status !== 'duplicate' && (card.quality?.status === 'pending' || (card.quality?.status === 'keep' && !card.eligible))).length,
+      scopeDigest: workScopeDigest(all),
+      duplicates: cards.filter(card => card.dedup?.status === 'duplicate').length,
+      dedupPending: cards.filter(card => card.dedup?.status === 'pending').length,
       reasons: [...reasons].map(([reason, count]) => ({ reason, count })), decisions,
     };
   }
@@ -257,6 +404,11 @@ export function createReferenceLibrary(root: string) {
     return { id: `rf-${record.id}-${index}`, imagePath: path.join(sourceDir(record.id), record.source.frames[index]!.file), imageSha256 };
   };
 
+  const workScopeDigest = (all: SourceRecord[]) => sha256(JSON.stringify({
+    dedupId: all[0]?.dedup?.id, dedupInput: all[0]?.dedup?.inputDigest,
+    sources: all.map(record => ({ id: record.id, digest: recordDigest(record), versions: record.source.frames.map(frame => frame.versions.length) })),
+  }));
+
   async function prepareWork(retryUncertain: boolean): Promise<ReferenceWork> {
     const all = await records();
     const cohorts: QualityCohort[] = [];
@@ -266,6 +418,7 @@ export function createReferenceLibrary(root: string) {
       const anchors: QualityImage[] = [];
       for (const [index] of record.source.frames.entries()) {
         const card = cardFor(record, index)!;
+        if (card.dedup?.status === 'duplicate') continue;
         const status = card.quality!.status;
         if (status === 'pending' || (retryUncertain && status === 'uncertain')) {
           candidates.push(imageFor(record, index)); ids.push(card.id);
@@ -276,11 +429,12 @@ export function createReferenceLibrary(root: string) {
       }
       if (candidates.length) cohorts.push({ sourceId: record.id, digest: recordDigest(record), candidates, anchors });
     }
-    const scopeDigest = sha256(JSON.stringify(all.map(record => ({ id: record.id, digest: recordDigest(record), versions: record.source.frames.map(frame => frame.versions.length) }))));
+    const scopeDigest = workScopeDigest(all);
     return { ids, cohorts, scopeDigest };
   }
 
   async function beginQuality(cohort: QualityCohort, signal: AbortSignal): Promise<string> {
+    await invalidateDedup();
     return serialize(manifestPath(cohort.sourceId), async () => {
       const record = await recordFor(cohort.sourceId);
       signal.throwIfAborted();
@@ -293,6 +447,7 @@ export function createReferenceLibrary(root: string) {
   }
 
   async function saveQuality(cohort: QualityCohort, reviewId: string, decisions: QualityDecision[], model: string, signal: AbortSignal) {
+    await invalidateDedup();
     await serialize(manifestPath(cohort.sourceId), async () => {
       const record = await recordFor(cohort.sourceId);
       signal.throwIfAborted();
@@ -318,15 +473,18 @@ export function createReferenceLibrary(root: string) {
 
   async function analysisInputs(ids: string[]) {
     const result: (QualityImage & { reviewId: string })[] = [];
+    const all = await records();
     for (const id of ids) {
       const matches = CARD_ID.exec(id)!;
-      const record = await recordFor(matches[1]!);
+      const record = all.find(record => record.id === matches[1]);
       const index = Number(matches[2]);
       const card = record && cardFor(record, index);
+      if (card?.dedup?.status === 'duplicate') continue;
       if (!record || !card || card.quality?.status === 'pending') {
         throw new ReferenceLibraryError(409, 'Кадры изменились после проверки качества. Обнови список и повтори незавершённый этап.');
       }
       if (record && card?.quality?.status === 'keep' && !card.eligible) {
+        if (!record.dedupPassValid || card.dedup?.status !== 'keep') throw new ReferenceLibraryError(409, 'Сначала заверши сравнение похожих кадров.');
         result.push({ ...imageFor(record, index), reviewId: record.source.frames[index]!.quality!.reviewId });
       }
     }
@@ -337,11 +495,16 @@ export function createReferenceLibrary(root: string) {
     const matches = CARD_ID.exec(result.id)!;
     await serialize(manifestPath(matches[1]!), async () => {
       const record = await recordFor(matches[1]!);
+      const context = await records();
+      if (record) {
+        record.dedup = context[0]?.dedup;
+        record.dedupPassValid = record.dedup?.inputDigest === dedupDigest(context.map(item => item.id === record.id ? record : item));
+      }
       const index = Number(matches[2]);
       const card = record && cardFor(record, index);
       const frame = record?.source.frames[index];
       signal.throwIfAborted();
-      if (!record || !frame || card?.quality?.status !== 'keep' || record.hashes[index] !== input.imageSha256 || frame.quality?.reviewId !== input.reviewId) {
+      if (!record || !frame || card?.quality?.status !== 'keep' || card.dedup?.status !== 'keep' || !record.dedupPassValid || record.hashes[index] !== input.imageSha256 || frame.quality?.reviewId !== input.reviewId) {
         throw new ReferenceLibraryError(409, 'Кадр изменился после проверки качества. Разбор не сохранён.');
       }
       const current = frame.versions.at(-1)!;
@@ -379,10 +542,10 @@ export function createReferenceLibrary(root: string) {
     return source;
   }
 
-  const analysis = createReferenceAnalysis(root, { prepareWork, beginQuality, saveQuality, analysisInputs, saveAnalysis });
+  const analysis = createReferenceAnalysis(root, { prepareWork, beginQuality, saveQuality, curateDuplicates, analysisInputs, saveAnalysis });
 
   return {
-    ...analysis, list, get, imagePath, readEligibleImage, qualityAudit,
+    ...analysis, list, get, imagePath, readEligibleImage, qualityAudit, curateDuplicates,
     edit(id: string, change: { folder?: ReferenceFolder | null; tags?: string[] }) {
       return update(id, (frame, current) => {
         if (change.folder !== undefined) frame.manualFolder = true;
@@ -401,10 +564,12 @@ export function createReferenceLibrary(root: string) {
         staging = incoming;
         const original = path.join(incoming, 'input');
         const id = await writeReferenceInput(original, body);
+        const prior = await readSource(id);
+        if (prior && prior.scanVersion !== SCAN_VERSION && prior.frames.some(frame => frame.timeMs !== null)) await invalidateDedup();
         return await serialize(manifestPath(id), async () => {
           const existing = await readSource(id);
           if (existing && (existing.scanVersion === SCAN_VERSION || existing.frames.every(frame => frame.timeMs === null))) {
-            return cardsFor((await recordFor(id))!);
+            return cardsFor((await records(true)).find(record => record.id === id)!);
           }
           const frames = await extractReferenceFrames(original, input.format, incoming);
           if (existing) await extendVideo(id, existing, frames, incoming);
@@ -416,7 +581,7 @@ export function createReferenceLibrary(root: string) {
             await atomicWrite(path.join(commit, 'cards.json'), `${JSON.stringify(source)}\n`);
             await rename(commit, sourceDir(id));
           }
-          return cardsFor((await recordFor(id))!);
+          return cardsFor((await records(true)).find(record => record.id === id)!);
         });
       } finally {
         imports--;

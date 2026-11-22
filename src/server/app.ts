@@ -35,7 +35,8 @@ import { validateMediaFile } from './gen/validateMedia.ts';
 import { GEN_HTTP, GenError } from './gen/provider.ts';
 import { createGenRuntime, SubmitError, type GenRuntime } from './gen/runtime.ts';
 import type { ImageInput } from './llm/codexCli/args.ts';
-import { DEFAULT_LLM_MODEL, LlmError, runCodex } from './llm/codexCli/provider.ts';
+import { LlmError, runCodex } from './llm/codexCli/provider.ts';
+import { selectLlmRoute } from './llm/routing.ts';
 import { writeShot, type Runner } from './llm/tasks/write.ts';
 import { createProductionRuntime, type ProductionRuntime } from './production/runtime.ts';
 import { productionRoutes } from './production/routes.ts';
@@ -288,7 +289,7 @@ export function createApp(options: AppOptions) {
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
           run: await runFor(c),
-          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
+          model: options.writerModel,
           signal: c.req.raw.signal,
         });
         return c.json(result);
@@ -309,7 +310,8 @@ export function createApp(options: AppOptions) {
       if (asked.length === 0) return c.json({ items, output: null, problems: [], meta: null });
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/fields.system.md'), 'utf8');
       const run = await runFor(c);
-      const request = { system, jsonSchema: FIELDS_SCHEMA, model: options.writerModel ?? process.env.SP_FIELDS_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
+      const route = selectLlmRoute('fields', { explicitModel: options.writerModel });
+      const request = { system, jsonSchema: FIELDS_SCHEMA, model: route.model, effort: route.effort, timeoutMs: 150_000, signal: c.req.raw.signal, taskRu: 'Агент полей' };
       try {
         const user = buildFieldsUser(project, items);
         let result = await run<FieldsOutput>({ ...request, user });
@@ -339,9 +341,10 @@ export function createApp(options: AppOptions) {
       const catalog = JSON.parse(readFileSync(path.join(packDir, 'symptoms.json'), 'utf8')) as SymptomCatalog;
       const system = buildCriticSystem(readFileSync(path.join(packDir, 'prompts/critic.system.md'), 'utf8'), catalog);
       const user = buildCriticUser({ project, shot, paragraphs: build.paragraphs, resolvedParagraphs: build.resolvedParagraphs, durationSec: durationOf(project, shot), findings: build.findings, visionSummaries: body.visionSummaries, shooting: agentShooting(shot, pack) });
+      const route = selectLlmRoute('text-critic', { explicitModel: options.writerModel });
       try {
         // Критик читает большой контекст и пишет длинный JSON; сохраняем отдельный лимит времени.
-        const result = await (await runFor(c))<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: options.writerModel ?? process.env.SP_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium', timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
+        const result = await (await runFor(c))<CriticOutput>({ system, user, jsonSchema: CRITIC_SCHEMA, model: route.model, effort: route.effort, timeoutMs: 300_000, signal: c.req.raw.signal, taskRu: 'Критик' });
         const verified = verifyCritique(result.data, build.resolvedParagraphs);
         return c.json({ critique: { ...verified.critique, prompt: build.prompt, createdAt: new Date().toISOString(), model: result.meta.model, droppedRu: verified.droppedRu }, meta: result.meta });
       } catch (error) {
@@ -381,7 +384,7 @@ export function createApp(options: AppOptions) {
           rules: readFileSync(path.join(packDir, 'prompts/writer.system.md'), 'utf8'),
           fewshot: JSON.parse(readFileSync(path.join(packDir, 'prompts/fewshot/k2.json'), 'utf8')) as FewShot,
           run: await runFor(c),
-          model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
+          model: options.writerModel,
           signal: c.req.raw.signal,
           fix: { symptoms, workedRu: attempt.workedRu, failedRu: attempt.failedRu },
         });
@@ -405,14 +408,15 @@ export function createApp(options: AppOptions) {
       } catch {
         return c.json({ error: 'NO_VISION_COPY', messageRu: 'Нет уменьшенной копии для анализа — загрузи картинку референса заново.' }, 422);
       }
+      const route = selectLlmRoute('vision');
       try {
         const result = await (await runFor(c))<VisionOutput>({
           system: VISION_SYSTEM,
           user: buildVisionUser(ref),
           images: [{ mediaType: 'image/jpeg', base64: Buffer.from(bytes).toString('base64') }],
           jsonSchema: VISION_SCHEMA,
-          model: process.env.SP_VISION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
-          effort: 'low',
+          model: route.model,
+          effort: route.effort,
           timeoutMs: 90_000,
           signal: c.req.raw.signal,
         });
@@ -437,7 +441,8 @@ export function createApp(options: AppOptions) {
       const lineIds = [...text.matchAll(/\bL\d+\b/g)].map((m) => m[0]).filter((id, i, all) => all.indexOf(id) === i);
       const system = readFileSync(path.join(options.rootDir, 'packs', project.packId, 'prompts/planner.system.md'), 'utf8');
       const run = await runFor(c);
-      const request = { system, jsonSchema: PLANNER_SCHEMA, model: options.writerModel ?? process.env.SP_WRITER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, timeoutMs: 180_000, signal: c.req.raw.signal };
+      const route = selectLlmRoute('planner', { explicitModel: options.writerModel });
+      const request = { system, jsonSchema: PLANNER_SCHEMA, model: route.model, effort: route.effort, timeoutMs: 180_000, signal: c.req.raw.signal };
       try {
         const user = buildPlannerUser(project, text, lineIds, durationSec, shooting);
         let result = await run<PlannerOutput>({ ...request, user });
@@ -464,7 +469,8 @@ export function createApp(options: AppOptions) {
       if (problems.length > 0) return c.json({ error: 'BAD_REGION', messageRu: problems.join(' ') }, 422);
       if (!needsTranslation(instructionRu)) return c.json({ prompt: buildRegionPrompt(boxes, instructionRu), instructionEn: instructionRu, meta: null });
       const run = await runFor(c);
-      const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: process.env.SP_EDIT_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'low' as const, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
+      const route = selectLlmRoute('edit');
+      const request = { system: EDIT_INSTRUCTION_SYSTEM, jsonSchema: EDIT_INSTRUCTION_SCHEMA, model: route.model, effort: route.effort, timeoutMs: 60_000, signal: c.req.raw.signal, taskRu: 'Перевод правки' };
       try {
         const user = buildEditInstructionUser(instructionRu, boxes.length);
         let result = await run<EditInstructionOutput>({ ...request, user });
@@ -565,7 +571,8 @@ export function createApp(options: AppOptions) {
       // Мудборды — подсказка агенту; Higgsfield не ответил — промпт пишется без них.
       const styles = candidates.some(hasStyles) ? (await gen.styles('higgsfield').catch(() => [])).map((s) => ({ id: s.id, name: s.name })) : [];
       const run = await runFor(c);
-      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: options.writerModel ?? process.env.SP_PROMPTER_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL, effort: 'medium' as const, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
+      const route = selectLlmRoute('prompter', { explicitModel: options.writerModel });
+      const llm = { system, jsonSchema: PROMPTER_SCHEMA, model: route.model, effort: route.effort, images, timeoutMs: 150_000 + images.length * 15_000, signal: c.req.raw.signal, taskRu: 'Промптер' };
       try {
         const user = buildPrompterUser(request, candidates, styles, camera, template);
         let result = await run<PrompterOutput>({ ...llm, user });
@@ -574,7 +581,10 @@ export function createApp(options: AppOptions) {
           result = await run<PrompterOutput>({ ...llm, user: `${user}\n\nYour previous answer was rejected:\n${problems.map((p) => `- ${p}`).join('\n')}\n\nPrevious answer:\n${JSON.stringify(result.data)}` });
           problems = validatePrompter(result.data, candidates, styles, refs, shot, template);
         }
-        const output = normalizePrompter(result.data, styles, refs, shot);
+        if (!candidates.some(candidate => candidate.id === result.data.modelId.trim())) {
+          return c.json({ error: 'BAD_MODEL', messageRu: 'Агент выбрал модель вне доступного списка. Повтори запрос с выбранной моделью.' }, 422);
+        }
+        const output = normalizePrompter(result.data, styles, refs, shot, modelId === 'auto', previous);
         if (output === null) return c.json({ error: 'BAD_MODEL', messageRu: 'Агент выбрал модель, которой нет в студии. Попробуй ещё раз.' }, 422);
         return c.json({ result: output, problems, meta: result.meta });
       } catch (error) {

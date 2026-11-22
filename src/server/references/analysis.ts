@@ -2,11 +2,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { ReferenceFolderSchema, type ReferenceAnalysisJob } from '../../core/references.ts';
-import { DEFAULT_LLM_MODEL, LlmError } from '../llm/codexCli/provider.ts';
+import { LlmError } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 import { atomicWrite, serialize } from '../storage/atomic.ts';
 import { ReferenceLibraryError } from './media.ts';
 import { readQualityImage, reviewReferenceCohort, runWhileActive, type QualityCohort, type QualityDecision, type QualityImage } from './quality.ts';
+import type { DedupProgress } from './dedup.ts';
 
 const BATCH_SIZE = 4;
 const count = z.number().int().nonnegative();
@@ -44,11 +46,14 @@ const JobSchema = z.object({
   inputTokens: count,
   outputTokens: count,
   error: z.string().optional(),
-  phase: z.enum(['quality', 'analysis']).optional(),
+  phase: z.enum(['quality', 'dedup', 'analysis']).optional(),
   reviewed: count.optional(),
   kept: count.optional(),
   rejected: count.optional(),
   uncertain: count.optional(),
+  duplicates: count.optional(),
+  dedupTotal: count.optional(),
+  dedupCompleted: count.optional(),
 });
 
 const ANALYSIS_SYSTEM = `Analyze visual references for a film director. Pair each image with its supplied ID in order and return one record per image. Write every description, visual detail and tag in English. Use established photography and filmmaking terms that someone could use to find the image.
@@ -74,8 +79,7 @@ async function analyzeReferenceBatch(
     user: JSON.stringify({ imageIdsInOrder: batch.map(frame => frame.id) }),
     images,
     jsonSchema: OUTPUT_JSON_SCHEMA,
-    model: process.env.SP_VISION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL,
-    effort: 'low',
+    ...selectLlmRoute('reference-analysis'),
     timeoutMs: 120_000,
     signal,
     taskRu: 'Разбор референсов',
@@ -89,6 +93,7 @@ interface AnalysisStore {
   prepareWork(retryUncertain: boolean): Promise<ReferenceWork>;
   beginQuality(cohort: QualityCohort, signal: AbortSignal): Promise<string>;
   saveQuality(cohort: QualityCohort, reviewId: string, decisions: QualityDecision[], model: string, signal: AbortSignal): Promise<void>;
+  curateDuplicates(signal: AbortSignal, onProgress: (progress: DedupProgress) => Promise<void>): Promise<{ total: number; duplicateIds: string[] }>;
   analysisInputs(ids: string[]): Promise<AnalysisInput[]>;
   saveAnalysis(result: AnalysisResult, input: AnalysisInput, signal: AbortSignal): Promise<void>;
 }
@@ -138,6 +143,17 @@ export function createReferenceAnalysis(root: string, store: AnalysisStore) {
         await writeJob(job);
       }
       signal.throwIfAborted();
+      job.phase = 'dedup';
+      await writeJob(job);
+      const dedup = await store.curateDuplicates(signal, async progress => {
+        job.dedupTotal = progress.total;
+        job.dedupCompleted = progress.completed;
+        await writeJob(job);
+      });
+      signal.throwIfAborted();
+      const workIds = new Set(work.ids);
+      job.duplicates = dedup.duplicateIds.filter(id => workIds.has(id)).length;
+      job.completed += job.duplicates;
       job.phase = 'analysis';
       const pending = await store.analysisInputs(work.ids);
       job.kept = pending.length;
@@ -191,7 +207,8 @@ export function createReferenceAnalysis(root: string, store: AnalysisStore) {
         const job: ReferenceAnalysisJob = {
           status: work.ids.length ? 'running' : 'done', total: work.ids.length,
           completed: 0, inputTokens: 0, outputTokens: 0,
-          phase: work.cohorts.length ? 'quality' : 'analysis', reviewed: 0, kept: 0, rejected: 0, uncertain: 0,
+          phase: work.cohorts.length ? 'quality' : 'dedup', reviewed: 0, kept: 0, rejected: 0, uncertain: 0,
+          duplicates: 0, dedupTotal: 0, dedupCompleted: 0,
         };
         if (!work.ids.length) return job;
         await writeJob(job);

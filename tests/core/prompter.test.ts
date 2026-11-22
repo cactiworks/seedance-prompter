@@ -54,9 +54,55 @@ describe('промптер: вход агента', () => {
   it('карточка модели — файл по id', () => {
     expect(cardFile('kie/gpt-image-2-5')).toBe('kie--gpt-image-2-5.md');
   });
+
+  it('показывает catalog estimates для экономичных auto defaults с фактически переданными рефами', () => {
+    const refs: PrompterRef[] = Array.from({ length: 3 }, () => ({ role: 'style', commentRu: '' }));
+    const user = buildPrompterUser({ ideaRu: 'Редакционный портрет', kind: 'image', modelId: 'auto', refs }, images, []);
+    const input = JSON.parse(user.slice(user.indexOf('{'), user.lastIndexOf('}') + 1)) as { candidates: { id: string; params: { key: string; default: string }[]; costHint: { usd: number; source: string; referenceCount: number; parameterBasis: string } }[] };
+    const portrait = input.candidates.find(candidate => candidate.id === soul.id)!;
+    expect(portrait.params.find(param => param.key === 'resolution')?.default).toBe('720p');
+    expect(portrait.costHint).toMatchObject({ usd: 0.004, source: 'catalog_estimate', referenceCount: 1, parameterBasis: 'candidate_defaults' });
+    const seedream = input.candidates.find(candidate => candidate.id === 'kie/seedream-5-pro')!;
+    expect(seedream.params.find(param => param.key === 'resolution')?.default).toBe('1K');
+    expect(seedream.costHint).toMatchObject({ usd: 0.04, referenceCount: 3 });
+  });
+
+  it('не принимает неизвестную account quote за бесплатную модель', () => {
+    const user = buildPrompterUser({ ideaRu: 'Видео с диалогом', kind: 'video', modelId: 'auto' }, modelsOf('video'), []);
+    const input = JSON.parse(user.slice(user.indexOf('{'), user.lastIndexOf('}') + 1)) as { candidates: { id: string; costHint: { usd: number | null; source: string } }[] };
+    expect(input.candidates.find(candidate => candidate.id === 'higgsfield/seedance-2-5')?.costHint).toMatchObject({ usd: null, source: 'account_quote_required' });
+    expect(input.candidates.find(candidate => candidate.id === 'kie/kling-3')?.costHint.usd).toBe(0.35);
+  });
+
+  it('выбирает низкую каталоговую цену, а не первый enum вариант', () => {
+    const reordered: GenModel = { ...soul, params: soul.params.map(param => param.key === 'resolution' ? { ...param, options: ['1080p', '720p'] } : param) };
+    const user = buildPrompterUser({ ideaRu: 'Портрет', kind: 'image', modelId: 'auto' }, [reordered], []);
+    const input = JSON.parse(user.slice(user.indexOf('{'), user.lastIndexOf('}') + 1)) as { candidates: { params: { key: string; default: string }[] }[] };
+    expect(input.candidates[0]?.params.find(param => param.key === 'resolution')?.default).toBe('720p');
+  });
+
+  it('фиксированный выбор сохраняет стандартные параметры модели', () => {
+    const user = buildPrompterUser({ ideaRu: 'Портрет', kind: 'image', modelId: soul.id }, [soul], []);
+    const input = JSON.parse(user.slice(user.indexOf('{'), user.lastIndexOf('}') + 1)) as { candidates: { params: { key: string; default: string }[]; costHint: { usd: number } }[] };
+    expect(input.candidates[0]?.params.find(param => param.key === 'resolution')?.default).toBe('1080p');
+    expect(input.candidates[0]?.costHint.usd).toBe(0.006);
+  });
+
+  it('не выбирает дешёвый вариант, отклонённый ограничениями модели', () => {
+    const constrained: GenModel = { ...soul, limits: params => params.resolution === '720p' ? ['This route needs 1080p.'] : [] };
+    const user = buildPrompterUser({ ideaRu: 'Портрет', kind: 'image', modelId: 'auto' }, [constrained], []);
+    const input = JSON.parse(user.slice(user.indexOf('{'), user.lastIndexOf('}') + 1)) as { candidates: { params: { key: string; default: string }[]; costHint: { usd: number } }[] };
+    expect(input.candidates[0]?.params.find(param => param.key === 'resolution')?.default).toBe('1080p');
+    expect(input.candidates[0]?.costHint.usd).toBe(0.006);
+  });
 });
 
 describe('промптер: проверка и нормализация ответа', () => {
+  it('пропущенные auto параметры используют ту же экономичную базу, явное разрешение сохраняется', () => {
+    expect(normalizePrompter(answer({ params: [] }), [], [], EMPTY_SHOT, true)?.params.resolution).toBe('720p');
+    expect(normalizePrompter(answer({ params: [] }), [], [], EMPTY_SHOT, false)?.params.resolution).toBe('1080p');
+    expect(normalizePrompter(answer({ modelId: gpt.id, params: [{ key: 'resolution', value: '4K' }] }), [], [], EMPTY_SHOT, true)?.params.resolution).toBe('4K');
+  });
   it('хороший ответ проходит; мудборд по имени без учёта регистра → id; параметры в типах модели', () => {
     expect(validatePrompter(answer(), images, styles)).toEqual([]);
     const result = normalizePrompter(answer(), styles);

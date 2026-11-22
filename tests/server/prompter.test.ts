@@ -6,7 +6,7 @@ import type { PrompterOutput, PrompterResult } from '../../src/core/llm/buildPro
 import { createApp, CLIENT_HEADER, HOST, PORT } from '../../src/server/app.ts';
 import type { GenProvider } from '../../src/server/gen/provider.ts';
 import { createGenRuntime } from '../../src/server/gen/runtime.ts';
-import type { LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
+import { LlmError, type LlmRequest } from '../../src/server/llm/codexCli/provider.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
 const headers = { host: `${HOST}:${PORT}`, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };
@@ -14,7 +14,7 @@ const STYLE_ID = '33333333-3333-4333-8333-333333333333';
 
 const unused = async (): Promise<never> => Promise.reject(new Error('генерация промптером не запускается'));
 
-function setup(answers: PrompterOutput[]) {
+function setup(answers: PrompterOutput[], options: { writerModel?: string; failure?: LlmError } = {}) {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'sp-prompter-'));
   const higgsfield: GenProvider = { id: 'higgsfield', hasKey: () => true, upload: unused, submit: unused, poll: unused, freshUrl: unused, listStyles: async () => [{ id: STYLE_ID, name: 'Subtle flash', description: '', previewUrl: null }] };
   const gen = createGenRuntime({ dataDir, providers: { higgsfield } });
@@ -23,8 +23,10 @@ function setup(answers: PrompterOutput[]) {
     rootDir: ROOT,
     dataDir,
     gen,
+    writerModel: options.writerModel,
     runLlm: async <T>(request: LlmRequest) => {
       calls.push(request);
+      if (options.failure) throw options.failure;
       return { data: answers[calls.length - 1] as T, meta: { durationMs: 5, model: 'mock', turns: 2, inputTokens: 10, outputTokens: 10 } };
     },
   });
@@ -43,8 +45,19 @@ const good: PrompterOutput = {
 };
 
 describe('POST /api/llm/prompter', () => {
+  it.each([false, true])('сохраняет прошлое разрешение при правке, если новое не задано явно: %s', async explicit => {
+    const { post } = setup([{ ...good, params: explicit ? [{ key: 'resolution', value: '720p' }] : [] }]);
+    const response = await post({
+      ideaRu: 'Тот же портрет', kind: 'image', modelId: 'auto', commentRu: 'Поменяй только свет',
+      previous: { modelId: 'higgsfield/soul-2', prompt: good.prompt, params: { resolution: '1080p', aspectRatio: '9:16' }, styleName: '' },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { result: PrompterResult; problems: string[] };
+    expect(body.problems).toEqual([]);
+    expect(body.result.params.resolution).toBe(explicit ? '720p' : '1080p');
+  });
   it.each([
-    { common: undefined, role: undefined, expected: 'gpt-6-astra' },
+    { common: undefined, role: undefined, expected: 'gpt-6.1-sol' },
     { common: 'gpt-shared-test', role: undefined, expected: 'gpt-shared-test' },
     { common: 'gpt-shared-test', role: 'gpt-role-test', expected: 'gpt-role-test' },
   ])('выбор LLM: роль $role, общий $common → $expected; медиа остаётся в Higgsfield', async ({ common, role, expected }) => {
@@ -55,6 +68,7 @@ describe('POST /api/llm/prompter', () => {
       const response = await post({ ideaRu: 'фото со вспышкой', kind: 'image', modelId: 'auto' });
       expect(response.status).toBe(200);
       expect(calls[0]?.model).toBe(expected);
+      expect(calls[0]?.effort).toBe('medium');
       expect(calls[0]).not.toHaveProperty('fallbackModel');
       expect(((await response.json()) as { result: PrompterResult }).result.modelId).toBe('higgsfield/soul-2');
     } finally {
@@ -78,7 +92,9 @@ describe('POST /api/llm/prompter', () => {
     expect(calls[1]?.user).toContain('English only');
     expect(body.problems).toEqual([]);
     expect(body.result.modelId).toBe('higgsfield/soul-2');
-    expect(body.result.params).toMatchObject({ aspectRatio: '9:16', resolution: '1080p', styleId: STYLE_ID });
+    expect(body.result.params).toMatchObject({ aspectRatio: '9:16', resolution: '720p', styleId: STYLE_ID });
+    expect(calls[1]?.model).toBe(calls[0]?.model);
+    expect(calls[1]?.effort).toBe(calls[0]?.effort);
   });
 
   it('модель выбрана владельцем — в системе только её карточка, агенту — режим fixed', async () => {
@@ -89,6 +105,32 @@ describe('POST /api/llm/prompter', () => {
     expect(calls[0]?.system).not.toContain('Seedance 2.5 (ByteDance, via KIE) — card');
     expect(calls[0]?.user).toContain('"mode": "fixed"');
     expect(calls[0]?.user).toContain('"styleOptions": []');
+  });
+
+  it('явная программная модель имеет приоритет над role и global env', async () => {
+    vi.stubEnv('SP_LLM_MODEL', 'global-test');
+    vi.stubEnv('SP_PROMPTER_MODEL', 'role-test');
+    try {
+      const { calls, post } = setup([good], { writerModel: 'explicit-test' });
+      expect((await post({ ideaRu: 'Портрет', kind: 'image', modelId: 'auto' })).status).toBe(200);
+      expect(calls[0]).toMatchObject({ model: 'explicit-test', effort: 'medium' });
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('не подменяет fixed media-модель после двух неверных ответов поддерживаемой другой моделью', async () => {
+    const wrong: PrompterOutput = { ...good, modelId: 'kie/gpt-image-2-5', styleName: '', params: [] };
+    const { calls, post } = setup([wrong, wrong]);
+    const response = await post({ ideaRu: 'Портрет', kind: 'image', modelId: 'higgsfield/soul-2' });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'BAD_MODEL' });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('недоступная модель не вызывает автоматический повтор или дорогой fallback', async () => {
+    const { calls, post } = setup([], { failure: new LlmError('PROCESS_CRASH', 'Выбранная модель недоступна.') });
+    expect((await post({ ideaRu: 'Портрет', kind: 'image', modelId: 'auto' })).status).toBe(502);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ model: 'gpt-6.1-sol', effort: 'medium' });
   });
 
   it('референсы: картинки уходят агенту вложениями, комплект камеры раскрыт из pack «Кадров», в ответе — какие картинки идут в модель', async () => {

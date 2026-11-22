@@ -3,6 +3,7 @@ import { validateWriterOutput, type Violation, type WriterOutput } from '../../.
 import type { Project, Shot } from '../../../core/model/project.ts';
 import { agentShooting, buildShot, kitOf, type PackBundle } from '../../../core/pipeline.ts';
 import type { LlmRequest, LlmResult } from '../codexCli/provider.ts';
+import { selectLlmRoute } from '../routing.ts';
 
 export type Runner = <T>(request: LlmRequest) => Promise<LlmResult<T>>;
 
@@ -13,7 +14,7 @@ export interface WriteShotInput {
   rules: string;
   fewshot: FewShot;
   run: Runner;
-  model: string;
+  model?: string;
   signal?: AbortSignal;
   /** Режим починки после неудачной генерации: правятся все абзацы с текстом, результат — предложение. */
   fix?: FixBrief;
@@ -50,6 +51,7 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   if (writable.length === 0) throw new Error(input.fix === undefined ? 'Нечего писать: ни один отрезок не менялся после прошлой сборки или у отрезков нет описания по-русски.' : 'Нечего чинить: в кадре нет ни одного абзаца с текстом.');
 
   const system = buildWriterSystem(input.rules, input.fewshot);
+  const route = selectLlmRoute('writer', { explicitModel: input.model });
   const ctx = buildValidationContext(project, shot, writable, input.fix !== undefined);
   const totals = { durationMs: 0, inputTokens: 0, outputTokens: 0, model: null as string | null };
 
@@ -65,7 +67,7 @@ export async function writeShot(input: WriteShotInput): Promise<WriteShotResult>
   };
 
   const call = async (user: string): Promise<WriterOutput> => {
-    const result = await input.run<WriterOutput>({ system, user, jsonSchema: WRITER_SCHEMA, model: input.model, effort: 'medium', timeoutMs: 240_000, signal: input.signal });
+    const result = await input.run<WriterOutput>({ system, user, jsonSchema: WRITER_SCHEMA, model: route.model, effort: route.effort, timeoutMs: 240_000, signal: input.signal });
     totals.durationMs += result.meta.durationMs;
     totals.inputTokens += result.meta.inputTokens;
     totals.outputTokens += result.meta.outputTokens;

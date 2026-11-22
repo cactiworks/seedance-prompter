@@ -1791,5 +1791,17 @@
   "Закреплённый кадр сохранён в подборке, но сейчас не допущен в библиотеку. Проверь его статус в очереди проверки.": "The pinned frame remains in the reference set but is not currently eligible for the library. Check its status in the review queue.",
   "Проверь качество и разбери кадры в библиотеке.": "Review quality and analyze frames in the library.",
   "Последний проход завершён": "Last run completed",
-  "Закрепить проверенную версию": "Pin the reviewed version"
+  "Закрепить проверенную версию": "Pin the reviewed version",
+  "Похожий кадр исключён": "Similar frame excluded",
+  "Показать сохранённый кадр": "Show the retained frame",
+  "Ожидают сравнения": "Awaiting comparison",
+  "Похожие исключены": "Similar frames excluded",
+  "Похожие исключены: {0}": "Similar frames excluded: {0}",
+  "Среди очень похожих кадров сохраняется один технически лучший по резкости и разрешению. Сравнение не расходует AI-квоту.": "Among very similar frames, one technically best frame is retained based on sharpness and resolution. Comparison uses no AI quota.",
+  "Отбор похожих кадров": "Selecting similar frames",
+  "Сравнено: {0} из {1} · Похожие исключены: {2}": "Compared: {0} of {1} · Similar frames excluded: {2}",
+  "Обработка идёт. В библиотеке появятся проверенные самостоятельные кадры.": "Processing is in progress. Reviewed distinct frames will appear in the library.",
+  "Нажми «Проверить и разобрать», чтобы продолжить обработку оставшихся кадров.": "Click Review and analyze to continue processing the remaining frames.",
+  "Неопределённые кадры доступны для отдельной повторной проверки.": "Uncertain frames are available for a separate review.",
+  "Подходящих кадров пока нет. Причины исключения доступны в журнале проверки.": "No suitable frames are available yet. Exclusion reasons are recorded in the review log."
 }

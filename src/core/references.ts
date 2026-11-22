@@ -50,6 +50,15 @@ export interface ReferenceCard {
     retainedBecauseReferenced?: boolean;
   };
   eligible?: boolean;
+  dedup?: ReferenceDedupDecision;
+}
+
+export interface ReferenceDedupDecision {
+  status: 'pending' | 'keep' | 'duplicate';
+  reason: string;
+  duplicateOf?: string;
+  method?: string;
+  retainedBecauseReferenced?: boolean;
 }
 
 export interface ReferenceAnalysisJob {
@@ -59,11 +68,14 @@ export interface ReferenceAnalysisJob {
   inputTokens: number;
   outputTokens: number;
   error?: string;
-  phase?: 'quality' | 'analysis';
+  phase?: 'quality' | 'dedup' | 'analysis';
   reviewed?: number;
   kept?: number;
   rejected?: number;
   uncertain?: number;
+  duplicates?: number;
+  dedupTotal?: number;
+  dedupCompleted?: number;
 }
 
 export interface ReferenceQualityAudit {
@@ -91,7 +103,10 @@ export interface ReferenceQualityAudit {
     model?: string | null;
     at?: string;
     retainedBecauseReferenced?: boolean;
+    dedup?: ReferenceDedupDecision;
   }[];
+  duplicates?: number;
+  dedupPending?: number;
 }
 
 export const isReferenceEligible = (card: ReferenceCard | undefined): card is ReferenceCard =>

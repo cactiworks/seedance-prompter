@@ -8,7 +8,8 @@ import { appearanceReady, boundPrompts } from '../../core/production/appearance.
 import { canRegenerateMaster, masterAttempts } from '../../core/production/photos.ts';
 import { identityImages } from './appearance.ts';
 import { hasStoryEvents, sceneForShot } from '../../core/production/plan.ts';
-import { DEFAULT_LLM_MODEL, LlmError, runCodex, type LlmResult } from '../llm/codexCli/provider.ts';
+import { LlmError, runCodex, type LlmResult } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { ImageInput } from '../llm/codexCli/args.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 
@@ -51,7 +52,6 @@ const jobsActive = (run: ProductionRun) => run.photos?.items.some((i) => ['submi
 export function createPhotoReview(store: Store, options: { dataDir: string; gen?: GenRuntime; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; now: () => number; model?: string }) {
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   let stopped = false;
-  const model = options.model ?? process.env.SP_PRODUCTION_CRITIC_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
   async function start(id: string, input: z.infer<typeof ReviewStartSchema>, codexAccountId?: string) {
     const key = input.scope === 'master' ? 'masterReview' : 'review';
     const run = await store.update(id, (run) => {
@@ -95,6 +95,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
     const job = { controller, done: Promise.resolve() }; pending.set(id, job);
     const requestId = snapshot[key]!.requestId;
     job.done = (async () => {
+      let route = selectLlmRoute('photo-review', { explicitModel: options.model });
       let meta: LlmResult<unknown>['meta'] | undefined;
       try {
         const run = await store.update(id, (current) => {
@@ -108,6 +109,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
         const images: ImageInput[] = [];
         const logic = run[key]!.criteriaVersion === LOGIC_CRITERIA;
         const detailed = logic || run[key]!.criteriaVersion === DETAIL_CRITERIA;
+        route = selectLlmRoute('photo-review', { explicitModel: options.model, detailedInspection: detailed });
         const schema = logic ? LogicReviewReportSchema : detailed ? DetailedReviewReportSchema : GeneratedReviewReportSchema;
         const imageMap: { imageIndex: number; role: string; artifactId?: string; view?: string; box?: { x: number; y: number; w: number; h: number } }[] = [];
         if (run.character) {
@@ -135,7 +137,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
           user: JSON.stringify({ inspectionMode: logic ? LOGIC_CRITERIA : detailed ? DETAIL_CRITERIA : 'overview', scope: key === 'masterReview' ? 'master' : 'series', appearance: run.appearance?.output?.profile ?? null, identityRequired: !!run.character, scenePlan: run.scenePlan, masterPrompt: boundPrompts(run)?.masterPrompt ?? null, scenario: run.script, direction: run.direction, style: run.style, imageMap,
             masterRole: hasStoryEvents(run.scenePlan) ? 'character quality gate; not a composition reference' : 'shared scene reference',
             candidates: artifacts.map((a) => { const shot = run.scenePlan?.shots.find(s => s.id === a.shotId); return { artifactId: a.id, shotId: a.shotId, shot: shot ?? null, scene: shot && run.scenePlan ? sceneForShot(run.scenePlan, shot) : run.scenePlan?.scene }; }), identityAvailable: identityCount > 0 }),
-          images, jsonSchema: z.toJSONSchema(schema), model, effort: detailed ? 'high' : 'medium', timeoutMs: 240_000,
+          images, jsonSchema: z.toJSONSchema(schema), model: route.model, effort: route.effort, timeoutMs: 240_000,
           signal: controller.signal, taskRu: 'Критик фотографий Production',
         });
         meta = response.meta;
@@ -166,7 +168,7 @@ export function createPhotoReview(store: Store, options: { dataDir: string; gen?
               ? `Отчёт критика не прошёл схему: ${error.issues.slice(0,3).map(i=>i.path.join('.')).join(', ')}. Повтори проверку.`
               : error instanceof ReviewValidationError ? `${error.message} Повтори проверку; фото сохранено.`
               : 'Критик не завершил проверку: файл недоступен или проверяемые данные изменились. Повтори проверку вручную.',
-            model: meta?.model ?? model, inputTokens: meta?.inputTokens ?? null, outputTokens: meta?.outputTokens ?? null });
+            model: meta?.model ?? route.model, inputTokens: meta?.inputTokens ?? null, outputTokens: meta?.outputTokens ?? null });
           if (key === 'masterReview' && run.photos) {
             run.photos.status = 'stopped';
             if (run.review?.status === 'pending') { run.review.status = 'interrupted'; run.review.error = 'Сначала нужна завершённая проверка master.'; }

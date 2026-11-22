@@ -10,7 +10,7 @@ import { checkIsolation } from './tripwire.ts';
 import { skillPathsToDisable } from './skills.ts';
 
 export { DEFAULT_LLM_MODEL } from './args.ts';
-export type LlmErrorCode = 'NOT_INSTALLED' | 'CLI_OUTDATED' | 'NOT_LOGGED_IN' | 'USAGE_LIMIT' | 'ISOLATION_VIOLATION' | 'NO_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'CANCELLED' | 'PROCESS_CRASH';
+export type LlmErrorCode = 'NOT_INSTALLED' | 'CLI_OUTDATED' | 'MODEL_UNAVAILABLE' | 'NOT_LOGGED_IN' | 'USAGE_LIMIT' | 'ISOLATION_VIOLATION' | 'NO_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'CANCELLED' | 'PROCESS_CRASH';
 
 export class LlmError extends Error {
   readonly code: LlmErrorCode;
@@ -42,6 +42,9 @@ export interface LlmResult<T> {
 function classify(text: string): LlmError | null {
   if (/requires a newer version of Codex|please upgrade to the latest app or CLI/i.test(text)) {
     return new LlmError('CLI_OUTDATED', 'Выбранной модели нужна новая версия Codex CLI. Обнови: npm install -g @openai/codex@latest. Затем повтори незавершённый этап.');
+  }
+  if (/model_not_found|unsupported_model|model_not_supported|unsupported model|unknown model|\bmodel\b.{0,180}(?:not supported|not available|not found|does not exist|not advertised)/i.test(text)) {
+    return new LlmError('MODEL_UNAVAILABLE', 'Выбранная модель недоступна в этом AI-подключении. Используй поддерживаемую модель; автоматического переключения не было.', text.slice(0, 200));
   }
   if (/not logged in|not authenticated|login required|authentication required|unauthorized|401|refresh token|forced login|requires? (?:a )?chatgpt|must (?:be logged|log) in|run [`']?codex login/i.test(text)) {
     return new LlmError('NOT_LOGGED_IN', 'Нужен вход в Codex через ChatGPT. Выполни `codex login` в терминале.', text.slice(0, 200));

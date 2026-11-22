@@ -306,6 +306,11 @@ describe('real photos with injected providers only', () => {
     expect(run.shots.every(shot => !shot.acceptedPhotoId)).toBe(true); expect(run.retouch).toBeUndefined();
     for (const [model, body] of s.submit.mock.calls) { expect(model).toBe('higgsfield-ai/soul/v2/standard'); expect(body).not.toHaveProperty('image_url'); expect(body.custom_reference_id).toBe(identity.referenceId); }
     expect(s.provider.upload).not.toHaveBeenCalled();
+    const appearanceRequests = s.calls.filter(request => request.taskRu === 'Внешность персонажа Production');
+    expect(appearanceRequests.length).toBeGreaterThan(0);
+    expect(appearanceRequests.every(request => request.model === 'gpt-6.1-terra' && request.effort === 'medium')).toBe(true);
+    const reviewRequests = s.calls.filter(request => request.taskRu === 'Критик фотографий Production');
+    expect(reviewRequests.every(request => request.model === 'gpt-6.1-terra' && request.effort === 'high')).toBe(true);
     const payload = JSON.parse(s.calls.find(c => c.taskRu === 'Критик фотографий Production' && JSON.parse(c.user).scope === 'series')!.user);
     expect(payload.scenePlan.contentMode).toBe('broll'); expect(payload.scenario).toBe('');
     expect(payload.candidates.find((c: { shotId: string }) => c.shotId === 'shot-1').shot.intentionalEffect).toContain('вихрь');

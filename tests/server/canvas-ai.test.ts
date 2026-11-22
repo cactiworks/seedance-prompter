@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CanvasNodeSchema, type Flow } from '../../src/core/model/canvas.ts';
 import { GenJobSchema } from '../../src/core/model/media.ts';
 import type { ReferenceCard } from '../../src/core/references.ts';
@@ -16,6 +16,7 @@ import type { Runner } from '../../src/server/llm/tasks/write.ts';
 import { createCharacters } from '../../src/server/production/characters.ts';
 import { createFlows } from '../../src/server/storage/flows.ts';
 import { createStore } from '../../src/server/storage/fsStore.ts';
+import { StoredCanvasAiRunSchema } from '../../src/server/canvasAi/types.ts';
 
 const ROOT = path.join(import.meta.dirname, '../..');
 const headers = { host: `${HOST}:${PORT}`, [CLIENT_HEADER]: '1', 'content-type': 'application/json' };
@@ -23,7 +24,7 @@ const meta = { durationMs: 1, model: 'fake', turns: 1, inputTokens: 1, outputTok
 const idea = { textRu: 'Ты стоишь на мокрой улице в серой куртке, свет отражается в лужах.', assumptionsRu: ['Камера остаётся неподвижной.'], referenceNotesRu: [] };
 const prompt = { prompt: 'A young man wearing a grey jacket stands on a wet street, soft light reflected in puddles, documentary photography.', summaryRu: 'Сохранил улицу, куртку и отражения.', referenceNotesRu: [] };
 const node = (id: string, type: string, extra = {}) => CanvasNodeSchema.parse({ id, type, x: 0, y: 0, ...extra });
-async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runner; accountRunner?: (id?: string) => Runner; resolveLibraryReference?: Parameters<typeof createCanvasAi>[0]['resolveLibraryReference'] } = {}) {
+async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runner; accountRunner?: (id?: string) => Runner; model?: string; resolveLibraryReference?: Parameters<typeof createCanvasAi>[0]['resolveLibraryReference'] } = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'sp-canvas-ai-'));
   const flows = createFlows(dataDir);
   const base = await flows.create('AI fake test');
@@ -32,7 +33,7 @@ async function setup(outputs: unknown[] = [idea, prompt], options: { run?: Runne
   const run: Runner = options.run ?? (async <T>(request: LlmRequest) => { calls.push(request); return { data: outputs.shift() as T, meta }; });
   const gen = createGenRuntime({ dataDir, providers: {} });
   const characters = createCharacters({ dataDir });
-  const runtime = createCanvasAi({ rootDir: ROOT, dataDir, flows, gen, characters, runLlm: run, runLlmForAccount: options.accountRunner, resolveLibraryReference: options.resolveLibraryReference });
+  const runtime = createCanvasAi({ rootDir: ROOT, dataDir, flows, gen, characters, runLlm: run, runLlmForAccount: options.accountRunner, model: options.model, resolveLibraryReference: options.resolveLibraryReference });
   const app = createApp({ rootDir: ROOT, dataDir, gen, characters, canvasAi: runtime, runLlm: run });
   const saved = async () => (await flows.get(base.id))!;
   const send = (method: string, url: string, body?: unknown) => app.request(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -50,6 +51,28 @@ function submission(flow: Flow) {
 }
 
 describe('Canvas AI durable explicit stages', () => {
+  it.each([undefined, 'gpt-6-astra'])('persists the effective model and effort sent to both stages with explicit model %s', async explicitModel => {
+    vi.stubEnv('SP_LLM_MODEL', undefined); vi.stubEnv('SP_CANVAS_AI_MODEL', undefined);
+    const s = await setup([idea, prompt], { model: explicitModel });
+    try {
+      const prepared = await s.ready('idea');
+      expect(prepared.status).toBe('ready');
+      await s.runtime.approve(prepared.id, await s.saved(), prepared.revision);
+      const compiled = await s.ready('prompt');
+      expect(compiled.status).toBe('ready');
+      for (const [index, run] of [prepared, compiled].entries()) {
+        const stored = JSON.parse(await readFile(path.join(s.dataDir, 'canvas-ai', run.id, 'run.json'), 'utf8'));
+        expect(stored.llmInput).toMatchObject({ model: explicitModel ?? 'gpt-6.1-sol', effort: 'medium' });
+        expect(s.calls[index]).toMatchObject({ model: stored.llmInput.model, effort: stored.llmInput.effort });
+        const legacy = { ...stored, llmInput: { system: stored.llmInput.system, user: stored.llmInput.user, model: stored.llmInput.model } };
+        expect(StoredCanvasAiRunSchema.parse(legacy).llmInput).not.toHaveProperty('effort');
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      await rm(s.dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('pins library images to the idea and only uses approved techniques during prompt compilation', async () => {
     const card: ReferenceCard = {
       id: 'ref-frame', sourceName: 'Private filename.mp4', timeMs: 1200, version: 1, folder: 'camera', tags: ['силуэт'],

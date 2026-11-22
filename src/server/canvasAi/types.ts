@@ -6,7 +6,7 @@ export type { CanvasAiRun, CanvasAiSnapshot } from '../../core/model/canvasAi.ts
 
 export const StoredCanvasAiRunSchema = CanvasAiRunSchema.extend({
   codexAccountId: z.string().optional(), flowSnapshot: FlowSchema,
-  llmInput: z.object({ system: z.string(), user: z.string(), model: z.string() }).optional(),
+  llmInput: z.object({ system: z.string(), user: z.string(), model: z.string(), effort: z.enum(['low', 'medium', 'high']).optional() }).optional(),
 });
 export type StoredCanvasAiRun = z.infer<typeof StoredCanvasAiRunSchema>;
 export const publicRun = (stored: StoredCanvasAiRun): CanvasAiRun => CanvasAiRunSchema.parse(stored);

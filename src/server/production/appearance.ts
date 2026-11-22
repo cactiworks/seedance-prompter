@@ -5,7 +5,8 @@ import type { ProductionRun } from '../../core/production/model.ts';
 import { createUploads } from '../storage/uploads.ts';
 import { createCharacters } from './characters.ts';
 import { visionCopy } from './vision.ts';
-import { DEFAULT_LLM_MODEL, LlmError, runCodex, type LlmResult } from '../llm/codexCli/provider.ts';
+import { LlmError, runCodex, type LlmResult } from '../llm/codexCli/provider.ts';
+import { selectLlmRoute } from '../llm/routing.ts';
 import type { Runner } from '../llm/tasks/write.ts';
 
 export const APPEARANCE_SYSTEM = `Закрепи видимую внешность выбранного персонажа по приложенным identity-фотографиям и внеси её в существующие prompts серии. Верни JSON по схеме: profile и prompts.
@@ -39,7 +40,8 @@ export async function identityImages(dataDir: string, run: ProductionRun, exactI
 export function createAppearancePreparation(store: Store, options: { dataDir: string; runLlm?: Runner; runLlmForAccount?: (id?: string) => Runner; model?: string; now: () => number }) {
   const pending = new Map<string, { controller: AbortController; done: Promise<void> }>();
   let stopped = false;
-  const model = options.model ?? process.env.SP_PRODUCTION_MODEL ?? process.env.SP_LLM_MODEL ?? DEFAULT_LLM_MODEL;
+  const route = selectLlmRoute('appearance', { explicitModel: options.model });
+  const model = route.model;
   async function tick(id: string) {
     if (stopped || pending.has(id)) return;
     const snapshot = await store.get(id);
@@ -58,7 +60,7 @@ export function createAppearancePreparation(store: Store, options: { dataDir: st
         if (controller.signal.aborted) return;
         const response = await (options.runLlmForAccount?.(run.appearance?.codexAccountId) ?? options.runLlm ?? runCodex)<unknown>({ system: APPEARANCE_SYSTEM,
           user: JSON.stringify({ scenePlan: run.scenePlan, promptPlan: run.promptPlan, imageMap: ids.map((_, i) => ({ imageIndex: i + 1, role: 'identity' })) }),
-          images, jsonSchema: z.toJSONSchema(AppearanceOutputSchema), model, effort: 'medium', timeoutMs: 240_000,
+          images, jsonSchema: z.toJSONSchema(AppearanceOutputSchema), model, effort: route.effort, timeoutMs: 240_000,
           signal: controller.signal, taskRu: 'Внешность персонажа Production' });
         meta = response.meta;
         const output = AppearanceOutputSchema.parse(response.data); validateAppearance(output, run, images.length);

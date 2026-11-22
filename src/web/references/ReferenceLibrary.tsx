@@ -25,7 +25,7 @@ const QUALITY_COPY: Record<ReferenceQualityDecision['status'], string> = {
   uncertain: 'Качество не определено',
 };
 
-type FolderFilter = 'all' | 'pending' | 'analysis' | 'rejected' | 'uncertain' | ReferenceFolder;
+type FolderFilter = 'all' | 'pending' | 'dedup' | 'duplicates' | 'analysis' | 'rejected' | 'uncertain' | ReferenceFolder;
 type LibraryMode = 'folders' | 'chat' | 'graph';
 
 function messageOf(error: unknown): string {
@@ -39,33 +39,37 @@ function matchesQuery(card: ReferenceCard, query: string): boolean {
 
 function QualityReferencePreview({ card, decision, onOpen }: { card: ReferenceCard; decision?: ReferenceQualityDecision; onOpen: () => void }) {
   const status = decision?.status ?? 'pending';
+  const duplicate = (decision?.dedup ?? card.dedup)?.status === 'duplicate';
   return <button type="button" className={styles.cardLink} onClick={onOpen} aria-label={ui('Открыть проверку кадра {0}', referenceCaption(card))}>
-    {status === 'pending' || status === 'keep' ? <ReferenceImage card={card} management /> : <span className={styles.empty}>
+    {!duplicate && (status === 'pending' || status === 'keep') ? <ReferenceImage card={card} management /> : <span className={styles.empty}>
       <Icon name="images" size={1.5} />
       <Text as="span" variant="label" tone="secondary">{ui('Кадр не допущен в библиотеку')}</Text>
     </span>}
     <span className={styles.cardCaption}>
       <Text as="span" variant="label" medium className={styles.cardTitle}>{referenceCaption(card)}</Text>
-      <Text as="span" variant="caption" tone="secondary">{ui(QUALITY_COPY[status])}</Text>
+      <Text as="span" variant="caption" tone="secondary">{duplicate ? ui('Похожий кадр исключён') : ui(QUALITY_COPY[status])}</Text>
     </span>
   </button>;
 }
 
-function QualityReferenceDialog({ card, decision, onClose }: { card: ReferenceCard; decision?: ReferenceQualityDecision; onClose: () => void }) {
+function QualityReferenceDialog({ card, decision, onClose, onOpenWinner }: { card: ReferenceCard; decision?: ReferenceQualityDecision; onClose: () => void; onOpenWinner?: () => void }) {
   const status = decision?.status ?? 'pending';
+  const dedup = decision?.dedup ?? card.dedup;
+  const duplicate = dedup?.status === 'duplicate';
   const metadata = decision ? [
     ['Модель проверки', decision.model], ['Версия критериев', decision.criteriaVersion],
     ['Время проверки', decision.at], ['SHA-256 кадра', decision.imageSha256], ['SHA-256 инструкции', decision.promptHash],
   ] as const : [];
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }} title={referenceCaption(card)} size="l">
     <div className={styles.details}>
-      {status === 'pending' || status === 'keep' ? <ReferenceImage card={card} className={styles.detailImage} management /> : <div className={styles.empty}>
+      {!duplicate && (status === 'pending' || status === 'keep') ? <ReferenceImage card={card} className={styles.detailImage} management /> : <div className={styles.empty}>
         <Icon name="images" size={1.5} />
         <Text tone="secondary">{ui('Кадр не допущен в библиотеку')}</Text>
       </div>}
       <div className={styles.detailsText}>
-        <div><Text as="h3" variant="label" medium>{ui(QUALITY_COPY[status])}</Text>
-          <Text>{decision?.reason || ui('Проверка качества ещё не выполнена.')}</Text></div>
+        <div><Text as="h3" variant="label" medium>{duplicate ? ui('Похожий кадр исключён') : ui(QUALITY_COPY[status])}</Text>
+          <Text>{duplicate ? dedup.reason : decision?.reason || ui('Проверка качества ещё не выполнена.')}</Text></div>
+        {duplicate && onOpenWinner && <Button variant="border" onClick={onOpenWinner}>{ui('Показать сохранённый кадр')}</Button>}
         <Text variant="label" tone="secondary">{ui('В поиск, граф и Canvas попадают только прошедшие проверку и разобранные кадры.')}</Text>
         {metadata.filter(([, value]) => value !== undefined && value !== null && value !== '').map(([label, value]) => <div key={label}>
           <Text as="h3" variant="caption" tone="secondary">{ui(label)}</Text>
@@ -136,7 +140,7 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
   const files = useRef<HTMLInputElement>(null);
   const importActive = useRef(false);
   const running = job?.status === 'running';
-  const analyzedCompleted = Math.max(0, (job?.completed ?? 0) - (job?.rejected ?? 0) - (job?.uncertain ?? 0));
+  const analyzedCompleted = Math.max(0, (job?.completed ?? 0) - (job?.rejected ?? 0) - (job?.uncertain ?? 0) - (job?.duplicates ?? 0));
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,19 +176,25 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
   const decisions = new Map(audit?.decisions.map((decision) => [decision.id, decision]));
   const eligibleIds = new Set(cards.map((card) => card.id));
   const statusOf = (card: ReferenceCard): ReferenceQualityDecision['status'] => decisions.get(card.id)?.status ?? 'pending';
-  const waitingAnalysis = managedCards.filter((card) => statusOf(card) === 'keep' && !eligibleIds.has(card.id)).length;
+  const dedupOf = (card: ReferenceCard) => decisions.get(card.id)?.dedup ?? card.dedup;
+  const waitsForAnalysis = (card: ReferenceCard) => statusOf(card) === 'keep' && dedupOf(card)?.status !== 'duplicate' && dedupOf(card)?.status !== 'pending' && !eligibleIds.has(card.id);
+  const waitingAnalysis = managedCards.filter(waitsForAnalysis).length;
   const filters = [
     { id: 'all' as const, label: ui('Все кадры'), count: cards.length },
     { id: 'pending' as const, label: ui('Ожидают проверки'), count: audit?.pending ?? 0 },
+    { id: 'dedup' as const, label: ui('Ожидают сравнения'), count: audit?.dedupPending ?? 0 },
+    { id: 'duplicates' as const, label: ui('Похожие исключены'), count: audit?.duplicates ?? 0 },
     { id: 'analysis' as const, label: ui('Ожидают разбора'), count: waitingAnalysis },
     { id: 'rejected' as const, label: ui('Отклонены'), count: audit?.rejected ?? 0 },
     { id: 'uncertain' as const, label: ui('Не определено'), count: audit?.uncertain ?? 0 },
     ...FOLDERS.map(([id, name]) => ({ id, label: ui(name), count: cards.filter((card) => card.folder === id).length })),
   ];
-  const managementFilter = folder === 'pending' || folder === 'analysis' || folder === 'rejected' || folder === 'uncertain';
+  const managementFilter = folder === 'pending' || folder === 'dedup' || folder === 'duplicates' || folder === 'analysis' || folder === 'rejected' || folder === 'uncertain';
   const filtered = (managementFilter ? managedCards : cards).filter((card) => {
     const selected = folder === 'all' || (folder === 'pending' ? statusOf(card) === 'pending'
-      : folder === 'analysis' ? statusOf(card) === 'keep' && !eligibleIds.has(card.id)
+      : folder === 'dedup' ? statusOf(card) === 'keep' && dedupOf(card)?.status === 'pending'
+        : folder === 'duplicates' ? dedupOf(card)?.status === 'duplicate'
+          : folder === 'analysis' ? waitsForAnalysis(card)
         : folder === 'rejected' ? statusOf(card) === 'reject' : folder === 'uncertain' ? statusOf(card) === 'uncertain' : card.folder === folder);
     return selected && matchesQuery(card, search.trim().toLocaleLowerCase());
   });
@@ -258,6 +268,7 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
               <Text as="span" variant="caption" tone="secondary">{ui('Прошли проверку: {0}', format.format(audit.kept))}</Text>
               <Text as="span" variant="caption" tone="secondary">{ui('Отклонены: {0}', format.format(audit.rejected))}</Text>
               <Text as="span" variant="caption" tone="secondary">{ui('Не определено: {0}', format.format(audit.uncertain))}</Text>
+              <Text as="span" variant="caption" tone="secondary">{ui('Похожие исключены: {0}', format.format(audit.duplicates ?? 0))}</Text>
             </div>}
             {shared && <Text id="reference-upload-visibility" variant="label" tone="secondary">{ui('Загруженные кадры видят все пользователи студии.')}</Text>}
           </div>
@@ -276,19 +287,22 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
           </div>
         </header>
 
-        {audit && (audit.pending > 0 || waitingAnalysis > 0 || audit.uncertain > 0) && <div className={styles.status}>
+        {audit && (audit.pending > 0 || (audit.dedupPending ?? 0) > 0 || waitingAnalysis > 0 || audit.uncertain > 0) && <div className={styles.status}>
           {audit.pending > 0 && <Text variant="label">{ui('Проверка качества ещё не выполнена для {0} кадров.', format.format(audit.pending))}</Text>}
           <Text variant="label" tone="secondary">{ui('Сначала проверяем качество и полезность, затем разбираем прошедшие кадры. Неопределённые результаты остаются вне библиотеки.')}</Text>
+          <Text variant="label" tone="secondary">{ui('Среди очень похожих кадров сохраняется один технически лучший по резкости и разрешению. Сравнение не расходует AI-квоту.')}</Text>
           {!running && <Text variant="caption" tone="secondary">{ui('По кнопке кадры отправятся в AI для проверки и разбора. Продолжение после остановки запускается вручную.')}</Text>}
         </div>}
 
         {((job && (mode === 'folders' || job.status !== 'done')) || upload || notice || error || failedUploads.length > 0) && <div className={styles.status}>
           {job && (mode === 'folders' || job.status !== 'done') && <div className={styles.job} role="status">
-            <Text variant="label" medium>{running ? ui(job.phase === 'quality' ? 'Проверка качества' : 'Разбор прошедших кадров') : ui(JOB_COPY[job.status])}</Text>
-            <Text variant="caption" tone="secondary">{job.phase === 'quality'
+            <Text variant="label" medium>{running ? ui(job.phase === 'quality' ? 'Проверка качества' : job.phase === 'dedup' ? 'Отбор похожих кадров' : 'Разбор прошедших кадров') : ui(JOB_COPY[job.status])}</Text>
+            <Text variant="caption" tone="secondary">{job.phase === 'dedup'
+              ? ui('Сравнено: {0} из {1} · Похожие исключены: {2}', format.format(job.dedupCompleted ?? 0), format.format(job.dedupTotal ?? 0), format.format(job.duplicates ?? 0))
+              : job.phase === 'quality'
               ? ui('Проверено: {0} · Прошли: {1} · Отклонены: {2} · Не определено: {3}', format.format(job.reviewed ?? 0), format.format(job.kept ?? 0), format.format(job.rejected ?? 0), format.format(job.uncertain ?? 0))
               : ui('{0} из {1} кадров · токены {2} вход / {3} выход', format.format(analyzedCompleted), format.format(job.kept ?? job.total), format.format(job.inputTokens), format.format(job.outputTokens))}</Text>
-            {running && <progress aria-label={ui('Прогресс анализа')} max={Math.max(1, job.phase === 'quality' ? job.total : job.kept ?? job.total)} value={job.phase === 'quality' ? job.reviewed ?? 0 : analyzedCompleted} />}
+            {running && <progress aria-label={ui('Прогресс анализа')} max={Math.max(1, job.phase === 'quality' ? job.total : job.phase === 'dedup' ? job.dedupTotal ?? 0 : job.kept ?? job.total)} value={job.phase === 'quality' ? job.reviewed ?? 0 : job.phase === 'dedup' ? job.dedupCompleted ?? 0 : analyzedCompleted} />}
             {job.error && <Text variant="label" className={styles.error}>{ui(job.error)}</Text>}
           </div>}
           {upload && <Text variant="label" role="status">{ui('Загружаю {0} из {1} · {2}', upload.index, upload.total, upload.name)}</Text>}
@@ -345,14 +359,18 @@ export function ReferenceLibrary({ showGraph = false, shared = false }: { showGr
                   <Icon name="images" size={1.5} />
                   <Text as="h2" variant="title-s" medium>{!loaded ? ui('Открываю библиотеку…') : (audit?.total ?? 0) === 0 ? ui('Добавь первые кадры') : !managementFilter && cards.length === 0 ? ui('Проверенные кадры появятся здесь') : ui('Здесь пока нет кадров')}</Text>
                   {loaded && (audit?.total ?? 0) === 0 && <Text tone="secondary">{ui('Загрузи фото или видео. Из ролика останутся стоп-кадры с таймкодами.')}</Text>}
-                  {loaded && !managementFilter && cards.length === 0 && (audit?.total ?? 0) > 0 && <Text tone="secondary">{ui('Открой очередь «Ожидают проверки» и запусти проверку и разбор.')}</Text>}
+                  {loaded && !managementFilter && cards.length === 0 && (audit?.total ?? 0) > 0 && <Text tone="secondary">{running
+                    ? ui('Обработка идёт. В библиотеке появятся проверенные самостоятельные кадры.')
+                    : pending > 0 ? ui('Нажми «Проверить и разобрать», чтобы продолжить обработку оставшихся кадров.')
+                      : (audit?.uncertain ?? 0) > 0 ? ui('Неопределённые кадры доступны для отдельной повторной проверки.')
+                        : ui('Подходящих кадров пока нет. Причины исключения доступны в журнале проверки.')}</Text>}
                 </div>}
               </section>
             </div>}
       </div>
       {openedCard && (eligibleIds.has(openedCard.id) ? <EditReferenceDialog key={openedCard.id} card={openedCard} onClose={() => setOpened(null)} onEdited={(updated) => {
         upsert([updated]); setCards((current) => current.map((card) => card.id === updated.id ? updated : card)); setOpened(null);
-      }} /> : <QualityReferenceDialog card={openedCard} decision={decisions.get(openedCard.id)} onClose={() => setOpened(null)} />)}
+      }} /> : <QualityReferenceDialog card={openedCard} decision={decisions.get(openedCard.id)} onClose={() => setOpened(null)} onOpenWinner={dedupOf(openedCard)?.duplicateOf && managedCards.some(card => card.id === dedupOf(openedCard)?.duplicateOf) ? () => setOpened(dedupOf(openedCard)!.duplicateOf!) : undefined} />)}
     </main>
   );
 }
