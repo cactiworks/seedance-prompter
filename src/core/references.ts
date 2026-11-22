@@ -43,6 +43,13 @@ export interface ReferenceCard {
   folder: ReferenceFolder | null;
   tags: string[];
   analysis: ReferenceAnalysis | null;
+  quality?: {
+    status: 'pending' | 'keep' | 'reject' | 'uncertain';
+    reason: string;
+    duplicateOf?: string;
+    retainedBecauseReferenced?: boolean;
+  };
+  eligible?: boolean;
 }
 
 export interface ReferenceAnalysisJob {
@@ -52,7 +59,43 @@ export interface ReferenceAnalysisJob {
   inputTokens: number;
   outputTokens: number;
   error?: string;
+  phase?: 'quality' | 'analysis';
+  reviewed?: number;
+  kept?: number;
+  rejected?: number;
+  uncertain?: number;
 }
+
+export interface ReferenceQualityAudit {
+  total: number;
+  pending: number;
+  kept: number;
+  rejected: number;
+  uncertain: number;
+  analyzed: number;
+  eligible: number;
+  retainedReferenced: number;
+  pendingWork: number;
+  scopeDigest: string;
+  reasons: { reason: string; count: number }[];
+  decisions: {
+    id: string;
+    sourceName: string;
+    timeMs: number | null;
+    status: 'pending' | 'keep' | 'reject' | 'uncertain';
+    reason: string;
+    duplicateOf?: string;
+    criteriaVersion?: number;
+    imageSha256?: string;
+    promptHash?: string;
+    model?: string | null;
+    at?: string;
+    retainedBecauseReferenced?: boolean;
+  }[];
+}
+
+export const isReferenceEligible = (card: ReferenceCard | undefined): card is ReferenceCard =>
+  card?.eligible === true && card.quality?.status === 'keep' && card.analysis !== null;
 
 export interface ReferenceMatch {
   refId: string;

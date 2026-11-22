@@ -18,7 +18,11 @@ const FeedbackSchema = z.object({
   role: ReferenceSelectionSchema.shape.role.optional(),
 });
 const EditSchema = z.object({ folder: ReferenceFolderSchema.nullable().optional(), tags: ReferenceTagsSchema.optional() });
-const AnalyzeSchema = z.object({ maxPending: z.number().int().positive().optional() });
+const AnalyzeSchema = z.object({
+  maxPending: z.number().int().nonnegative().optional(),
+  scopeDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  retryUncertain: z.boolean().optional(),
+});
 
 interface ReferenceRouteOptions {
   graph?: boolean;
@@ -48,9 +52,18 @@ export function referenceRoutes(root: string, library: ReferenceLibrary | undefi
     throw error;
   });
 
-  app.get('/cards', async (c) => c.json({ cards: await library.list() }));
+  const scopeOf = (c: Context) => c.req.query('scope') === 'all' ? 'all' as const : 'eligible' as const;
+  app.get('/cards', async (c) => c.json({ cards: await library.list(scopeOf(c)) }));
+  app.get('/quality/audit', async (c) => c.json(await library.qualityAudit()));
   app.get('/cards/:id/image', async (c) => {
-    const file = await library.imagePath(c.req.param('id'));
+    if (scopeOf(c) === 'eligible') {
+      const resolved = await library.readEligibleImage(c.req.param('id'));
+      if (!resolved) return missing(c);
+      return new Response(new Uint8Array(resolved.bytes), {
+        headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
+      });
+    }
+    const file = await library.imagePath(c.req.param('id'), scopeOf(c));
     if (!file) return missing(c);
     return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream<Uint8Array>, {
       headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
@@ -67,7 +80,7 @@ export function referenceRoutes(root: string, library: ReferenceLibrary | undefi
   app.get('/analysis', async (c) => c.json({ job: await library.analysisStatus() }));
   app.post('/analysis', async (c) => {
     const options = AnalyzeSchema.parse(c.req.header('content-type')?.startsWith('application/json') ? await c.req.json() : {});
-    return c.json({ job: await library.startAnalysis(await runFor(c), options.maxPending) });
+    return c.json({ job: await library.startAnalysis(await runFor(c), options.maxPending, options) });
   });
   app.post('/analysis/cancel', async (c) => c.json({ job: await library.stopAnalysis() }));
   app.get('/threads/:key', async (c) => {

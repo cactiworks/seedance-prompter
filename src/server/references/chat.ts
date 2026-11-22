@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
-  REFERENCE_FOLDERS, type ReferenceCard, type ReferenceMatch, type ReferenceSelection, type ReferenceThread,
+  REFERENCE_FOLDERS, isReferenceEligible, type ReferenceCard, type ReferenceMatch, type ReferenceSelection, type ReferenceThread,
 } from '../../core/references.ts';
 import { DEFAULT_LLM_MODEL } from '../llm/codexCli/provider.ts';
 import type { Runner } from '../llm/tasks/write.ts';
@@ -67,7 +67,7 @@ function preferenceFor(refId: string, aspect: Aspect, preferences: Preference[])
 }
 
 function shortlist(cards: ReferenceCard[], aspects: Aspect[], preferences: Preference[]) {
-  const search = cards.filter(card => card.analysis !== null).map(card => ({
+  const search = cards.filter(isReferenceEligible).map(card => ({
     card, fields: [termsOf(card.tags.join(' ')), termsOf(card.folder ? REFERENCE_FOLDERS[card.folder] : ''),
       ...Object.values(card.analysis ?? {}).map(termsOf)],
   }));
@@ -118,7 +118,7 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
     try {
       const history = (await get(key)).turns.slice(-4);
       const previous = history.at(-1);
-      const cards = await library.list();
+      const cards = (await library.list()).filter(isReferenceEligible);
       let matches: ReferenceMatch[] = [];
       let summary = NO_MATCH;
       if (cards.some(card => card.analysis)) {
@@ -164,7 +164,7 @@ export function createReferenceChat(root: string, library: LibraryIndex) {
 
   async function setSelection(key: string, selection: ReferenceSelection[]): Promise<ReferenceThread> {
     const cards = await Promise.all(selection.map(item => library.get(item.id, item.version)));
-    if (cards.some(card => !card?.analysis)) throw new ReferenceChatError(422, 'В подборке есть недоступный или неразобранный кадр.');
+    if (cards.some(card => !isReferenceEligible(card))) throw new ReferenceChatError(422, 'В подборке есть кадр без актуальной проверки качества или разбора.');
     const file = fileFor(key);
     return serialize(file, async () => {
       const next = { ...(await get(key)), selection };

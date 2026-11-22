@@ -16,8 +16,8 @@ export function referenceCaption(card: ReferenceCard): string {
   return card.timeMs === null ? card.sourceName : `${card.sourceName} · ${referenceTimestamp(card.timeMs)}`;
 }
 
-export function ReferenceImage({ card, className }: { card: ReferenceCard; className?: string }) {
-  return <img className={className ?? styles.frameImage} src={referenceImageUrl(card.id)} alt={card.analysis?.visible || referenceCaption(card)} loading="lazy" decoding="async" />;
+export function ReferenceImage({ card, className, management = false }: { card: ReferenceCard; className?: string; management?: boolean }) {
+  return <img className={className ?? styles.frameImage} src={referenceImageUrl(card.id, management)} alt={card.analysis?.visible || referenceCaption(card)} loading="lazy" decoding="async" />;
 }
 
 export function ReferenceCardPreview({ card, onOpen }: { card: ReferenceCard; onOpen: () => void }) {

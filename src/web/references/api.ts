@@ -1,4 +1,4 @@
-import type { ReferenceAnalysisJob, ReferenceCard, ReferenceFolder, ReferenceSelection, ReferenceThread } from '../../core/references.ts';
+import type { ReferenceAnalysisJob, ReferenceCard, ReferenceFolder, ReferenceQualityAudit, ReferenceSelection, ReferenceThread } from '../../core/references.ts';
 import { ui } from '../language.ts';
 import { studioFetch } from '../remoteFetch.ts';
 
@@ -31,16 +31,22 @@ export interface ReferenceLibraryStatus {
   shared?: boolean;
 }
 
+export type { ReferenceQualityAudit };
+export type ReferenceQualityDecision = ReferenceQualityAudit['decisions'][number];
+
 export function referenceLibraryStatus(signal?: AbortSignal): Promise<ReferenceLibraryStatus> {
   return json(`${ROOT}/status`, { signal });
 }
 
-export function referenceImageUrl(id: string): string {
-  return `${cardPath(id)}/image`;
+export function referenceImageUrl(id: string, management = false): string {
+  return `${cardPath(id)}/image${management ? '?scope=all' : ''}`;
 }
 
-export const getReferenceCards = (signal?: AbortSignal): Promise<{ cards: ReferenceCard[] }> =>
-  json(`${ROOT}/cards`, { signal });
+export const getReferenceCards = (signal?: AbortSignal, management = false): Promise<{ cards: ReferenceCard[] }> =>
+  json(`${ROOT}/cards${management ? '?scope=all' : ''}`, { signal });
+
+export const getReferenceQualityAudit = (signal?: AbortSignal): Promise<ReferenceQualityAudit> =>
+  json(`${ROOT}/quality/audit`, { signal });
 
 export function uploadReference(file: File): Promise<{ cards: ReferenceCard[] }> {
   return json(`${ROOT}/imports?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
@@ -50,8 +56,8 @@ export function editReference(id: string, change: { folder?: ReferenceFolder; ta
   return json(cardPath(id), data('PATCH', change));
 }
 
-export function referenceAnalysis(action?: 'start' | 'stop', signal?: AbortSignal, maxPending?: number): Promise<{ job: ReferenceAnalysisJob | null }> {
-  return json(`${ROOT}/analysis${action === 'stop' ? '/cancel' : ''}`, action ? data('POST', action === 'start' ? { maxPending } : {}, signal) : { signal });
+export function referenceAnalysis(action?: 'start' | 'stop', signal?: AbortSignal, maxPending?: number, scopeDigest?: string, retryUncertain = false): Promise<{ job: ReferenceAnalysisJob | null }> {
+  return json(`${ROOT}/analysis${action === 'stop' ? '/cancel' : ''}`, action ? data('POST', action === 'start' ? { maxPending, scopeDigest, retryUncertain } : {}, signal) : { signal });
 }
 
 export const getReferenceThread = (key: string, signal?: AbortSignal): Promise<{ thread: ReferenceThread }> =>

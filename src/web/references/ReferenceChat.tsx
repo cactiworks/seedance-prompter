@@ -230,7 +230,7 @@ export function ReferenceChat({ threadKey, initialBrief = '', selection, onApply
           {turns.length === 0 && !pendingQuery && <div className={styles.chatEmpty}>
             <Icon name="sparkles" size={1.5} />
             <Text as="h3" variant="title-s" medium>{ui('Подбор референсов')}</Text>
-            <Text tone="secondary">{busy === 'load' ? ui('Открываю чат…') : readyCount ? ui('Опиши шот и приёмы, которые хочешь найти.') : ui('Сначала проанализируй кадры в библиотеке.')}</Text>
+            <Text tone="secondary">{busy === 'load' ? ui('Открываю чат…') : readyCount ? ui('Опиши шот и приёмы, которые хочешь найти.') : ui('Сначала запусти проверку и разбор кадров в библиотеке.')}</Text>
             {!loaded && busy !== 'load' && <Button variant="border" onClick={() => { setBusy('load'); setError(''); setLoadVersion((value) => value + 1); }}>{ui('Повторить')}</Button>}
           </div>}
         </>}
@@ -240,19 +240,24 @@ export function ReferenceChat({ threadKey, initialBrief = '', selection, onApply
         {(selected.length > 0 || dirty) && <div className={styles.selection}>
           <div className={styles.row}>
             <Text as="h3" variant="label" medium>{ui('В подборке {0} из {1}', selected.length, MAX_REFERENCE_SELECTIONS)}</Text>
-            <Button variant="primary" size="s" disabled={!dirty || !loaded || busy === 'send' || selected.some((item) => !item.role.trim())} loading={busy === 'apply'} onClick={() => void apply()}>
+            <Button variant="primary" size="s" disabled={!dirty || !loaded || busy === 'send' || selected.some((item) => !item.role.trim() || cardMap.get(item.id)?.version !== item.version)} loading={busy === 'apply'} onClick={() => void apply()}>
               {onApply ? ui('Применить подборку') : ui('Сохранить подборку')}
             </Button>
           </div>
           <div className={styles.selectedList}>
             {selected.map((item) => {
-              const card = cardMap.get(item.id);
-              return <div key={item.id} className={styles.selectedFrame} title={card ? referenceCaption(card) : item.id}>
+              const current = cardMap.get(item.id);
+              const card = current?.version === item.version ? current : undefined;
+              return <div key={item.id}>
+                <div className={styles.selectedFrame} title={card ? referenceCaption(card) : item.id}>
                 {card && <button type="button" className={styles.selectedImage} onClick={() => setOpened(card)} aria-label={ui('Открыть кадр {0}', referenceCaption(card))}><ReferenceImage card={card} /></button>}
                 <input aria-label={ui('Назначение кадра {0}', card ? referenceCaption(card) : item.id)} value={item.role} maxLength={240} disabled={busy === 'apply'}
                   onChange={(event) => setSelected((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, role: event.target.value } : entry))} />
                 <Button variant="ghost" size="xs" iconOnly aria-label={ui('Убрать кадр из подборки')} disabled={busy === 'apply'} icon={<Icon name="close" size={0.875} />}
                   onClick={() => setSelected((previous) => previous.filter((entry) => entry.id !== item.id))} />
+                </div>
+                {!card && <Text variant="caption" tone="secondary">{ui('Закреплённый кадр сохранён в подборке, но сейчас не допущен в библиотеку. Проверь его статус в очереди проверки.')}</Text>}
+                {!card && current && <Button variant="border" size="xs" disabled={busy === 'apply'} onClick={() => setSelected((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, version: current.version } : entry))}>{ui('Закрепить проверенную версию')}</Button>}
               </div>;
             })}
           </div>

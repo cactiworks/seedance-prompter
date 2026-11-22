@@ -27,7 +27,7 @@ export function ReferenceGraph({ cards, onOpen }: { cards: ReferenceCard[]; onOp
     <div className={styles.empty}>
       <Icon name="link" size={1.5} />
       <Text as="h2" variant="title-s" medium>{ui('Здесь появятся связи между кадрами')}</Text>
-      <Text tone="secondary">{ui('Проанализируй кадры или добавь приёмы вручную.')}</Text>
+      <Text tone="secondary">{ui('Проверь качество и разбери кадры в библиотеке.')}</Text>
     </div>
   );
 

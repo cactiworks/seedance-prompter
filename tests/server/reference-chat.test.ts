@@ -20,6 +20,7 @@ afterEach(async () => { await Promise.all(dirs.splice(0).map(dir => rm(dir, { re
 
 const card = (id: string, subject: string, angle: string): ReferenceCard => ({
   id, sourceName: `${id}.jpg`, timeMs: null, folder: 'camera', version: 1, tags: [angle],
+  quality: { status: 'keep', reason: 'Полезный визуальный приём.' }, eligible: true,
   analysis: { visible: subject, technique: angle, transfer: angle, subject, pose: '', composition: '', angle, lighting: '', color: '', texture: '', styling: '' },
 });
 
@@ -140,6 +141,7 @@ describe('reference library deployment gate', () => {
       run: async <T>(request: LlmRequest, options?: { codexHome?: string }): Promise<LlmResult<T>> => {
         const input = JSON.parse(request.user);
         const replies = {
+          'Проверка качества референсов': { frames: input.candidateIds?.map((id: string) => ({ id, status: 'keep', reasonCode: 'useful', reason: 'Выразительный цвет.', duplicateOf: null })) },
           'Разбор референсов': { frames: input.imageIdsInOrder?.map((id: string) => ({ id, folder: frame.folder, tags: frame.tags, analysis: frame.analysis })) },
           'Разобрать запрос референсов': { aspects: [{ role: 'ракурс fisheye', terms: ['fisheye'] }] },
           'Подобрать кадры из библиотеки': { summary: 'Широкая перспектива улицы.', matches: [{ refId, role: 'ракурс fisheye', reason: 'Характер перспективы.' }] },
@@ -181,7 +183,8 @@ describe('reference library deployment gate', () => {
     const upload = await request('/api/references/imports?name=fixture.png', { method: 'POST', body: new Uint8Array(await readFile(picture)) });
     expect(upload.status).toBe(200);
     refId = (await upload.json()).cards[0].id;
-    const image = await request(`/api/references/cards/${refId}/image`);
+    expect((await request(`/api/references/cards/${refId}/image`)).status).toBe(404);
+    const image = await request(`/api/references/cards/${refId}/image?scope=all`);
     expect(image.headers.get('content-type')).toBe('image/jpeg');
     expect((await image.arrayBuffer()).byteLength).toBeGreaterThan(0);
     expect((await request('/api/references/analysis', json({ maxPending: 1 }), a)).status).toBe(200);

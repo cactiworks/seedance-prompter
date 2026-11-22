@@ -51,13 +51,14 @@ it('streams images, preserves the first import and removes temporary originals',
   expect(results[0]).toEqual(results[1]);
   const [card] = results[0]!;
   expect(card).toMatchObject({ timeMs: null, folder: null, analysis: null, version: 1 });
-  const image = (await library.imagePath(card!.id))!;
+  const image = (await library.imagePath(card!.id, 'all'))!;
   expect((await readFile(image)).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
   expect((await readdir(path.dirname(image))).sort()).toEqual(['cards.json', 'frame-cover.jpg']);
   expect(await readdir(path.join(root, 'sources'))).toHaveLength(1);
-  expect(await createReferenceLibrary(root).list()).toEqual([card]);
+  expect(await createReferenceLibrary(root).list('all')).toEqual([card]);
+  expect(await createReferenceLibrary(root).list()).toEqual([]);
   await expect(library.importFile('broken.png', body(Buffer.from('broken')))).rejects.toMatchObject({ status: 422 });
-  expect(await library.list()).toEqual([card]);
+  expect(await library.list('all')).toEqual([card]);
 });
 
 it('extracts distinct shot frames with decoded timestamps rather than retaining cadence or near duplicates', async () => {
@@ -72,7 +73,7 @@ it('extracts distinct shot frames with decoded timestamps rather than retaining 
   expect(cards).toHaveLength(2);
   expect(cards.map(card => card.timeMs)).toEqual([1000, 3000]);
   const colors = await Promise.all(cards.map(async card => {
-    const input = (await library.imagePath(card.id))!;
+    const input = (await library.imagePath(card.id, 'all'))!;
     const out = path.join(dir, `pixel-${card.timeMs}.rgb`);
     await runFfmpeg(['-i', input, '-vf', 'scale=1:1,format=rgb24', '-frames:v', '1', '-f', 'rawvideo', out]);
     return readFile(out);
@@ -105,14 +106,15 @@ it('scans every frame through a late single-frame insert and serves cards past i
   expect(late.id).toMatch(/-11$/);
 
   const reopened = createReferenceLibrary(root);
-  expect(await reopened.list()).toEqual(cards);
+  expect(await reopened.list('all')).toEqual(cards);
   expect(await reopened.importFile('duplicate.mp4', body(bytes))).toEqual(cards);
   const app = referenceRoutes(root, reopened, async () => { throw new Error('Import and image read must not use AI.'); }, {});
-  const response = await app.request(`/cards/${late.id}/image`);
+  expect((await app.request(`/cards/${late.id}/image`)).status).toBe(404);
+  const response = await app.request(`/cards/${late.id}/image?scope=all`);
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toBe('image/jpeg');
   expect(new Uint8Array(await response.arrayBuffer()).slice(0, 2)).toEqual(new Uint8Array([0xff, 0xd8]));
-  const jpeg = (await reopened.imagePath(late.id))!;
+  const jpeg = (await reopened.imagePath(late.id, 'all'))!;
   const pink = path.join(dir, 'pink.rgb');
   await runFfmpeg(['-i', jpeg, '-vf', 'scale=1:1,format=rgb24', '-frames:v', '1', '-f', 'rawvideo', pink]);
   const pixel = await readFile(pink);
@@ -143,11 +145,11 @@ it('extends a legacy eight-card video only on re-upload and preserves its names,
   });
   await Promise.all(frames.map(frame => writeFile(path.join(source, frame.file), jpeg)));
   await writeFile(path.join(source, 'cards.json'), JSON.stringify({ name: 'original.mp4', frames }));
-  const prior = await library.list();
+  const prior = await library.list('all');
   expect(prior).toHaveLength(8);
   const first = prior[0]!;
-  const firstVersion = await library.get(first.id, 1);
-  const firstPath = await library.imagePath(first.id);
+  const firstVersion = await library.get(first.id, 1, 'all');
+  const firstPath = await library.imagePath(first.id, 'all');
 
   const [refreshed, repeated] = await Promise.all([
     library.importFile('same-content.mov', body(bytes)),
@@ -158,11 +160,11 @@ it('extends a legacy eight-card video only on re-upload and preserves its names,
   expect(refreshed.slice(0, 8)).toEqual(prior);
   expect(refreshed.at(-1)).toMatchObject({ sourceName: 'original.mp4', timeMs: 5550, analysis: null, version: 1 });
   const reopened = createReferenceLibrary(root);
-  expect(await reopened.list()).toEqual(refreshed);
-  expect(await reopened.get(first.id, 1)).toEqual(firstVersion);
-  expect(await reopened.imagePath(first.id)).toBe(firstPath);
+  expect(await reopened.list('all')).toEqual(refreshed);
+  expect(await reopened.get(first.id, 1, 'all')).toEqual(firstVersion);
+  expect(await reopened.imagePath(first.id, 'all')).toBe(firstPath);
   expect(await readFile(firstPath!)).toEqual(jpeg);
-  const latePath = await reopened.imagePath(refreshed.at(-1)!.id);
+  const latePath = await reopened.imagePath(refreshed.at(-1)!.id, 'all');
   expect((await readFile(latePath!)).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
   expect(await reopened.importFile('same-content-later.mp4', body(bytes))).toEqual(refreshed);
 });
@@ -200,7 +202,11 @@ it('omits blank videos and cleans their staged originals', async () => {
 });
 
 function reply<T>(request: LlmRequest): LlmResult<T> {
-  const { imageIdsInOrder } = JSON.parse(request.user) as { imageIdsInOrder: string[] };
+  const { imageIdsInOrder, candidateIds } = JSON.parse(request.user) as { imageIdsInOrder: string[]; candidateIds?: string[] };
+  if (request.taskRu === 'Проверка качества референсов') return {
+    data: { frames: candidateIds!.map(id => ({ id, status: 'keep', reasonCode: 'useful', reason: 'Выразительная композиция.', duplicateOf: null })) } as T,
+    meta: { durationMs: 1, model: 'mock', turns: 1, inputTokens: 0, outputTokens: 0 },
+  };
   return {
     data: { frames: imageIdsInOrder.map(id => ({ id, folder: 'camera', tags: ['lighting'], analysis: notes })) } as T,
     meta: { durationMs: 1, model: 'mock', turns: 1, inputTokens: 100, outputTokens: 20 },
@@ -212,10 +218,11 @@ it('commits completed batches and manually retries the remaining frames after st
   for (const color of ['red', 'blue', 'green', 'yellow', 'cyan']) {
     await library.importFile(`${color}.png`, body(await picture(dir, color)));
   }
-  const first = (await library.list())[0]!;
+  const first = (await library.list('all'))[0]!;
   const changed = await library.edit(first.id, { folder: 'details', tags: ['мой тег', 'Мой тег'] });
   const sizes: number[] = [];
   const runner: Runner = async request => {
+    if (request.taskRu === 'Проверка качества референсов') return reply(request);
     sizes.push(request.images?.length ?? 0);
     if (sizes.length === 2) await new Promise<void>((_resolve, reject) => {
       request.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
@@ -228,39 +235,41 @@ it('commits completed batches and manually retries the remaining frames after st
   expect(await library.stopAnalysis()).toMatchObject({ status: 'stopped', completed: 4, inputTokens: 100, outputTokens: 20 });
   expect((await library.get(first.id))?.folder).toBe('details');
   expect((await library.get(first.id))?.tags).toEqual(['мой тег']);
-  expect(await library.get(first.id, changed!.version)).toEqual(changed);
+  expect(await library.get(first.id, changed!.version)).toBeUndefined();
+  expect(await library.get(first.id, changed!.version, 'all')).toMatchObject({ id: changed!.id, version: changed!.version, tags: changed!.tags });
 
   const reopened = createReferenceLibrary(root);
   expect(await reopened.startAnalysis(async request => {
     expect(request.images).toHaveLength(1);
     return reply(request);
   }, 1)).toMatchObject({ status: 'running', total: 1 });
-  await vi.waitFor(async () => expect(await reopened.analysisStatus()).toMatchObject({ status: 'done', completed: 1 }));
+  await vi.waitFor(async () => expect(await reopened.analysisStatus()).toMatchObject({ status: 'done', completed: 1, kept: 1 }));
   expect((await reopened.list()).every(card => card.analysis?.visible === notes.visible)).toBe(true);
 });
 
 it('does not publish an invalid model batch or retry without a click', async () => {
   const { dir, library } = await fixture();
   const [card] = await library.importFile('red.png', body(await picture(dir, 'red')));
-  const runner: Runner = async <T>() => ({
+  const runner: Runner = async <T>(request: LlmRequest) => request.taskRu === 'Проверка качества референсов' ? reply<T>(request) : ({
     data: { frames: [{ id: 'foreign-card', folder: 'camera', tags: [], analysis: notes }] } as T,
     meta: { durationMs: 1, model: 'mock', turns: 1, inputTokens: 12, outputTokens: 4 },
   });
   await library.startAnalysis(runner);
   await vi.waitFor(async () => expect(await library.analysisStatus()).toMatchObject({ status: 'error', completed: 0, inputTokens: 12 }));
-  expect(await library.get(card!.id)).toEqual(card);
+  expect(await library.get(card!.id)).toBeUndefined();
+  expect(await library.get(card!.id, undefined, 'all')).toMatchObject({ analysis: null, eligible: false });
 });
 
 it('rejects non-English prose on a correctly identified frame before saving it', async () => {
   const { dir, library } = await fixture();
   const [card] = await library.importFile('red.png', body(await picture(dir, 'red')));
-  const runner: Runner = async <T>(request: LlmRequest) => ({
+  const runner: Runner = async <T>(request: LlmRequest) => request.taskRu === 'Проверка качества референсов' ? reply<T>(request) : ({
     ...reply<T>(request),
     data: { frames: [{ id: card!.id, folder: 'camera', tags: ['lighting'], analysis: { ...notes, visible: 'Красный силуэт' } }] } as T,
   });
   await library.startAnalysis(runner);
   await vi.waitFor(async () => expect(await library.analysisStatus()).toMatchObject({ status: 'error', completed: 0 }));
-  expect(await library.get(card!.id)).toEqual(card);
+  expect(await library.get(card!.id)).toBeUndefined();
 });
 
 it('stops promptly while a provider call is waiting and ignores its late result', async () => {
@@ -268,7 +277,7 @@ it('stops promptly while a provider call is waiting and ignores its late result'
   const [card] = await library.importFile('red.png', body(await picture(dir, 'red')));
   let finish: (() => void) | undefined;
   let signal: AbortSignal | undefined;
-  await library.startAnalysis(<T>(request: LlmRequest) => new Promise<LlmResult<T>>(resolve => {
+  await library.startAnalysis(<T>(request: LlmRequest) => request.taskRu === 'Проверка качества референсов' ? Promise.resolve(reply<T>(request)) : new Promise<LlmResult<T>>(resolve => {
     signal = request.signal;
     finish = () => resolve(reply<T>(request));
   }));
@@ -276,5 +285,6 @@ it('stops promptly while a provider call is waiting and ignores its late result'
   expect(await library.stopAnalysis()).toMatchObject({ status: 'stopped', completed: 0 });
   expect(signal?.aborted).toBe(true);
   finish!();
-  expect(await library.get(card!.id)).toEqual(card);
+  expect(await library.get(card!.id)).toBeUndefined();
+  expect(await library.get(card!.id, undefined, 'all')).toMatchObject({ analysis: null, eligible: false });
 });

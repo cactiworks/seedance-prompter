@@ -3,7 +3,7 @@ import { createProductionCanvas } from './production/canvas.ts';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Hono, type Context } from 'hono';
 import { AccountError, type Accounts } from './accounts/service.ts';
@@ -211,10 +211,10 @@ export function createApp(options: AppOptions) {
     dataDir: options.dataDir, rootDir: options.rootDir, flows, gen, characters,
     runLlm: options.runLlm, runLlmForAccount: options.accounts?.runnerFor,
     resolveLibraryReference: references ? async ({ id, version }) => {
-      const card = await references.get(id, version);
-      const file = card ? await references.imagePath(id) : undefined;
-      if (!card || !file) return null;
-      try { return { card, image: { mediaType: 'image/jpeg', base64: (await readFile(file)).toString('base64') } }; }
+      try {
+        const resolved = await references.readEligibleImage(id, version);
+        return resolved ? { card: resolved.card, image: { mediaType: 'image/jpeg', base64: resolved.bytes.toString('base64') } } : null;
+      }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
         throw error;

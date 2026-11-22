@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { ReferenceFolderSchema, type ReferenceCard, type ReferenceFolder } from '../../core/references.ts';
+import { ReferenceFolderSchema, type ReferenceCard, type ReferenceFolder, type ReferenceQualityAudit } from '../../core/references.ts';
 import { atomicWrite, serialize } from '../storage/atomic.ts';
-import { createReferenceAnalysis, ReferenceAnalysisSchema, ReferenceTagsSchema, type AnalysisResult } from './analysis.ts';
+import { createReferenceAnalysis, ReferenceAnalysisSchema, ReferenceTagsSchema, type AnalysisResult, type ReferenceWork } from './analysis.ts';
 import { extractReferenceFrames, referenceInput, ReferenceLibraryError, writeReferenceInput } from './media.ts';
+import {
+  REFERENCE_QUALITY_PROMPT_HASH, REFERENCE_QUALITY_VERSION, StoredReferenceQualitySchema, sha256,
+  type QualityCohort, type QualityDecision, type QualityImage,
+} from './quality.ts';
 
 export { ReferenceLibraryError } from './media.ts';
 
@@ -12,38 +17,66 @@ const CARD_ID = /^rf-([a-f0-9]{64})-(0|[1-9]\d*)$/;
 const SOURCE_ID = /^[a-f0-9]{64}$/;
 const SCAN_VERSION = 2;
 const SCAN_DIRECTORY = 'scan-v2';
+const BindingSchema = z.object({ imageSha256: z.string(), reviewId: z.string() });
 const CardVersionSchema = z.object({
   folder: ReferenceFolderSchema.nullable(),
   tags: ReferenceTagsSchema,
   analysis: ReferenceAnalysisSchema.nullable(),
+  analysisBinding: BindingSchema.optional(),
 });
 const SourceSchema = z.object({
   name: z.string().min(1).max(160),
   scanVersion: z.literal(SCAN_VERSION).optional(),
+  qualityCohort: z.object({
+    id: z.string(), status: z.enum(['pending', 'complete']), imageDigest: z.string(),
+    criteriaVersion: z.number().int(), promptHash: z.string(),
+  }).optional(),
   frames: z.array(z.object({
     file: z.string().regex(/^(?:frame-(?:cover|\d+)|scan-v2\/frame-\d+)\.jpg$/),
     timeMs: z.number().int().nonnegative().nullable(),
     versions: z.array(CardVersionSchema).min(1),
     manualFolder: z.boolean().optional(),
     manualTags: z.boolean().optional(),
+    quality: StoredReferenceQualitySchema.optional(),
   })).min(1),
 }).refine(source => source.scanVersion === SCAN_VERSION || source.frames.every(frame => !frame.file.includes('/')));
 type Source = z.infer<typeof SourceSchema>;
 type CardVersion = z.infer<typeof CardVersionSchema>;
+type Scope = 'eligible' | 'all';
+interface SourceRecord { id: string; source: Source; hashes: (string | null)[] }
 
 const EMPTY: CardVersion = { folder: null, tags: [], analysis: null };
+const imageDigest = ({ source, hashes }: SourceRecord) => sha256(JSON.stringify(source.frames.map((frame, index) => ({
+  file: frame.file, timeMs: frame.timeMs, imageSha256: frame.quality?.status === 'reject' ? frame.quality.imageSha256 : hashes[index],
+}))));
+const recordDigest = (record: SourceRecord) => sha256(JSON.stringify({
+  images: imageDigest(record), decisions: record.source.frames.map(frame => frame.quality?.reviewId ?? null),
+}));
+const currentPolicy = (value: { criteriaVersion: number; promptHash: string }) =>
+  value.criteriaVersion === REFERENCE_QUALITY_VERSION && value.promptHash === REFERENCE_QUALITY_PROMPT_HASH;
 
-function selectedCard(sourceId: string, source: Source, index: number, version?: number): ReferenceCard | undefined {
+function cardFor(record: SourceRecord, index: number, version?: number): ReferenceCard | undefined {
+  const { id, source, hashes } = record;
   const frame = source.frames[index];
-  if (!frame) return undefined;
+  if (!frame) return;
   const revision = version ?? frame.versions.length;
   const values = frame.versions[revision - 1];
-  if (!values) return undefined;
-  return { id: `rf-${sourceId}-${index}`, sourceName: source.name, timeMs: frame.timeMs, version: revision, ...values };
-}
-
-function cardsFor(sourceId: string, source: Source): ReferenceCard[] {
-  return source.frames.map((_, index) => selectedCard(sourceId, source, index)!);
+  if (!values) return;
+  const stored = frame.quality;
+  const cohort = source.qualityCohort;
+  const valid = stored && currentPolicy(stored) && hashes[index] === stored.imageSha256;
+  const complete = cohort?.status === 'complete' && currentPolicy(cohort) && cohort.imageDigest === imageDigest(record);
+  const quality: NonNullable<ReferenceCard['quality']> = stored?.status === 'reject'
+    ? { status: 'reject', reason: stored.reason, duplicateOf: stored.duplicateOf, retainedBecauseReferenced: stored.retainedBecauseReferenced }
+    : valid && (stored.status === 'uncertain' || complete)
+      ? { status: stored.status, reason: stored.reason }
+      : { status: 'pending', reason: hashes[index] === null ? 'Изображение недоступно. Кадр закрыт для использования.' : 'Кадр ожидает обязательной проверки качества.' };
+  const eligible = quality.status === 'keep' && values.analysis !== null &&
+    values.analysisBinding?.imageSha256 === stored?.imageSha256 && values.analysisBinding?.reviewId === stored?.reviewId;
+  return {
+    id: `rf-${id}-${index}`, sourceName: source.name, timeMs: frame.timeMs, version: revision,
+    folder: values.folder, tags: values.tags, analysis: values.analysis, quality, eligible,
+  };
 }
 
 function distinctTags(tags: string[]) {
@@ -66,70 +99,258 @@ export function createReferenceLibrary(root: string) {
     return ready ??= (async () => {
       await mkdir(storeDir, { recursive: true, mode: 0o700 });
       const entries = await readdir(storeDir, { withFileTypes: true });
-      // The application holds an exclusive data-directory lock while serving this store.
       await Promise.all(entries.filter(entry => entry.isDirectory() && entry.name.startsWith('.incoming-'))
         .map(entry => rm(path.join(storeDir, entry.name), { recursive: true, force: true })));
+      for (const entry of entries.filter(entry => entry.isDirectory() && SOURCE_ID.test(entry.name))) {
+        const source = await readSource(entry.name);
+        if (source?.frames.some(frame => frame.quality?.status === 'reject')) await cleanupRejected(entry.name);
+      }
     })();
   }
 
   async function readSource(id: string): Promise<Source | undefined> {
-    try {
-      return SourceSchema.parse(JSON.parse(await readFile(manifestPath(id), 'utf8')));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    try { return SourceSchema.parse(JSON.parse(await readFile(manifestPath(id), 'utf8'))); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
       throw error;
     }
   }
 
-  async function list(): Promise<ReferenceCard[]> {
+  async function recordFor(id: string): Promise<SourceRecord | undefined> {
+    const source = await readSource(id);
+    if (!source) return;
+    const hashes = await Promise.all(source.frames.map(async frame => {
+      try { return sha256(await readFile(path.join(sourceDir(id), frame.file))); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
+    }));
+    return { id, source, hashes };
+  }
+
+  async function records() {
     await initialize();
-    const ids = (await readdir(storeDir)).filter(name => SOURCE_ID.test(name));
-    const sources = await Promise.all(ids.map(async id => ({ id, source: await readSource(id) })));
-    return sources.flatMap(({ id, source }) => source ? cardsFor(id, source) : [])
+    const ids = (await readdir(storeDir)).filter(name => SOURCE_ID.test(name)).sort();
+    return (await Promise.all(ids.map(recordFor))).filter((record): record is SourceRecord => record !== undefined);
+  }
+
+  const cardsFor = (record: SourceRecord) => record.source.frames.map((_, index) => cardFor(record, index)!);
+  async function list(scope: Scope = 'eligible'): Promise<ReferenceCard[]> {
+    return (await records()).flatMap(cardsFor).filter(card => scope === 'all' || card.eligible)
       .sort((a, b) => a.sourceName.localeCompare(b.sourceName, 'ru') || a.id.localeCompare(b.id, 'en', { numeric: true }));
   }
 
-  async function get(id: string, version?: number): Promise<ReferenceCard | undefined> {
+  async function get(id: string, version?: number, scope: Scope = 'eligible'): Promise<ReferenceCard | undefined> {
+    await initialize();
     const matches = CARD_ID.exec(id);
-    if (!matches) return undefined;
-    const source = await readSource(matches[1]!);
-    return source && selectedCard(matches[1]!, source, Number(matches[2]), version);
+    if (!matches) return;
+    const record = await recordFor(matches[1]!);
+    const card = record && cardFor(record, Number(matches[2]), version);
+    return card && (scope === 'all' || card.eligible) ? card : undefined;
   }
 
-  async function imagePath(id: string): Promise<string | undefined> {
+  async function imagePath(id: string, scope: Scope = 'eligible'): Promise<string | undefined> {
     const matches = CARD_ID.exec(id);
-    if (!matches) return undefined;
-    const frame = (await readSource(matches[1]!))?.frames[Number(matches[2])];
-    return frame && path.join(sourceDir(matches[1]!), frame.file);
+    if (!matches || !await get(id, undefined, scope)) return;
+    const record = await recordFor(matches[1]!);
+    const index = Number(matches[2]);
+    return record?.hashes[index] ? path.join(sourceDir(matches[1]!), record.source.frames[index]!.file) : undefined;
   }
 
-  async function update(
-    id: string,
-    change: (frame: Source['frames'][number], current: CardVersion) => CardVersion,
-  ): Promise<ReferenceCard | undefined> {
+  async function readEligibleImage(id: string, version?: number) {
+    await initialize();
     const matches = CARD_ID.exec(id);
-    if (!matches) return undefined;
+    if (!matches) return;
+    const record = await recordFor(matches[1]!);
+    const index = Number(matches[2]);
+    const card = record && cardFor(record, index, version);
+    if (!record || !card?.eligible) return;
+    const bytes = await readFile(path.join(sourceDir(record.id), record.source.frames[index]!.file));
+    if (sha256(bytes) !== record.hashes[index]) return;
+    return { card, bytes };
+  }
+
+  async function update(id: string, change: (frame: Source['frames'][number], current: CardVersion) => CardVersion) {
+    const matches = CARD_ID.exec(id);
+    if (!matches) return;
     const sourceId = matches[1]!;
     const index = Number(matches[2]);
-    const file = manifestPath(sourceId);
-    return serialize(file, async () => {
+    return serialize(manifestPath(sourceId), async () => {
       const source = await readSource(sourceId);
       const frame = source?.frames[index];
-      if (!source || !frame) return undefined;
+      if (!source || !frame) return;
       const current = frame.versions.at(-1)!;
       const next = change(frame, current);
       if (JSON.stringify(next) !== JSON.stringify(current)) frame.versions.push(next);
-      await atomicWrite(file, `${JSON.stringify(source)}\n`);
-      return selectedCard(sourceId, source, index);
+      await atomicWrite(manifestPath(sourceId), `${JSON.stringify(source)}\n`);
+      return get(id, undefined, 'all');
     });
   }
 
-  async function saveAnalysis(result: AnalysisResult) {
-    await update(result.id, (frame, current) => ({
-      folder: frame.manualFolder ? current.folder : result.folder,
-      tags: frame.manualTags ? current.tags : distinctTags(result.tags),
-      analysis: result.analysis,
+  async function referencedIds(): Promise<Set<string> | null> {
+    const ids = new Set<string>();
+    const visit = async (dir: string): Promise<void> => {
+      let entries;
+      try { entries = await readdir(dir, { withFileTypes: true }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+      for (const entry of entries) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) await visit(file);
+        else if (entry.isFile() && entry.name.endsWith('.json')) {
+          const text = await readFile(file, 'utf8');
+          JSON.parse(text);
+          for (const match of text.matchAll(/rf-[a-f0-9]{64}-(?:0|[1-9]\d*)/g)) ids.add(match[0]);
+        }
+      }
+    };
+    try {
+      await Promise.all([path.join(path.dirname(root), 'canvas'), path.join(path.dirname(root), 'canvas-ai'), path.join(root, 'chat')].map(visit));
+      return ids;
+    } catch { return null; }
+  }
+
+  async function cleanupRejected(sourceId: string) {
+    const refs = await referencedIds();
+    await serialize(manifestPath(sourceId), async () => {
+      const source = await readSource(sourceId);
+      if (!source) return;
+      for (const [index, frame] of source.frames.entries()) {
+        if (frame.quality?.status !== 'reject') continue;
+        const retained = refs === null || refs.has(`rf-${sourceId}-${index}`);
+        frame.quality.retainedBecauseReferenced = retained;
+        if (!retained) await rm(path.join(sourceDir(sourceId), frame.file), { force: true });
+      }
+      await atomicWrite(manifestPath(sourceId), `${JSON.stringify(source)}\n`);
+    });
+  }
+
+  async function qualityAudit(): Promise<ReferenceQualityAudit> {
+    const all = await records();
+    const cards = all.flatMap(cardsFor);
+    const reasons = new Map<string, number>();
+    const decisions = all.flatMap(record => record.source.frames.map((frame, index) => {
+      const card = cardFor(record, index)!;
+      const quality = card.quality!;
+      reasons.set(quality.reason, (reasons.get(quality.reason) ?? 0) + 1);
+      return {
+        id: card.id, sourceName: card.sourceName, timeMs: card.timeMs, ...quality,
+        criteriaVersion: frame.quality?.criteriaVersion, imageSha256: frame.quality?.imageSha256,
+        promptHash: frame.quality?.promptHash, model: frame.quality?.model, at: frame.quality?.at,
+      };
     }));
+    const count = (status: NonNullable<ReferenceCard['quality']>['status']) => cards.filter(card => card.quality?.status === status).length;
+    return {
+      total: cards.length, pending: count('pending'), kept: count('keep'), rejected: count('reject'), uncertain: count('uncertain'),
+      analyzed: cards.filter(card => card.analysis !== null).length, eligible: cards.filter(card => card.eligible).length,
+      retainedReferenced: cards.filter(card => card.quality?.retainedBecauseReferenced).length,
+      pendingWork: cards.filter(card => card.quality?.status === 'pending' || (card.quality?.status === 'keep' && !card.eligible)).length,
+      scopeDigest: sha256(JSON.stringify(all.map(record => ({ id: record.id, digest: recordDigest(record), versions: record.source.frames.map(frame => frame.versions.length) })))),
+      reasons: [...reasons].map(([reason, count]) => ({ reason, count })), decisions,
+    };
+  }
+
+  const imageFor = (record: SourceRecord, index: number): QualityImage => {
+    const imageSha256 = record.hashes[index];
+    if (!imageSha256) throw new ReferenceLibraryError(409, 'Кандидат недоступен. Обнови список и восстанови исходный кадр перед проверкой.');
+    return { id: `rf-${record.id}-${index}`, imagePath: path.join(sourceDir(record.id), record.source.frames[index]!.file), imageSha256 };
+  };
+
+  async function prepareWork(retryUncertain: boolean): Promise<ReferenceWork> {
+    const all = await records();
+    const cohorts: QualityCohort[] = [];
+    const ids: string[] = [];
+    for (const record of all) {
+      const candidates: QualityImage[] = [];
+      const anchors: QualityImage[] = [];
+      for (const [index] of record.source.frames.entries()) {
+        const card = cardFor(record, index)!;
+        const status = card.quality!.status;
+        if (status === 'pending' || (retryUncertain && status === 'uncertain')) {
+          candidates.push(imageFor(record, index)); ids.push(card.id);
+        } else if (status === 'keep') {
+          anchors.push(imageFor(record, index));
+          if (!card.eligible) ids.push(card.id);
+        }
+      }
+      if (candidates.length) cohorts.push({ sourceId: record.id, digest: recordDigest(record), candidates, anchors });
+    }
+    const scopeDigest = sha256(JSON.stringify(all.map(record => ({ id: record.id, digest: recordDigest(record), versions: record.source.frames.map(frame => frame.versions.length) }))));
+    return { ids, cohorts, scopeDigest };
+  }
+
+  async function beginQuality(cohort: QualityCohort, signal: AbortSignal): Promise<string> {
+    return serialize(manifestPath(cohort.sourceId), async () => {
+      const record = await recordFor(cohort.sourceId);
+      signal.throwIfAborted();
+      if (!record || recordDigest(record) !== cohort.digest) throw new ReferenceLibraryError(409, 'Источник изменился после подтверждения. Повтори проверку списка.');
+      const id = randomUUID();
+      record.source.qualityCohort = { id, status: 'pending', imageDigest: imageDigest(record), criteriaVersion: REFERENCE_QUALITY_VERSION, promptHash: REFERENCE_QUALITY_PROMPT_HASH };
+      await atomicWrite(manifestPath(cohort.sourceId), `${JSON.stringify(record.source)}\n`);
+      return id;
+    });
+  }
+
+  async function saveQuality(cohort: QualityCohort, reviewId: string, decisions: QualityDecision[], model: string, signal: AbortSignal) {
+    await serialize(manifestPath(cohort.sourceId), async () => {
+      const record = await recordFor(cohort.sourceId);
+      signal.throwIfAborted();
+      if (!record || recordDigest(record) !== cohort.digest || record.source.qualityCohort?.id !== reviewId) {
+        throw new ReferenceLibraryError(409, 'Кадры изменились во время проверки. Ответ не применён.');
+      }
+      const inputs = new Map(cohort.candidates.map(frame => [frame.id, frame]));
+      for (const decision of decisions) {
+        const input = inputs.get(decision.id)!;
+        const index = Number(CARD_ID.exec(decision.id)![2]);
+        record.source.frames[index]!.quality = {
+          status: decision.status, reasonCode: decision.reasonCode, reason: decision.reason,
+          duplicateOf: decision.duplicateOf ?? undefined, reviewId, imageSha256: input.imageSha256,
+          criteriaVersion: REFERENCE_QUALITY_VERSION, promptHash: REFERENCE_QUALITY_PROMPT_HASH, model, at: new Date().toISOString(),
+        };
+      }
+      record.source.qualityCohort = { ...record.source.qualityCohort!, status: 'complete', imageDigest: imageDigest(record) };
+      signal.throwIfAborted();
+      await atomicWrite(manifestPath(cohort.sourceId), `${JSON.stringify(record.source)}\n`);
+    });
+    await cleanupRejected(cohort.sourceId);
+  }
+
+  async function analysisInputs(ids: string[]) {
+    const result: (QualityImage & { reviewId: string })[] = [];
+    for (const id of ids) {
+      const matches = CARD_ID.exec(id)!;
+      const record = await recordFor(matches[1]!);
+      const index = Number(matches[2]);
+      const card = record && cardFor(record, index);
+      if (!record || !card || card.quality?.status === 'pending') {
+        throw new ReferenceLibraryError(409, 'Кадры изменились после проверки качества. Обнови список и повтори незавершённый этап.');
+      }
+      if (record && card?.quality?.status === 'keep' && !card.eligible) {
+        result.push({ ...imageFor(record, index), reviewId: record.source.frames[index]!.quality!.reviewId });
+      }
+    }
+    return result;
+  }
+
+  async function saveAnalysis(result: AnalysisResult, input: QualityImage & { reviewId: string }, signal: AbortSignal) {
+    const matches = CARD_ID.exec(result.id)!;
+    await serialize(manifestPath(matches[1]!), async () => {
+      const record = await recordFor(matches[1]!);
+      const index = Number(matches[2]);
+      const card = record && cardFor(record, index);
+      const frame = record?.source.frames[index];
+      signal.throwIfAborted();
+      if (!record || !frame || card?.quality?.status !== 'keep' || record.hashes[index] !== input.imageSha256 || frame.quality?.reviewId !== input.reviewId) {
+        throw new ReferenceLibraryError(409, 'Кадр изменился после проверки качества. Разбор не сохранён.');
+      }
+      const current = frame.versions.at(-1)!;
+      frame.versions.push({
+        folder: frame.manualFolder ? current.folder : result.folder,
+        tags: frame.manualTags ? current.tags : distinctTags(result.tags),
+        analysis: result.analysis, analysisBinding: { imageSha256: input.imageSha256, reviewId: input.reviewId },
+      });
+      await atomicWrite(manifestPath(record.id), `${JSON.stringify(record.source)}\n`);
+    });
   }
 
   async function extendVideo(id: string, existing: Source, extracted: Awaited<ReturnType<typeof extractReferenceFrames>>, incoming: string) {
@@ -140,8 +361,6 @@ export function createReferenceLibrary(root: string) {
       return [{ ...frame, filename: `frame-${frame.timeMs}.jpg` }];
     });
     const destination = path.join(sourceDir(id), SCAN_DIRECTORY);
-    // The unmarked manifest cannot reference an upgrade directory. A crash
-    // before manifest publication can leave one orphan to replace on retry.
     await rm(destination, { recursive: true, force: true });
     if (additions.length > 0) {
       const prepared = path.join(incoming, SCAN_DIRECTORY);
@@ -150,8 +369,7 @@ export function createReferenceLibrary(root: string) {
       await rename(prepared, destination);
     }
     const source: Source = {
-      ...existing,
-      scanVersion: SCAN_VERSION,
+      ...existing, qualityCohort: undefined, scanVersion: SCAN_VERSION,
       frames: [...existing.frames, ...additions.map(({ filename, timeMs }) => ({
         file: `${SCAN_DIRECTORY}/${filename}`, timeMs, versions: [EMPTY],
       }))],
@@ -160,22 +378,15 @@ export function createReferenceLibrary(root: string) {
     return source;
   }
 
-  const analysis = createReferenceAnalysis(root, { list, imagePath, saveAnalysis });
+  const analysis = createReferenceAnalysis(root, { prepareWork, beginQuality, saveQuality, analysisInputs, saveAnalysis });
 
   return {
-    ...analysis,
-    list,
-    get,
-    imagePath,
+    ...analysis, list, get, imagePath, readEligibleImage, qualityAudit,
     edit(id: string, change: { folder?: ReferenceFolder | null; tags?: string[] }) {
       return update(id, (frame, current) => {
         if (change.folder !== undefined) frame.manualFolder = true;
         if (change.tags !== undefined) frame.manualTags = true;
-        return {
-          ...current,
-          folder: change.folder === undefined ? current.folder : change.folder,
-          tags: change.tags === undefined ? current.tags : distinctTags(change.tags),
-        };
+        return { ...current, folder: change.folder === undefined ? current.folder : change.folder, tags: change.tags === undefined ? current.tags : distinctTags(change.tags) };
       });
     },
     async importFile(name: string, body: ReadableStream<Uint8Array> | null, mime?: string): Promise<ReferenceCard[]> {
@@ -192,17 +403,19 @@ export function createReferenceLibrary(root: string) {
         return await serialize(manifestPath(id), async () => {
           const existing = await readSource(id);
           if (existing && (existing.scanVersion === SCAN_VERSION || existing.frames.every(frame => frame.timeMs === null))) {
-            return cardsFor(id, existing);
+            return cardsFor((await recordFor(id))!);
           }
           const frames = await extractReferenceFrames(original, input.format, incoming);
-          if (existing) return cardsFor(id, await extendVideo(id, existing, frames, incoming));
-          const commit = path.join(incoming, 'ready');
-          await mkdir(commit, { mode: 0o700 });
-          await Promise.all(frames.map(frame => rename(path.join(incoming, frame.file), path.join(commit, frame.file))));
-          const source: Source = { name: input.name, scanVersion: SCAN_VERSION, frames: frames.map(frame => ({ ...frame, versions: [EMPTY] })) };
-          await atomicWrite(path.join(commit, 'cards.json'), `${JSON.stringify(source)}\n`);
-          await rename(commit, sourceDir(id));
-          return cardsFor(id, source);
+          if (existing) await extendVideo(id, existing, frames, incoming);
+          else {
+            const commit = path.join(incoming, 'ready');
+            await mkdir(commit, { mode: 0o700 });
+            await Promise.all(frames.map(frame => rename(path.join(incoming, frame.file), path.join(commit, frame.file))));
+            const source: Source = { name: input.name, scanVersion: SCAN_VERSION, frames: frames.map(frame => ({ ...frame, versions: [EMPTY] })) };
+            await atomicWrite(path.join(commit, 'cards.json'), `${JSON.stringify(source)}\n`);
+            await rename(commit, sourceDir(id));
+          }
+          return cardsFor((await recordFor(id))!);
         });
       } finally {
         imports--;
